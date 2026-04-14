@@ -1016,7 +1016,7 @@ app.get("/api/gamified/quizzes", requireAuth, async (req: AuthenticatedRequest, 
 app.get("/api/gamified/quizzes/:id", requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const requester = { id: req.auth?.sub || "", role: req.auth?.role || "student" };
-    const includeAnswerKeys = requester.role === "admin" || requester.role === "teacher";
+    const includeAnswerKeys = true;
     const quiz = await service.getGamifiedQuizDetail(req.params.id, requester, includeAnswerKeys);
 
     if (!quiz) {
