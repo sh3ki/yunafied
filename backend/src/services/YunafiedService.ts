@@ -1600,8 +1600,9 @@ export class YunafiedService {
     studentId: string,
     input: { answers: Array<{ questionId: string; selectedChoiceId?: string | null; timeRemainingSeconds?: number }> },
   ): Promise<GamifiedAttemptResultItem> {
-    const quizResult = await pool.query<{ category_id: string }>(
-      `SELECT category_id
+    const quizResult = await pool.query<{ category_id: string; time_per_question_seconds: number }>(
+      `SELECT category_id,
+              time_per_question_seconds
          FROM gamified_quizzes
         WHERE id = $1
           AND is_published = TRUE`,
@@ -1615,13 +1616,17 @@ export class YunafiedService {
 
     const questionRows = await pool.query<{
       question_id: string;
+      prompt: string;
       points: number;
       choice_id: string;
+      choice_text: string;
       is_correct: boolean;
     }>(
       `SELECT q.id AS question_id,
+              q.prompt,
               q.points,
               c.id AS choice_id,
+              c.choice_text,
               c.is_correct
          FROM gamified_questions q
          JOIN gamified_choices c ON c.question_id = q.id
@@ -1636,19 +1641,32 @@ export class YunafiedService {
 
     const questionMeta = new Map<
       string,
-      { points: number; correctChoiceId: string; validChoiceIds: Set<string> }
+      {
+        prompt: string;
+        points: number;
+        correctChoiceId: string;
+        correctChoiceText: string;
+        validChoiceIds: Set<string>;
+        choiceTextById: Map<string, string>;
+      }
     >();
 
     questionRows.rows.forEach((row) => {
       const existing = questionMeta.get(row.question_id) || {
+        prompt: row.prompt,
         points: row.points,
         correctChoiceId: "",
+        correctChoiceText: "",
         validChoiceIds: new Set<string>(),
+        choiceTextById: new Map<string, string>(),
       };
+      existing.prompt = row.prompt;
       existing.points = row.points;
       existing.validChoiceIds.add(row.choice_id);
+      existing.choiceTextById.set(row.choice_id, row.choice_text);
       if (row.is_correct) {
         existing.correctChoiceId = row.choice_id;
+        existing.correctChoiceText = row.choice_text;
       }
       questionMeta.set(row.question_id, existing);
     });
@@ -1664,9 +1682,14 @@ export class YunafiedService {
       const answer = answersByQuestion.get(questionId);
       const selectedChoiceId = answer?.selectedChoiceId || null;
       const normalizedChoiceId = selectedChoiceId && meta.validChoiceIds.has(selectedChoiceId) ? selectedChoiceId : null;
-      const timeRemainingSeconds = Math.max(0, Math.floor(answer?.timeRemainingSeconds || 0));
+      const timeRemainingSeconds = Math.max(
+        0,
+        Math.min(quiz.time_per_question_seconds, Math.floor(answer?.timeRemainingSeconds || 0)),
+      );
       const isCorrect = normalizedChoiceId !== null && normalizedChoiceId === meta.correctChoiceId;
-      const pointsEarned = isCorrect ? meta.points + timeRemainingSeconds * 10 : 0;
+      const speedRatio = quiz.time_per_question_seconds > 0 ? timeRemainingSeconds / quiz.time_per_question_seconds : 0;
+      const speedBonus = isCorrect ? Math.round(meta.points * 0.5 * speedRatio) : 0;
+      const pointsEarned = isCorrect ? meta.points + speedBonus : 0;
 
       if (isCorrect) {
         correctAnswers += 1;
@@ -1675,8 +1698,14 @@ export class YunafiedService {
 
       return {
         questionId,
+        questionPrompt: meta.prompt,
         selectedChoiceId: normalizedChoiceId,
+        selectedChoiceText: normalizedChoiceId ? meta.choiceTextById.get(normalizedChoiceId) || null : null,
+        correctChoiceId: meta.correctChoiceId,
+        correctChoiceText: meta.correctChoiceText,
         isCorrect,
+        maxPoints: meta.points,
+        speedBonus,
         pointsEarned,
         timeRemainingSeconds,
       };
@@ -1738,6 +1767,7 @@ export class YunafiedService {
       return {
         ...attempt,
         attemptId: attempt.id,
+        answers: evaluatedAnswers,
       };
     } catch (error) {
       await client.query("ROLLBACK");
