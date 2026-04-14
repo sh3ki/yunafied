@@ -653,24 +653,193 @@ app.post(
   },
 );
 
-app.get("/api/schedules", requireAuth, async (_req, res, next) => {
+app.get("/api/schedules", requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    res.json(await service.listSchedules());
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "student" };
+    res.json(await service.listSchedulesForRole(requester));
   } catch (error) {
     next(error);
   }
 });
 
-const createScheduleSchema = z.object({
+const scheduleDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const scheduleTimeSchema = z.string().regex(/^\d{2}:\d{2}$/);
+const nullableUuidSchema = z.preprocess((value) => (value === "" ? null : value), z.string().uuid().nullable().optional());
+
+const createStudentScheduleRequestSchema = z.object({
+  teacherId: z.string().uuid(),
   title: z.string().min(2),
-  day: z.string().min(3),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+  description: z.string().min(1).max(2000).default(""),
+  date: scheduleDateSchema,
+  startTime: scheduleTimeSchema,
+  endTime: scheduleTimeSchema,
+  requestNote: z.string().max(500).optional(),
 });
 
-app.post("/api/schedules", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+const createManagedScheduleSchema = z.object({
+  teacherId: z.string().uuid().optional(),
+  studentId: nullableUuidSchema,
+  title: z.string().min(2),
+  description: z.string().min(1).max(2000).default(""),
+  date: scheduleDateSchema,
+  startTime: scheduleTimeSchema,
+  endTime: scheduleTimeSchema,
+});
+
+const teacherRespondScheduleSchema = z
+  .object({
+    decision: z.enum(["accepted", "declined"]),
+    title: z.string().min(2).optional(),
+    description: z.string().min(1).max(2000).optional(),
+    date: scheduleDateSchema.optional(),
+    startTime: scheduleTimeSchema.optional(),
+    endTime: scheduleTimeSchema.optional(),
+    responseNote: z.string().max(500).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.decision === "declined" && !value.responseNote?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Decline note is required.",
+        path: ["responseNote"],
+      });
+    }
+  });
+
+const moveScheduleSchema = z.object({
+  date: scheduleDateSchema,
+  startTime: scheduleTimeSchema,
+  endTime: scheduleTimeSchema,
+  title: z.string().min(2).optional(),
+  description: z.string().min(1).max(2000).optional(),
+});
+
+const cancelScheduleSchema = z.object({
+  responseNote: z.string().min(1).max(500),
+});
+
+const adminEditScheduleSchema = z.object({
+  teacherId: z.string().uuid().optional(),
+  studentId: nullableUuidSchema,
+  title: z.string().min(2).optional(),
+  description: z.string().min(1).max(2000).optional(),
+  date: scheduleDateSchema.optional(),
+  startTime: scheduleTimeSchema.optional(),
+  endTime: scheduleTimeSchema.optional(),
+  status: z.enum(["pending", "accepted", "declined", "cancelled"]).optional(),
+  requestNote: z.string().max(500).nullable().optional(),
+  responseNote: z.string().max(500).nullable().optional(),
+});
+
+const gamifiedCategorySchema = z.object({
+  name: z.string().min(2).max(80),
+  description: z.string().max(500).nullable().optional(),
+});
+
+const gamifiedCategoryUpdateSchema = z
+  .object({
+    name: z.string().min(2).max(80).optional(),
+    description: z.string().max(500).nullable().optional(),
+  })
+  .refine((value) => value.name !== undefined || value.description !== undefined, {
+    message: "At least one field is required.",
+  });
+
+const gamifiedChoiceSchema = z.object({
+  text: z.string().min(1).max(300),
+  isCorrect: z.boolean(),
+});
+
+const gamifiedQuestionSchema = z.object({
+  prompt: z.string().min(1).max(2000),
+  points: z.coerce.number().int().min(1).max(5000).default(1000),
+  choices: z.array(gamifiedChoiceSchema).min(2).max(6),
+});
+
+const gamifiedQuizSchema = z.object({
+  categoryId: z.string().uuid(),
+  title: z.string().min(2).max(150),
+  description: z.string().max(2000).optional().default(""),
+  timePerQuestionSeconds: z.coerce.number().int().min(5).max(120).default(20),
+  isPublished: z.boolean().optional().default(true),
+  questions: z.array(gamifiedQuestionSchema).min(1).max(100),
+});
+
+const gamifiedListQuerySchema = z.object({
+  categoryId: z.string().uuid().optional(),
+});
+
+const gamifiedLeaderboardQuerySchema = z.object({
+  categoryId: z.string().uuid(),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+const gamifiedAttemptSchema = z.object({
+  answers: z.array(
+    z.object({
+      questionId: z.string().uuid(),
+      selectedChoiceId: nullableUuidSchema,
+      timeRemainingSeconds: z.coerce.number().int().min(0).max(300).optional().default(0),
+    }),
+  ),
+});
+
+app.post("/api/schedules", requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const payload = createScheduleSchema.parse(req.body);
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "student" };
+
+    if (!requester.id) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    if (requester.role === "student") {
+      const payload = createStudentScheduleRequestSchema.parse(req.body);
+      const schedule = await service.createScheduleRequest({
+        ...payload,
+        studentId: requester.id,
+      });
+      res.status(201).json(schedule);
+      clearBootstrapCache();
+      return;
+    }
+
+    if (requester.role === "teacher" || requester.role === "admin") {
+      const payload = createManagedScheduleSchema.parse(req.body);
+      const teacherId = requester.role === "teacher" ? requester.id : payload.teacherId;
+
+      if (!teacherId) {
+        res.status(400).json({ message: "teacherId is required for admin schedule creation." });
+        return;
+      }
+
+      const schedule = await service.createManagedSchedule({
+        title: payload.title,
+        description: payload.description,
+        date: payload.date,
+        startTime: payload.startTime,
+        endTime: payload.endTime,
+        teacherId,
+        studentId: payload.studentId || null,
+      });
+      res.status(201).json(schedule);
+      clearBootstrapCache();
+      return;
+    }
+
+    res.status(403).json({ message: "Forbidden" });
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.patch("/api/schedules/:id/respond", requireAuth, requireRole("teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = teacherRespondScheduleSchema.parse(req.body);
     const teacherId = req.auth?.sub;
 
     if (!teacherId) {
@@ -678,15 +847,89 @@ app.post("/api/schedules", requireAuth, requireRole("admin", "teacher"), async (
       return;
     }
 
-    const schedule = await service.createSchedule({ ...payload, teacherId });
-    res.status(201).json(schedule);
+    const updated = await service.teacherRespondToSchedule(req.params.id, teacherId, payload);
+    if (!updated) {
+      res.status(404).json({ message: "Schedule request not found." });
+      return;
+    }
+
+    res.json(updated);
     clearBootstrapCache();
   } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
     next(error);
   }
 });
 
-app.delete("/api/schedules/:id", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+app.patch("/api/schedules/:id/move", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = moveScheduleSchema.parse(req.body);
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "student" };
+    const updated = await service.moveSchedule(req.params.id, requester, payload);
+
+    if (!updated) {
+      res.status(404).json({ message: "Schedule not found." });
+      return;
+    }
+
+    res.json(updated);
+    clearBootstrapCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.patch("/api/schedules/:id/cancel", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = cancelScheduleSchema.parse(req.body);
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "student" };
+    const updated = await service.cancelSchedule(req.params.id, requester, payload.responseNote);
+
+    if (!updated) {
+      res.status(404).json({ message: "Schedule not found." });
+      return;
+    }
+
+    res.json(updated);
+    clearBootstrapCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.patch("/api/schedules/:id", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = adminEditScheduleSchema.parse(req.body);
+    const updated = await service.adminEditSchedule(req.params.id, payload);
+
+    if (!updated) {
+      res.status(404).json({ message: "Schedule not found." });
+      return;
+    }
+
+    res.json(updated);
+    clearBootstrapCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.delete("/api/schedules/:id", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
   try {
     const requester = { id: req.auth?.sub || "", role: req.auth?.role || "student" };
     const deleted = await service.deleteSchedule(req.params.id, requester);
@@ -699,6 +942,173 @@ app.delete("/api/schedules/:id", requireAuth, requireRole("admin", "teacher"), a
     res.status(204).send();
     clearBootstrapCache();
   } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/gamified/categories", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterRole = req.auth?.role || "student";
+    res.json(await service.listGamifiedCategories(requesterRole));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/gamified/categories", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = gamifiedCategorySchema.parse(req.body);
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "teacher" };
+
+    if (!requester.id) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const created = await service.createGamifiedCategory(payload, requester);
+    res.status(201).json(created);
+    clearBootstrapCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.patch("/api/gamified/categories/:id", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = gamifiedCategoryUpdateSchema.parse(req.body);
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "teacher" };
+
+    const updated = await service.updateGamifiedCategory(req.params.id, payload, requester);
+    if (!updated) {
+      res.status(404).json({ message: "Category not found." });
+      return;
+    }
+
+    res.json(updated);
+    clearBootstrapCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.get("/api/gamified/quizzes", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const query = gamifiedListQuerySchema.parse(req.query);
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "student" };
+    res.json(await service.listGamifiedQuizzes(requester, query));
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.get("/api/gamified/quizzes/:id", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "student" };
+    const includeAnswerKeys = requester.role === "admin" || requester.role === "teacher";
+    const quiz = await service.getGamifiedQuizDetail(req.params.id, requester, includeAnswerKeys);
+
+    if (!quiz) {
+      res.status(404).json({ message: "Quiz not found." });
+      return;
+    }
+
+    res.json(quiz);
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.post("/api/gamified/quizzes", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = gamifiedQuizSchema.parse(req.body);
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "teacher" };
+
+    if (!requester.id) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const quiz = await service.createGamifiedQuiz(payload, requester);
+    res.status(201).json(quiz);
+    clearBootstrapCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.put("/api/gamified/quizzes/:id", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = gamifiedQuizSchema.parse(req.body);
+    const requester = { id: req.auth?.sub || "", role: req.auth?.role || "teacher" };
+
+    const quiz = await service.updateGamifiedQuiz(req.params.id, payload, requester);
+    if (!quiz) {
+      res.status(404).json({ message: "Quiz not found." });
+      return;
+    }
+
+    res.json(quiz);
+    clearBootstrapCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.post("/api/gamified/quizzes/:id/attempts", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = gamifiedAttemptSchema.parse(req.body);
+    const studentId = req.auth?.sub;
+
+    if (!studentId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const attempt = await service.submitGamifiedAttempt(req.params.id, studentId, payload);
+    res.status(201).json(attempt);
+    clearBootstrapCache();
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+app.get("/api/gamified/leaderboard", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const query = gamifiedLeaderboardQuerySchema.parse(req.query);
+    res.json(await service.listGamifiedLeaderboard(query.categoryId, query.limit));
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({ message: error.message });
+      return;
+    }
     next(error);
   }
 });
