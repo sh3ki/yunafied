@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, Clock, Play, Plus, Sparkles, Target, Trophy } from 'lucide-react';
+import { Check, Clock, Play, Plus, Sparkles, Target, Trophy, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/app/services/apiClient';
 import {
@@ -40,6 +40,13 @@ interface DraftQuizForm {
   questions: DraftQuestion[];
 }
 
+interface AnswerFeedbackState {
+  isCorrect: boolean;
+  pointsEarned: number;
+  speedBonus: number;
+  correctChoiceText: string;
+}
+
 function makeLocalId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -70,6 +77,15 @@ function createDefaultQuizForm(categoryId = ''): DraftQuizForm {
     isPublished: true,
     questions: [createDraftQuestion()],
   };
+}
+
+function shuffleQuestions(questions: GamifiedQuestionItem[]): GamifiedQuestionItem[] {
+  const next = [...questions];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[randomIndex]] = [next[randomIndex], next[index]];
+  }
+  return next;
 }
 
 function playCountdownTone(secondsLeft: number): void {
@@ -122,6 +138,7 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [isSubmittingAttempt, setIsSubmittingAttempt] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [playQuestions, setPlayQuestions] = useState<GamifiedQuestionItem[]>([]);
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [answered, setAnswered] = useState(false);
   const [timeLeft, setTimeLeft] = useState(20);
@@ -130,6 +147,8 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   const [attemptAnswers, setAttemptAnswers] = useState<
     Array<{ questionId: string; selectedChoiceId: string | null; timeRemainingSeconds: number }>
   >([]);
+  const [runningScore, setRunningScore] = useState(0);
+  const [lastAnswerFeedback, setLastAnswerFeedback] = useState<AnswerFeedbackState | null>(null);
 
   const lastCountdownSecondRef = useRef<number | null>(null);
 
@@ -210,11 +229,11 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   }, [selectedQuizId]);
 
   const activeQuestion = useMemo(() => {
-    if (!activeQuiz || !quizStarted) {
+    if (!quizStarted) {
       return null;
     }
-    return activeQuiz.questions[currentQuestionIndex] || null;
-  }, [activeQuiz, currentQuestionIndex, quizStarted]);
+    return playQuestions[currentQuestionIndex] || null;
+  }, [playQuestions, currentQuestionIndex, quizStarted]);
 
   useEffect(() => {
     if (!quizStarted || !timerActive || answered) {
@@ -259,12 +278,15 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
     setQuizCompleted(false);
     setIsSubmittingAttempt(false);
     setCurrentQuestionIndex(0);
+    setPlayQuestions([]);
     setSelectedChoiceId(null);
     setAnswered(false);
     setTimeLeft(activeQuiz?.timePerQuestionSeconds || 20);
     setTimerActive(false);
     setAttemptResult(null);
     setAttemptAnswers([]);
+    setRunningScore(0);
+    setLastAnswerFeedback(null);
   };
 
   const startQuiz = () => {
@@ -276,10 +298,13 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
     setQuizStarted(true);
     setQuizCompleted(false);
     setCurrentQuestionIndex(0);
+    setPlayQuestions(shuffleQuestions(activeQuiz.questions));
     setSelectedChoiceId(null);
     setAnswered(false);
     setAttemptResult(null);
     setAttemptAnswers([]);
+    setRunningScore(0);
+    setLastAnswerFeedback(null);
     setTimeLeft(activeQuiz.timePerQuestionSeconds);
     setTimerActive(true);
   };
@@ -305,6 +330,8 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
       setQuizStarted(false);
       setQuizCompleted(true);
       setTimerActive(false);
+      setRunningScore(result.totalScore);
+      setLastAnswerFeedback(null);
       setIsSubmittingAttempt(false);
 
       if (selectedCategoryId) {
@@ -323,14 +350,30 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
       return;
     }
 
+    const correctChoice = activeQuestion.choices.find((choice) => !!choice.isCorrect);
+    const normalizedTimeRemaining = Math.max(0, Math.min(timeLeft, activeQuiz.timePerQuestionSeconds));
+    const isCorrect = Boolean(choiceId && correctChoice && choiceId === correctChoice.id);
+    const speedRatio = activeQuiz.timePerQuestionSeconds > 0
+      ? normalizedTimeRemaining / activeQuiz.timePerQuestionSeconds
+      : 0;
+    const speedBonus = isCorrect ? Math.round(activeQuestion.points * 0.5 * speedRatio) : 0;
+    const pointsEarned = isCorrect ? activeQuestion.points + speedBonus : 0;
+
     setAnswered(true);
     setSelectedChoiceId(choiceId);
     setTimerActive(false);
+    setRunningScore((prev) => prev + pointsEarned);
+    setLastAnswerFeedback({
+      isCorrect,
+      pointsEarned,
+      speedBonus,
+      correctChoiceText: correctChoice?.text || 'No correct answer configured.',
+    });
 
     const answerPayload = {
       questionId: activeQuestion.id,
       selectedChoiceId: choiceId,
-      timeRemainingSeconds: timeLeft,
+      timeRemainingSeconds: normalizedTimeRemaining,
     };
 
     const mergedAnswers = [...attemptAnswers.filter((item) => item.questionId !== activeQuestion.id), answerPayload];
@@ -341,12 +384,13 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
         setCurrentQuestionIndex((prev) => prev + 1);
         setAnswered(false);
         setSelectedChoiceId(null);
+        setLastAnswerFeedback(null);
         setTimeLeft(activeQuiz.timePerQuestionSeconds);
         setTimerActive(true);
       } else {
         void finishQuiz(mergedAnswers);
       }
-    }, 900);
+    }, 1200);
   };
 
   const addCategory = async () => {
@@ -478,10 +522,12 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   const myLeaderboardEntry = leaderboard.find((item) => item.studentId === userId);
 
   const optionColorClasses = [
-    'bg-red-500 hover:bg-red-600',
-    'bg-blue-500 hover:bg-blue-600',
-    'bg-yellow-500 hover:bg-yellow-600',
-    'bg-green-500 hover:bg-green-600',
+    'bg-indigo-600 hover:bg-indigo-700',
+    'bg-violet-600 hover:bg-violet-700',
+    'bg-amber-500 hover:bg-amber-600',
+    'bg-cyan-600 hover:bg-cyan-700',
+    'bg-fuchsia-600 hover:bg-fuchsia-700',
+    'bg-slate-600 hover:bg-slate-700',
   ];
 
   if (loading) {
@@ -889,14 +935,16 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                 <div className="flex items-center justify-between mb-4 gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2 text-sm">
-                      <span className="font-medium text-gray-600">Question {currentQuestionIndex + 1} of {activeQuiz.questions.length}</span>
+                        <span className="font-medium text-gray-600">Question {currentQuestionIndex + 1} of {playQuestions.length || activeQuiz.questions.length}</span>
                       <span className="text-gray-400">•</span>
                       <span className="font-bold text-indigo-600">Answered: {attemptAnswers.length}</span>
+                      <span className="text-gray-400">•</span>
+                      <span className="font-bold text-green-700">Score: {runningScore}</span>
                     </div>
                     <div className="w-full bg-gray-100 rounded-full h-2">
                       <div
                         className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${((currentQuestionIndex + 1) / activeQuiz.questions.length) * 100}%` }}
+                        style={{ width: `${((currentQuestionIndex + 1) / Math.max(playQuestions.length, 1)) * 100}%` }}
                       />
                     </div>
                   </div>
@@ -919,6 +967,13 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                   {activeQuestion.choices.map((choice, index) => {
                     const isSelected = choice.id === selectedChoiceId;
                     const baseColor = optionColorClasses[index % optionColorClasses.length];
+                    const isCorrectChoice = Boolean(choice.isCorrect);
+                    const isWrongSelected = answered && isSelected && !isCorrectChoice;
+                    const answeredClass = isCorrectChoice
+                      ? 'bg-green-600 border-green-700'
+                      : isWrongSelected
+                        ? 'bg-red-600 border-red-700'
+                        : 'bg-gray-300 border-gray-300 opacity-70 cursor-not-allowed';
 
                     return (
                       <button
@@ -927,9 +982,7 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                         disabled={answered}
                         className={`px-6 py-5 rounded-xl font-bold text-lg transition-all duration-300 text-white border-2 border-transparent shadow-md ${
                           answered
-                            ? isSelected
-                              ? 'bg-indigo-700 scale-[1.02]'
-                              : 'bg-gray-300 opacity-60 cursor-not-allowed'
+                            ? answeredClass
                             : `${baseColor} hover:scale-[1.01]`
                         }`}
                       >
@@ -938,16 +991,26 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                             {String.fromCharCode(65 + index)}
                           </div>
                           <span className="text-left flex-1">{choice.text}</span>
-                          {answered && isSelected ? <Check className="h-6 w-6" /> : null}
+                          {answered && isCorrectChoice ? <Check className="h-6 w-6" /> : null}
+                          {isWrongSelected ? <X className="h-6 w-6" /> : null}
                         </div>
                       </button>
                     );
                   })}
                 </div>
 
-                {answered ? (
-                  <div className="text-center p-3 rounded-xl bg-indigo-100 text-indigo-800 font-medium">
-                    Answer locked. Loading next question...
+                {answered && lastAnswerFeedback ? (
+                  <div
+                    className={`text-center p-3 rounded-xl font-medium ${
+                      lastAnswerFeedback.isCorrect
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {lastAnswerFeedback.isCorrect
+                      ? `Correct! +${lastAnswerFeedback.pointsEarned} points (base ${activeQuestion.points} + speed ${lastAnswerFeedback.speedBonus}).`
+                      : `Wrong answer. Correct answer: ${lastAnswerFeedback.correctChoiceText}. +0 points.`}
+                    <div className="text-xs mt-1 opacity-80">Loading next question...</div>
                   </div>
                 ) : null}
               </motion.div>
@@ -959,7 +1022,7 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                 animate={{ opacity: 1, scale: 1 }}
                 className="text-center py-10"
               >
-                <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-10 border-2 border-yellow-100 max-w-2xl mx-auto">
+                <div className="bg-gradient-to-br from-yellow-50 to-orange-50 rounded-2xl p-10 border-2 border-yellow-100 max-w-3xl mx-auto">
                   <div className="bg-white rounded-full p-6 w-24 h-24 mx-auto mb-6 shadow-lg">
                     <Trophy className="h-12 w-12 text-yellow-600" />
                   </div>
@@ -979,6 +1042,42 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                       </p>
                     </div>
                   </div>
+
+                  {attemptResult.answers.length ? (
+                    <div className="mb-8 text-left">
+                      <h4 className="font-bold text-gray-800 mb-3">Answer Review</h4>
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                        {attemptResult.answers.map((answer, index) => (
+                          <div
+                            key={answer.questionId}
+                            className={`rounded-lg border px-3 py-2 ${
+                              answer.isCorrect
+                                ? 'bg-green-50 border-green-200'
+                                : 'bg-red-50 border-red-200'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <p className="text-sm font-semibold text-gray-800">
+                                {index + 1}. {answer.questionPrompt}
+                              </p>
+                              <p className={`text-sm font-bold ${answer.isCorrect ? 'text-green-700' : 'text-red-700'}`}>
+                                +{answer.pointsEarned}
+                              </p>
+                            </div>
+                            <p className="text-xs text-gray-600 mt-1">
+                              Your answer: {answer.selectedChoiceText || 'No answer'}
+                            </p>
+                            {!answer.isCorrect ? (
+                              <p className="text-xs text-gray-700">Correct answer: {answer.correctChoiceText}</p>
+                            ) : null}
+                            <p className="text-xs text-gray-600 mt-1">
+                              Base: {answer.maxPoints} • Speed bonus: +{answer.speedBonus} • Time left: {answer.timeRemainingSeconds}s
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   <button
                     onClick={startQuiz}
