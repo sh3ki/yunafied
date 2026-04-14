@@ -23,6 +23,7 @@ export function BottomNav({ role, currentView, onNavigate }: BottomNavProps) {
     { id: 'schedule', label: 'Schedule', icon: Calendar, roles: ['admin', 'teacher', 'student'] },
     { id: 'assignments', label: 'Tasks', icon: BookOpen, roles: ['teacher', 'student'] },
     { id: 'announcements', label: 'Announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student'] },
+    { id: 'gamified-learning', label: 'Quiz', icon: Sparkles, roles: ['admin', 'teacher', 'student'] },
     { id: 'ai-guide', label: 'AI Guide', icon: Sparkles, roles: ['student'] },
     { id: 'users', label: 'Users', icon: Users, roles: ['admin'] },
     { id: 'grades', label: 'Grades', icon: GraduationCap, roles: ['student'] },
