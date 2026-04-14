@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "db:init": "tsx src/scripts/initDb.ts",
     "db:check": "tsx src/scripts/checkDb.ts",
-    "db:seed": "tsx src/scripts/seedDemo.ts"
+    "db:seed": "tsx src/scripts/seedDemo.ts",
+    "db:seed:gamified": "tsx src/scripts/seedGamified.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
