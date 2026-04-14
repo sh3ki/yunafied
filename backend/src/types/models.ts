@@ -131,6 +131,20 @@ export interface GamifiedLeaderboardItem {
   completedAt: string;
 }
 
+export interface GamifiedAttemptAnswerResultItem {
+  questionId: string;
+  questionPrompt: string;
+  selectedChoiceId: string | null;
+  selectedChoiceText: string | null;
+  correctChoiceId: string;
+  correctChoiceText: string;
+  isCorrect: boolean;
+  maxPoints: number;
+  speedBonus: number;
+  pointsEarned: number;
+  timeRemainingSeconds: number;
+}
+
 export interface GamifiedAttemptResultItem {
   attemptId: string;
   quizId: string;
@@ -140,4 +154,5 @@ export interface GamifiedAttemptResultItem {
   correctAnswers: number;
   totalScore: number;
   completedAt: string;
+  answers: GamifiedAttemptAnswerResultItem[];
 }
