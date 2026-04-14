@@ -2,6 +2,11 @@ import {
   AnnouncementItem,
   AssignmentItem,
   AuthUser,
+  GamifiedAttemptResultItem,
+  GamifiedCategoryItem,
+  GamifiedLeaderboardItem,
+  GamifiedQuizDetailItem,
+  GamifiedQuizItem,
   ScheduleItem,
   SubmissionItem,
   TranslationHistoryItem,
@@ -201,9 +206,13 @@ class YunafiedApiClient {
 
   async createSchedule(payload: {
     title: string;
-    day: string;
+    description: string;
+    date: string;
     startTime: string;
     endTime: string;
+    teacherId?: string;
+    studentId?: string | null;
+    requestNote?: string;
   }): Promise<ScheduleItem> {
     return this.request<ScheduleItem>("/api/schedules", {
       method: "POST",
@@ -211,8 +220,165 @@ class YunafiedApiClient {
     });
   }
 
+  async respondToSchedule(
+    id: string,
+    payload: {
+      decision: "accepted" | "declined";
+      title?: string;
+      description?: string;
+      date?: string;
+      startTime?: string;
+      endTime?: string;
+      responseNote?: string;
+    },
+  ): Promise<ScheduleItem> {
+    return this.request<ScheduleItem>(`/api/schedules/${id}/respond`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async moveSchedule(
+    id: string,
+    payload: {
+      date: string;
+      startTime: string;
+      endTime: string;
+      title?: string;
+      description?: string;
+    },
+  ): Promise<ScheduleItem> {
+    return this.request<ScheduleItem>(`/api/schedules/${id}/move`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async cancelSchedule(id: string, responseNote: string): Promise<ScheduleItem> {
+    return this.request<ScheduleItem>(`/api/schedules/${id}/cancel`, {
+      method: "PATCH",
+      body: JSON.stringify({ responseNote }),
+    });
+  }
+
+  async adminEditSchedule(
+    id: string,
+    payload: {
+      title?: string;
+      description?: string;
+      date?: string;
+      startTime?: string;
+      endTime?: string;
+      teacherId?: string;
+      studentId?: string | null;
+      status?: "pending" | "accepted" | "declined" | "cancelled";
+      requestNote?: string | null;
+      responseNote?: string | null;
+    },
+  ): Promise<ScheduleItem> {
+    return this.request<ScheduleItem>(`/api/schedules/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
   async deleteSchedule(id: string): Promise<void> {
     await this.request<void>(`/api/schedules/${id}`, { method: "DELETE" });
+  }
+
+  async listGamifiedCategories(): Promise<GamifiedCategoryItem[]> {
+    return this.request<GamifiedCategoryItem[]>("/api/gamified/categories");
+  }
+
+  async createGamifiedCategory(payload: { name: string; description?: string | null }): Promise<GamifiedCategoryItem> {
+    return this.request<GamifiedCategoryItem>("/api/gamified/categories", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateGamifiedCategory(
+    id: string,
+    payload: { name?: string; description?: string | null },
+  ): Promise<GamifiedCategoryItem> {
+    return this.request<GamifiedCategoryItem>(`/api/gamified/categories/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listGamifiedQuizzes(input?: { categoryId?: string }): Promise<GamifiedQuizItem[]> {
+    const params = new URLSearchParams();
+    if (input?.categoryId) {
+      params.set("categoryId", input.categoryId);
+    }
+    const query = params.toString();
+    return this.request<GamifiedQuizItem[]>(`/api/gamified/quizzes${query ? `?${query}` : ""}`);
+  }
+
+  async getGamifiedQuiz(id: string): Promise<GamifiedQuizDetailItem> {
+    return this.request<GamifiedQuizDetailItem>(`/api/gamified/quizzes/${id}`);
+  }
+
+  async createGamifiedQuiz(payload: {
+    categoryId: string;
+    title: string;
+    description?: string;
+    timePerQuestionSeconds: number;
+    isPublished?: boolean;
+    questions: Array<{
+      prompt: string;
+      points: number;
+      choices: Array<{ text: string; isCorrect: boolean }>;
+    }>;
+  }): Promise<GamifiedQuizDetailItem> {
+    return this.request<GamifiedQuizDetailItem>("/api/gamified/quizzes", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateGamifiedQuiz(
+    id: string,
+    payload: {
+      categoryId: string;
+      title: string;
+      description?: string;
+      timePerQuestionSeconds: number;
+      isPublished?: boolean;
+      questions: Array<{
+        prompt: string;
+        points: number;
+        choices: Array<{ text: string; isCorrect: boolean }>;
+      }>;
+    },
+  ): Promise<GamifiedQuizDetailItem> {
+    return this.request<GamifiedQuizDetailItem>(`/api/gamified/quizzes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async submitGamifiedAttempt(
+    quizId: string,
+    payload: {
+      answers: Array<{ questionId: string; selectedChoiceId?: string | null; timeRemainingSeconds?: number }>;
+    },
+  ): Promise<GamifiedAttemptResultItem> {
+    return this.request<GamifiedAttemptResultItem>(`/api/gamified/quizzes/${quizId}/attempts`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listGamifiedLeaderboard(input: { categoryId: string; limit?: number }): Promise<GamifiedLeaderboardItem[]> {
+    const params = new URLSearchParams();
+    params.set("categoryId", input.categoryId);
+    if (input.limit) {
+      params.set("limit", String(input.limit));
+    }
+
+    return this.request<GamifiedLeaderboardItem[]>(`/api/gamified/leaderboard?${params.toString()}`);
   }
 
   async listAssignments(): Promise<AssignmentItem[]> {
