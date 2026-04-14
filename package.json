@@ -10,7 +10,12 @@
     "dev": "npm run dev:full",
     "dev:backend": "npm run dev --prefix backend",
     "dev:frontend": "vite",
-    "dev:full": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\""
+    "dev:full": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "db:seed:gamified": "npm run db:seed:gamified --prefix backend",
+    "mobile:start": "npm run start --prefix mobile-app",
+    "mobile:start:lan": "npm run start:lan --prefix mobile-app",
+    "mobile:start:tunnel": "npm run start:tunnel --prefix mobile-app",
+    "mobile:typecheck": "npm run typecheck --prefix mobile-app"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -61,6 +66,7 @@
     "react-hook-form": "7.55.0",
     "react-popper": "2.3.0",
     "react-resizable-panels": "2.1.7",
+    "react-router-dom": "7.9.4",
     "react-responsive-masonry": "2.7.1",
     "react-slick": "0.31.0",
     "recharts": "2.15.2",
