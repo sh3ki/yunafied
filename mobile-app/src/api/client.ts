@@ -21,8 +21,64 @@ interface LoginResponse {
   user: AuthUser;
 }
 
-const configApiUrl = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
-const API_URL = configApiUrl || 'http://localhost:4000';
+function extractHost(uri: string | undefined | null): string | null {
+  if (!uri) {
+    return null;
+  }
+
+  const normalized = uri.replace(/^[a-z]+:\/\//i, '');
+  const hostWithPort = normalized.split('/')[0];
+  const host = hostWithPort.split(':')[0];
+  return host || null;
+}
+
+function detectExpoHost(): string | null {
+  const constantsAny = Constants as unknown as {
+    expoConfig?: { hostUri?: string };
+    expoGoConfig?: { debuggerHost?: string };
+    manifest2?: { extra?: { expoClient?: { hostUri?: string } } };
+    manifest?: { debuggerHost?: string };
+  };
+
+  const candidates = [
+    constantsAny.expoConfig?.hostUri,
+    constantsAny.expoGoConfig?.debuggerHost,
+    constantsAny.manifest2?.extra?.expoClient?.hostUri,
+    constantsAny.manifest?.debuggerHost,
+  ];
+
+  const isLikelyLocalHost = (host: string): boolean => {
+    const isIpv4 = /^(\d{1,3}\.){3}\d{1,3}$/.test(host);
+    return isIpv4 || host === 'localhost' || host.endsWith('.local');
+  };
+
+  for (const candidate of candidates) {
+    const host = extractHost(candidate);
+    if (host && isLikelyLocalHost(host)) {
+      return host;
+    }
+  }
+
+  return null;
+}
+
+function resolveApiUrl(): string {
+  const rawConfigApiUrl = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
+  const configApiUrl = rawConfigApiUrl?.trim();
+
+  if (configApiUrl && configApiUrl.toLowerCase() !== 'auto') {
+    return configApiUrl;
+  }
+
+  const detectedHost = detectExpoHost();
+  if (detectedHost) {
+    return `http://${detectedHost}:4000`;
+  }
+
+  return 'http://localhost:4000';
+}
+
+const API_URL = resolveApiUrl();
 
 class MobileApiClient {
   private token: string | null = null;
