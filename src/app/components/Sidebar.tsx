@@ -5,6 +5,9 @@ import {
   BookOpen, 
   Users, 
   BarChart,
+  Bell,
+  MessageCircle,
+  Library,
   LogOut,
   Flag,
   Megaphone,
@@ -12,6 +15,7 @@ import {
   UserRound
 } from 'lucide-react';
 import { clsx } from 'clsx';
+import { SystemLogo } from '@/app/components/SystemLogo';
 
 interface SidebarProps {
   role: 'admin' | 'teacher' | 'student';
@@ -33,6 +37,10 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student'] },
     { id: 'schedule', label: 'Scheduling', icon: Calendar, roles: ['admin', 'teacher', 'student'] },
     { id: 'announcements', label: 'Announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student'] },
+    { id: 'chats', label: 'Chats', icon: MessageCircle, roles: ['admin', 'teacher', 'student'] },
+    { id: 'notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'teacher', 'student'] },
+    { id: 'enrollments', label: 'Enrollments', icon: Users, roles: ['admin', 'teacher', 'student'] },
+    { id: 'materials', label: 'Learning Materials', icon: Library, roles: ['admin', 'teacher', 'student'] },
     { id: 'assignments', label: 'Assignments', icon: BookOpen, roles: ['teacher', 'student'] },
     { id: 'grades', label: 'Grades & Feedback', icon: BookOpen, roles: ['student'] },
     { id: 'gamified-learning', label: 'Gamified Learning', icon: Sparkles, roles: ['admin', 'teacher', 'student'] },
@@ -53,12 +61,7 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
   return (
     <div className="hidden md:flex w-64 bg-slate-900 text-white flex-col h-screen fixed left-0 top-0 z-10 shadow-xl">
       <div className="p-6 border-b border-slate-800">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <span className={clsx("p-1.5 rounded-lg", activeBgColor)}>
-            <Sparkles className="h-4 w-4 text-white" />
-          </span>
-          <span className="bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">YUNAFied</span>
-        </h2>
+        <SystemLogo compact showText imageClassName="ring-1 ring-white/10 shadow-lg shadow-violet-900/20" textClassName="text-white" />
         <div className="mt-4 p-3 rounded-xl bg-slate-800/70 border border-slate-700 flex items-center gap-3">
           <img
             src={user.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || 'User')}&background=ede9fe&color=5b21b6`}
