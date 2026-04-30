@@ -28,6 +28,8 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
   const [email, setEmail] = useState(user.email);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(user.profileImageUrl || null);
   const [profileImagePublicId, setProfileImagePublicId] = useState<string | null>(user.profileImagePublicId || null);
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
@@ -38,24 +40,31 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
     setEmail(user.email);
     setProfileImageUrl(user.profileImageUrl || null);
     setProfileImagePublicId(user.profileImagePublicId || null);
+    setSelectedImageFile(null);
+    setPreviewImageUrl(null);
   }, [user]);
 
-  const onFileChange = async (file: File | null) => {
+  useEffect(() => {
+    return () => {
+      if (previewImageUrl) {
+        URL.revokeObjectURL(previewImageUrl);
+      }
+    };
+  }, [previewImageUrl]);
+
+  const onFileChange = (file: File | null) => {
     if (!file) {
       return;
     }
 
-    try {
-      setUploading(true);
-      const uploaded = await onUploadProfileImage(file);
-      setProfileImageUrl(uploaded.secureUrl);
-      setProfileImagePublicId(uploaded.publicId);
-      toast.success('Profile image uploaded. Save changes to apply.');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to upload profile image.');
-    } finally {
-      setUploading(false);
+    if (previewImageUrl) {
+      URL.revokeObjectURL(previewImageUrl);
     }
+
+    const objectUrl = URL.createObjectURL(file);
+    setSelectedImageFile(file);
+    setPreviewImageUrl(objectUrl);
+    toast.success('Photo selected. Click Save Changes to upload and apply.');
   };
 
   const handleSave = async () => {
@@ -66,14 +75,35 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
 
     try {
       setSaving(true);
+      let nextProfileImageUrl = profileImageUrl;
+      let nextProfileImagePublicId = profileImagePublicId;
+
+      if (selectedImageFile) {
+        setUploading(true);
+        const uploaded = await onUploadProfileImage(selectedImageFile);
+        nextProfileImageUrl = uploaded.secureUrl;
+        nextProfileImagePublicId = uploaded.publicId;
+      }
+
       await onUpdateProfile({
         fullName: fullName.trim(),
         email: email.trim(),
-        profileImageUrl,
-        profileImagePublicId,
+        profileImageUrl: nextProfileImageUrl,
+        profileImagePublicId: nextProfileImagePublicId,
         currentPassword: currentPassword.trim() || undefined,
         newPassword: newPassword.trim() || undefined,
       });
+
+      if (selectedImageFile) {
+        setProfileImageUrl(nextProfileImageUrl);
+        setProfileImagePublicId(nextProfileImagePublicId);
+        setSelectedImageFile(null);
+      }
+
+      if (previewImageUrl) {
+        URL.revokeObjectURL(previewImageUrl);
+      }
+      setPreviewImageUrl(null);
 
       setCurrentPassword('');
       setNewPassword('');
@@ -81,6 +111,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
     } catch (error: any) {
       toast.error(error.message || 'Failed to update profile.');
     } finally {
+      setUploading(false);
       setSaving(false);
     }
   };
@@ -95,22 +126,23 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex items-center gap-4">
           <img
-            src={profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || 'User')}&background=ede9fe&color=5b21b6`}
+            src={previewImageUrl || profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || 'User')}&background=ede9fe&color=5b21b6`}
             alt="Profile"
             className="h-20 w-20 rounded-full object-cover border border-violet-100"
           />
           <div className="space-y-2">
             <label className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg text-sm cursor-pointer transition">
               <ImagePlus className="h-4 w-4" />
-              {uploading ? 'Uploading...' : 'Upload Photo'}
+              {uploading ? 'Uploading...' : selectedImageFile ? 'Change Selected Photo' : 'Upload Photo'}
               <input
                 type="file"
                 className="hidden"
                 accept=".jpg,.jpeg,.png,.webp"
-                disabled={uploading}
+                disabled={uploading || saving}
                 onChange={(e) => onFileChange(e.target.files?.[0] || null)}
               />
             </label>
+            {selectedImageFile ? <p className="text-xs text-violet-700">Selected: {selectedImageFile.name}</p> : null}
             <p className="text-xs text-gray-500">Accepted formats: JPG, PNG, WEBP (max 5MB)</p>
           </div>
         </div>
@@ -177,11 +209,11 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
         <div className="px-6 pb-6">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || uploading}
             className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-5 py-2.5 rounded-lg font-medium transition disabled:opacity-70"
           >
             <Save className="h-4 w-4" />
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving || uploading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
