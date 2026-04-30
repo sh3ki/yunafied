@@ -12,6 +12,7 @@ import { Schedule } from '@/app/components/Schedule';
 import { Assignments } from '@/app/components/Assignments';
 import { UsersView } from '@/app/components/Users';
 import { Communication } from '@/app/components/Communication';
+import { Chats } from '@/app/components/Chats';
 import { GamifiedLearning } from '@/app/components/GamifiedLearning';
 import { VideoSummarizer } from '@/app/components/VideoSummarizer';
 import { WordTranslator } from '@/app/components/WordTranslator';
@@ -20,6 +21,9 @@ import { ProfileSettings } from '@/app/components/ProfileSettings';
 import { AIChatbot } from '@/app/components/AIChatbot';
 import { MilestonesView } from '@/app/components/MilestonesView';
 import { Performance } from '@/app/components/Performance';
+import { Notifications } from '@/app/components/Notifications';
+import { EnrollmentRecords } from '@/app/components/EnrollmentRecords';
+import { LearningMaterials } from '@/app/components/LearningMaterials';
 import { apiClient } from '@/app/services/apiClient';
 import {
   AnnouncementItem,
@@ -144,12 +148,16 @@ interface AuthenticatedShellProps {
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'schedule', 'announcements', 'gamified-learning', 'performance', 'users', 'profile'],
-  teacher: ['dashboard', 'schedule', 'announcements', 'assignments', 'gamified-learning', 'performance', 'profile'],
+  admin: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'users', 'profile'],
+  teacher: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'assignments', 'materials', 'enrollments', 'gamified-learning', 'performance', 'profile'],
   student: [
     'dashboard',
     'schedule',
     'announcements',
+    'chats',
+    'notifications',
+    'enrollments',
+    'materials',
     'assignments',
     'grades',
     'gamified-learning',
@@ -293,6 +301,14 @@ function AuthenticatedShell({
                   <Communication role={userRole} announcements={data.announcements} onCreateAnnouncement={onCreateAnnouncement} />
                 </div>
               )}
+
+              {currentView === 'chats' && <Chats role={userRole} currentUserId={session.user.id} />}
+
+              {currentView === 'notifications' && <Notifications onNavigate={onNavigateView} />}
+
+              {currentView === 'enrollments' && <EnrollmentRecords role={userRole} />}
+
+              {currentView === 'materials' && <LearningMaterials role={userRole} backendBaseUrl={backendBaseUrl} />}
 
               {currentView === 'gamified-learning' && (
                 <GamifiedLearning role={userRole} userId={session.user.id} />
