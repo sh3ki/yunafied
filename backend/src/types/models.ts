@@ -1,6 +1,8 @@
 export type UserRole = "admin" | "teacher" | "student";
 export type UserStatus = "active" | "inactive";
 export type ScheduleStatus = "pending" | "accepted" | "declined" | "cancelled";
+export type EnrollmentStatus = "active" | "completed" | "dropped";
+export type ChatType = "direct" | "group";
 
 export interface AuthUser {
   id: string;
@@ -64,6 +66,77 @@ export interface AnnouncementItem {
   postedById: string;
   postedByName: string;
   createdAt: string;
+}
+
+export interface MessageUserItem {
+  id: string;
+  fullName: string;
+  role: UserRole;
+  profileImageUrl: string | null;
+}
+
+export interface MessageItem {
+  id: string;
+  senderId: string;
+  senderName: string;
+  receiverId: string;
+  receiverName: string;
+  body: string;
+  sentAt: string;
+}
+
+export interface ChatSummaryItem {
+  id: string;
+  name: string | null;
+  chatType: ChatType;
+  directKey: string | null;
+  createdById: string;
+  createdByName: string;
+  lastMessageId: string | null;
+  lastMessageBody: string | null;
+  lastMessageAt: string | null;
+  participantCount: number;
+  participants: MessageUserItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessageItem {
+  id: string;
+  chatId: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  sentAt: string;
+}
+
+export interface EnrollmentRecordItem {
+  id: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  subject: string;
+  tutorialGroup: string | null;
+  status: EnrollmentStatus;
+  note: string | null;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LearningMaterialItem {
+  id: string;
+  title: string;
+  description: string | null;
+  subject: string;
+  materialType: "link" | "file";
+  resourceUrl: string;
+  fileName: string | null;
+  createdById: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TranslationHistoryItem {
