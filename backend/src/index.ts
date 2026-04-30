@@ -1,7 +1,9 @@
 import "dotenv/config";
+import { execFile } from "node:child_process";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, promises as fs } from "node:fs";
 import bcrypt from "bcryptjs";
 import { v2 as cloudinary } from "cloudinary";
 import compression from "compression";
@@ -10,10 +12,13 @@ import express, { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import multer from "multer";
+import ffmpegPath from "ffmpeg-static";
 import { z } from "zod";
 import { testDatabaseConnection } from "./lib/db.js";
 import { AuthenticatedRequest, requireAuth, requireRole, signAccessToken } from "./middleware/auth.js";
 import { YunafiedService } from "./services/YunafiedService.js";
+
+const execFileAsync = promisify(execFile);
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
@@ -24,6 +29,24 @@ const bootstrapCache = new Map<string, { expiresAt: number; data: unknown }>();
 interface GroqMessage {
   role: "system" | "user" | "assistant";
   content: string;
+}
+
+interface PythonVideoToolResult {
+  transcript?: string;
+  error?: string;
+}
+
+interface ChunkSummary {
+  main_topic: string;
+  key_points: string[];
+  important_insights: string[];
+  conclusions: string[];
+}
+
+interface VideoSummaryPayload {
+  title: string;
+  summary: string[];
+  takeaways: string[];
 }
 
 function bootstrapCacheKey(auth: { sub?: string; role?: string }): string {
@@ -53,6 +76,323 @@ function setBootstrapCache(key: string, data: unknown): void {
 
 function clearBootstrapCache(): void {
   bootstrapCache.clear();
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "..");
+const workspaceRoot = path.resolve(projectRoot, "..");
+const pythonVideoToolPath = path.join(projectRoot, "python", "video_pipeline.py");
+const workspaceVenvPython = path.join(workspaceRoot, ".venv", "Scripts", "python.exe");
+
+function extractYoutubeVideoId(input: string): string | null {
+  try {
+    const url = new URL(input);
+    if (url.hostname.includes("youtu.be")) {
+      const id = url.pathname.split("/").filter(Boolean)[0];
+      return id || null;
+    }
+
+    if (url.searchParams.has("v")) {
+      return url.searchParams.get("v");
+    }
+
+    const pathParts = url.pathname.split("/").filter(Boolean);
+    const shortsIndex = pathParts.indexOf("shorts");
+    if (shortsIndex >= 0 && pathParts[shortsIndex + 1]) {
+      return pathParts[shortsIndex + 1];
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+type PythonRunner = { bin: string; prefix: string[] };
+
+const pythonRunners: PythonRunner[] = [
+  ...(process.env.PYTHON_BIN ? [{ bin: process.env.PYTHON_BIN, prefix: [] }] : []),
+  { bin: workspaceVenvPython, prefix: [] },
+  { bin: "python", prefix: [] },
+  { bin: "py", prefix: ["-3"] },
+];
+
+let resolvedPythonRunner: PythonRunner | null = null;
+
+async function getPythonRunner(): Promise<PythonRunner> {
+  if (resolvedPythonRunner) {
+    return resolvedPythonRunner;
+  }
+
+  await fs.access(pythonVideoToolPath);
+
+  for (const candidate of pythonRunners) {
+    try {
+      await execFileAsync(candidate.bin, [...candidate.prefix, "--version"]);
+      resolvedPythonRunner = candidate;
+      return candidate;
+    } catch {
+      // Continue trying the next Python executable candidate.
+    }
+  }
+
+  throw new Error("Python runtime was not found. Install Python 3.10+ and ensure it is available in PATH.");
+}
+
+function parseFirstJsonObject(raw: string): unknown {
+  const direct = raw.trim();
+  if (!direct) {
+    throw new Error("Received empty output.");
+  }
+
+  try {
+    return JSON.parse(direct);
+  } catch {
+    const start = direct.indexOf("{");
+    const end = direct.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(direct.slice(start, end + 1));
+    }
+    throw new Error("Output was not valid JSON.");
+  }
+}
+
+async function runPythonVideoTool(command: string, args: string[]): Promise<PythonVideoToolResult> {
+  const runner = await getPythonRunner();
+
+  const { stdout, stderr } = await execFileAsync(
+    runner.bin,
+    [...runner.prefix, pythonVideoToolPath, command, ...args],
+    {
+      maxBuffer: 20 * 1024 * 1024,
+      env: {
+        ...process.env,
+        FFMPEG_BINARY: (ffmpegPath as unknown as string | undefined) || process.env.FFMPEG_BINARY || "ffmpeg",
+      },
+    },
+  );
+
+  const parsed = parseFirstJsonObject(stdout) as PythonVideoToolResult;
+  if (parsed.error) {
+    throw new Error(parsed.error);
+  }
+
+  if (!parsed.transcript?.trim()) {
+    throw new Error(stderr?.trim() || "Transcription tool returned no transcript.");
+  }
+
+  return parsed;
+}
+
+async function fetchYoutubeTranscriptByVideoId(videoId: string): Promise<string> {
+  const result = await runPythonVideoTool("fetch_youtube_transcript", ["--video-id", videoId]);
+  return result.transcript!.trim();
+}
+
+async function transcribeUploadedVideoWithWhisper(filePath: string): Promise<string> {
+  const result = await runPythonVideoTool("transcribe_video_file", ["--video-path", filePath]);
+  return result.transcript!.trim();
+}
+
+async function transcribeYoutubeWithWhisper(videoUrl: string): Promise<string> {
+  const result = await runPythonVideoTool("transcribe_youtube_video", ["--video-url", videoUrl]);
+  return result.transcript!.trim();
+}
+
+function cleanTranscriptText(input: string): string {
+  const fillerWordRegex = /\b(um+|uh+|erm|ah+|you know|i mean|sort of|kind of|like)\b/gi;
+  const squashed = input
+    .replace(/[\t\r\n]+/g, " ")
+    .replace(fillerWordRegex, " ")
+    .replace(/\b(\w+)(\s+\1\b)+/gi, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const sentenceLike = squashed
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+  for (const piece of sentenceLike) {
+    const normalized = piece.toLowerCase();
+    if (seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    deduped.push(piece);
+  }
+
+  return deduped.join(" ").replace(/\s+/g, " ").trim();
+}
+
+function splitTranscriptIntoChunks(transcript: string, maxWords = 1800): string[] {
+  const words = transcript.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return [transcript];
+  }
+
+  const chunks: string[] = [];
+  for (let i = 0; i < words.length; i += maxWords) {
+    chunks.push(words.slice(i, i + maxWords).join(" "));
+  }
+
+  return chunks;
+}
+
+function normalizeList(input: unknown, limit = 6): string[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const normalized = input
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .map((item) => item.replace(/^[-*\d.)\s]+/, "").trim());
+
+  return Array.from(new Set(normalized)).slice(0, limit);
+}
+
+function normalizeStructuredSummary(input: unknown): VideoSummaryPayload {
+  const source = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  const title = String(source.title || "Video Summary").trim() || "Video Summary";
+  const summary = normalizeList(source.summary, 8);
+  const takeaways = normalizeList(source.takeaways, 5);
+
+  if (!summary.length) {
+    throw new Error("Summarizer returned no key points.");
+  }
+
+  return {
+    title,
+    summary,
+    takeaways,
+  };
+}
+
+function normalizeChunkSummary(input: unknown): ChunkSummary {
+  const source = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+
+  return {
+    main_topic: String(source.main_topic || "").trim(),
+    key_points: normalizeList(source.key_points, 6),
+    important_insights: normalizeList(source.important_insights, 4),
+    conclusions: normalizeList(source.conclusions, 4),
+  };
+}
+
+async function summarizeChunk(input: {
+  transcriptChunk: string;
+  context?: string;
+  chunkIndex: number;
+  totalChunks: number;
+}): Promise<ChunkSummary> {
+  const answer = await requestGroqChat({
+    messages: [
+      {
+        role: "system",
+        content:
+          "Extract only the most relevant information. Return strict JSON only with this schema: {\"main_topic\": string, \"key_points\": string[], \"important_insights\": string[], \"conclusions\": string[] }.",
+      },
+      {
+        role: "user",
+        content: [
+          input.context ? `Context: ${input.context.trim()}` : "",
+          `Chunk ${input.chunkIndex}/${input.totalChunks}`,
+          "Summarize only main topic, key points, important insights, and conclusions.",
+          `Transcript chunk: ${input.transcriptChunk}`,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      },
+    ],
+    temperature: 0.1,
+    maxTokens: 500,
+  });
+
+  return normalizeChunkSummary(parseFirstJsonObject(answer));
+}
+
+async function summarizeSingleTranscript(input: { transcript: string; context?: string }): Promise<VideoSummaryPayload> {
+  const answer = await requestGroqChat({
+    messages: [
+      {
+        role: "system",
+        content:
+          "Extract only main topic, key points, important insights, and conclusions. Return strict JSON only with schema: {\"title\": string, \"summary\": string[], \"takeaways\": string[] }.",
+      },
+      {
+        role: "user",
+        content: [
+          input.context ? `Context: ${input.context.trim()}` : "",
+          "Do not add anything outside the requested JSON schema.",
+          `Transcript: ${input.transcript}`,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      },
+    ],
+    temperature: 0.1,
+    maxTokens: 550,
+  });
+
+  return normalizeStructuredSummary(parseFirstJsonObject(answer));
+}
+
+async function summarizeChunkedTranscript(input: {
+  chunks: string[];
+  context?: string;
+}): Promise<VideoSummaryPayload> {
+  const chunkSummaries: ChunkSummary[] = [];
+  for (let index = 0; index < input.chunks.length; index += 1) {
+    const chunkSummary = await summarizeChunk({
+      transcriptChunk: input.chunks[index],
+      context: input.context,
+      chunkIndex: index + 1,
+      totalChunks: input.chunks.length,
+    });
+    chunkSummaries.push(chunkSummary);
+  }
+
+  const answer = await requestGroqChat({
+    messages: [
+      {
+        role: "system",
+        content:
+          "Combine chunk summaries and return strict JSON only with schema: {\"title\": string, \"summary\": string[], \"takeaways\": string[] }. summary must contain key points and important insights only.",
+      },
+      {
+        role: "user",
+        content: [
+          input.context ? `Context: ${input.context.trim()}` : "",
+          "Create a final concise summary from these chunk summaries.",
+          JSON.stringify(chunkSummaries),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      },
+    ],
+    temperature: 0.1,
+    maxTokens: 650,
+  });
+
+  return normalizeStructuredSummary(parseFirstJsonObject(answer));
+}
+
+async function summarizeTranscript(input: { transcript: string; context?: string }): Promise<VideoSummaryPayload> {
+  const cleanedTranscript = cleanTranscriptText(input.transcript);
+  if (!cleanedTranscript) {
+    throw new Error("No usable transcript text was produced.");
+  }
+
+  const chunks = splitTranscriptIntoChunks(cleanedTranscript, 1800);
+  if (chunks.length <= 1) {
+    return summarizeSingleTranscript({ transcript: cleanedTranscript, context: input.context });
+  }
+
+  return summarizeChunkedTranscript({ chunks, context: input.context });
 }
 
 async function requestGroqChat(input: {
@@ -97,8 +437,6 @@ async function requestGroqChat(input: {
   return answer;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const uploadsDir = process.env.UPLOAD_DIR || path.resolve(__dirname, "../uploads");
 mkdirSync(uploadsDir, { recursive: true });
 
@@ -145,6 +483,34 @@ const profileImageUpload = multer({
   },
 });
 
+const learningMaterialUpload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowed = [".pdf", ".doc", ".docx", ".txt", ".ppt", ".pptx", ".xls", ".xlsx"];
+    if (!allowed.includes(ext)) {
+      cb(new Error("Only PDF, DOC, DOCX, TXT, PPT, PPTX, XLS, and XLSX files are allowed."));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+const videoUpload = multer({
+  storage,
+  limits: { fileSize: 200 * 1024 * 1024 },
+  fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowed = [".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi"];
+    if (!allowed.includes(ext)) {
+      cb(new Error("Only MP4, M4V, MOV, MKV, WEBM, and AVI videos are allowed."));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
 async function uploadProfileBufferToCloudinary(file: Express.Multer.File): Promise<{ secureUrl: string; publicId: string }> {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
@@ -167,11 +533,12 @@ async function uploadProfileBufferToCloudinary(file: Express.Multer.File): Promi
   });
 }
 
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors());
 app.use(compression());
 app.use(express.json());
 app.use(morgan("dev"));
+app.use(express.static(path.resolve(__dirname, "../public")));
 app.use("/uploads", express.static(uploadsDir));
 
 const signupSchema = z.object({
@@ -220,10 +587,42 @@ const translateSchema = z.object({
   targetLanguage: z.string().min(2).max(40).default("Korean"),
 });
 
+const videoSummarySchema = z.object({
+  videoUrl: z.string().url(),
+  context: z.string().max(800).optional(),
+});
+
 const translationHistoryQuerySchema = z.object({
   search: z.string().max(200).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(30).default(6),
+});
+
+const notificationsQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+const enrollmentSchema = z.object({
+  studentId: z.string().uuid(),
+  teacherId: z.string().uuid(),
+  subject: z.string().min(2).max(200),
+  tutorialGroup: z.string().max(120).optional(),
+  status: z.enum(["active", "completed", "dropped"]).default("active"),
+  note: z.string().max(1000).optional(),
+});
+
+const enrollmentUpdateSchema = z.object({
+  subject: z.string().min(2).max(200).optional(),
+  tutorialGroup: z.string().max(120).nullable().optional(),
+  status: z.enum(["active", "completed", "dropped"]).optional(),
+  note: z.string().max(1000).nullable().optional(),
+});
+
+const materialLinkSchema = z.object({
+  title: z.string().min(2).max(200),
+  description: z.string().max(2000).optional(),
+  subject: z.string().min(2).max(200),
+  url: z.string().url(),
 });
 
 const updateProfileSchema = z
@@ -480,6 +879,176 @@ app.post("/api/ai/translate", requireAuth, async (req: AuthenticatedRequest, res
     });
 
     res.status(201).json({ translatedText, historyItem });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post(
+  "/api/ai/video-summary",
+  requireAuth,
+  videoUpload.single("file"),
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const context = typeof req.body?.context === "string" ? req.body.context : undefined;
+    const videoUrl = typeof req.body?.videoUrl === "string" ? req.body.videoUrl : undefined;
+    const uploadedVideoPath = req.file?.path;
+
+    let transcript = "";
+    let transcriptFetchError: string | null = null;
+
+    if (uploadedVideoPath) {
+      transcript = await transcribeUploadedVideoWithWhisper(uploadedVideoPath);
+    } else if (videoUrl) {
+      const videoId = extractYoutubeVideoId(videoUrl);
+      if (!videoId) {
+        res.status(400).json({ message: "Please provide a valid YouTube URL." });
+        return;
+      }
+
+      try {
+        transcript = await fetchYoutubeTranscriptByVideoId(videoId);
+      } catch (error) {
+        transcriptFetchError = error instanceof Error ? error.message : "Transcript fetch failed.";
+      }
+
+      if (!transcript.trim()) {
+        try {
+          transcript = await transcribeYoutubeWithWhisper(videoUrl);
+        } catch (error) {
+          const fallbackError = error instanceof Error ? error.message : "YouTube transcription fallback failed.";
+          throw new Error(
+            `Unable to process this YouTube video. Transcript fetch failed: ${transcriptFetchError || "Unknown error"}. Fallback transcription failed: ${fallbackError}`,
+          );
+        }
+      }
+    } else {
+      res.status(400).json({ message: "Provide a video file or a YouTube URL." });
+      return;
+    }
+
+    const structuredSummary = await summarizeTranscript({ transcript, context });
+
+    res.json(structuredSummary);
+  } catch (error) {
+    next(error);
+  } finally {
+    if (req.file?.path) {
+      await fs.unlink(req.file.path).catch(() => undefined);
+    }
+  }
+  },
+);
+
+app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    const role = req.auth?.role;
+
+    if (!userId || !role) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const query = notificationsQuerySchema.parse(req.query);
+    const requester = { id: userId, role };
+    const [assignments, submissions, schedules, announcements] = await Promise.all([
+      service.listAssignments(),
+      service.listSubmissionsForRole(requester),
+      service.listSchedulesForRole(requester),
+      service.listAnnouncements(),
+    ]);
+
+    type NotificationItem = {
+      id: string;
+      type: "assignment" | "submission" | "announcement" | "schedule" | "grade";
+      title: string;
+      message: string;
+      priority: "low" | "medium" | "high";
+      createdAt: string;
+      actionView: string;
+    };
+
+    const now = new Date();
+    const notificationRows: NotificationItem[] = [];
+
+    for (const announcement of announcements.slice(0, 8)) {
+      notificationRows.push({
+        id: `announcement:${announcement.id}`,
+        type: "announcement",
+        title: "New announcement",
+        message: `${announcement.title} by ${announcement.postedByName}`,
+        priority: "medium",
+        createdAt: announcement.createdAt,
+        actionView: "announcements",
+      });
+    }
+
+    if (role === "student") {
+      const mySubmissionByAssignment = new Set(submissions.map((item) => item.assignmentId));
+
+      for (const assignment of assignments) {
+        const due = new Date(assignment.dueDate);
+        const hoursUntilDue = (due.getTime() - now.getTime()) / 36e5;
+        const submitted = mySubmissionByAssignment.has(assignment.id);
+
+        if (!submitted && hoursUntilDue <= 72 && hoursUntilDue >= -24) {
+          notificationRows.push({
+            id: `assignment-due:${assignment.id}`,
+            type: "assignment",
+            title: "Assignment due soon",
+            message: `${assignment.title} is due on ${assignment.dueDate}.`,
+            priority: hoursUntilDue <= 24 ? "high" : "medium",
+            createdAt: assignment.createdAt,
+            actionView: "assignments",
+          });
+        }
+      }
+
+      for (const submission of submissions) {
+        if (submission.grade) {
+          notificationRows.push({
+            id: `grade:${submission.id}`,
+            type: "grade",
+            title: "Submission graded",
+            message: `${submission.assignmentTitle}: grade ${submission.grade}`,
+            priority: "medium",
+            createdAt: submission.gradedAt || submission.submittedAt,
+            actionView: "grades",
+          });
+        }
+      }
+    } else {
+      const ungraded = submissions.filter((item) => !item.grade);
+      for (const submission of ungraded.slice(0, 12)) {
+        notificationRows.push({
+          id: `submission:${submission.id}`,
+          type: "submission",
+          title: "New submission needs grading",
+          message: `${submission.studentName} submitted ${submission.assignmentTitle}.`,
+          priority: "high",
+          createdAt: submission.submittedAt,
+          actionView: "assignments",
+        });
+      }
+    }
+
+    for (const schedule of schedules.slice(0, 12)) {
+      if (schedule.status === "pending") {
+        notificationRows.push({
+          id: `schedule-pending:${schedule.id}`,
+          type: "schedule",
+          title: "Schedule request pending",
+          message: `${schedule.title} on ${schedule.date} ${schedule.startTime}-${schedule.endTime}`,
+          priority: "medium",
+          createdAt: schedule.updatedAt || schedule.createdAt,
+          actionView: "schedule",
+        });
+      }
+    }
+
+    notificationRows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    res.json(notificationRows.slice(0, query.limit));
   } catch (error) {
     next(error);
   }
@@ -1234,6 +1803,38 @@ const createAnnouncementSchema = z.object({
   content: z.string().min(2),
 });
 
+const createDirectChatSchema = z.object({
+  otherUserId: z.string().uuid(),
+});
+
+const createGroupChatSchema = z.object({
+  name: z.string().min(2),
+  participantIds: z.array(z.string().uuid()).min(1),
+});
+
+const chatMessageSchema = z.object({
+  body: z.string().min(1).max(5000),
+});
+
+const listMessagesSchema = z.object({
+  withUserId: z.string().uuid(),
+});
+
+const sendMessageSchema = z.object({
+  receiverId: z.string().uuid(),
+  body: z.string().min(1).max(5000),
+});
+
+function canDirectMessage(requesterRole: "admin" | "teacher" | "student", receiverRole: "admin" | "teacher" | "student"): boolean {
+  if (requesterRole === "admin") {
+    return true;
+  }
+  if (requesterRole === "teacher") {
+    return receiverRole === "student" || receiverRole === "admin";
+  }
+  return receiverRole === "teacher" || receiverRole === "admin";
+}
+
 app.post("/api/announcements", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
   try {
     const payload = createAnnouncementSchema.parse(req.body);
@@ -1252,6 +1853,400 @@ app.post("/api/announcements", requireAuth, requireRole("admin", "teacher"), asy
 
     res.status(201).json(announcement);
     clearBootstrapCache();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/chats/users", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    if (!requesterId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    res.json(await service.listChatUsers(requesterId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/chats", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    if (!requesterId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    res.json(await service.listChatsForUser(requesterId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/chats/direct", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = createDirectChatSchema.parse(req.body);
+    const requesterId = req.auth?.sub;
+
+    if (!requesterId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    if (payload.otherUserId === requesterId) {
+      res.status(400).json({ message: "You cannot start a chat with yourself." });
+      return;
+    }
+
+    const chat = await service.openOrCreateDirectChat(requesterId, payload.otherUserId);
+    res.status(201).json(chat);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/chats/group", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = createGroupChatSchema.parse(req.body);
+    const requesterId = req.auth?.sub;
+
+    if (!requesterId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const chat = await service.createGroupChat({
+      requesterId,
+      name: payload.name,
+      participantIds: payload.participantIds,
+    });
+    res.status(201).json(chat);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/chats/:chatId/messages", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    if (!requesterId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const rows = await service.listChatMessages(req.params.chatId, requesterId);
+    if (!rows) {
+      res.status(403).json({ message: "You do not have access to this chat." });
+      return;
+    }
+
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/chats/:chatId/messages", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = chatMessageSchema.parse(req.body);
+    const requesterId = req.auth?.sub;
+
+    if (!requesterId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const row = await service.sendChatMessage({
+      chatId: req.params.chatId,
+      senderId: requesterId,
+      body: payload.body,
+    });
+
+    if (!row) {
+      res.status(403).json({ message: "You do not have access to this chat." });
+      return;
+    }
+
+    res.status(201).json(row);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/enrollments", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    const requesterRole = req.auth?.role;
+
+    if (!requesterId || !requesterRole) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const rows = await service.listEnrollmentRecords({ id: requesterId, role: requesterRole });
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/enrollments", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const creatorId = req.auth?.sub;
+    if (!creatorId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const payload = enrollmentSchema.parse(req.body);
+    const row = await service.createEnrollmentRecord({
+      ...payload,
+      tutorialGroup: payload.tutorialGroup || null,
+      note: payload.note || null,
+      createdById: creatorId,
+    });
+
+    res.status(201).json(row);
+    clearBootstrapCache();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/enrollments/:id", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = enrollmentUpdateSchema.parse(req.body);
+    const row = await service.updateEnrollmentRecord(req.params.id, payload);
+
+    if (!row) {
+      res.status(404).json({ message: "Enrollment record not found." });
+      return;
+    }
+
+    res.json(row);
+    clearBootstrapCache();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/enrollments/:id", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const deleted = await service.deleteEnrollmentRecord(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ message: "Enrollment record not found." });
+      return;
+    }
+
+    res.status(204).send();
+    clearBootstrapCache();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/materials", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    const requesterRole = req.auth?.role;
+
+    if (!requesterId || !requesterRole) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    res.json(await service.listLearningMaterials({ id: requesterId, role: requesterRole }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/materials/link", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const creatorId = req.auth?.sub;
+    if (!creatorId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const payload = materialLinkSchema.parse(req.body);
+    const row = await service.createLearningMaterial({
+      title: payload.title,
+      description: payload.description || null,
+      subject: payload.subject,
+      materialType: "link",
+      resourceUrl: payload.url,
+      fileName: null,
+      createdById: creatorId,
+    });
+
+    res.status(201).json(row);
+    clearBootstrapCache();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post(
+  "/api/materials/file",
+  requireAuth,
+  requireRole("admin", "teacher"),
+  learningMaterialUpload.single("file"),
+  async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const creatorId = req.auth?.sub;
+      if (!creatorId) {
+        res.status(401).json({ message: "Unauthorized" });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({ message: "Missing learning material file." });
+        return;
+      }
+
+      const body = req.body && typeof req.body === "object" ? (req.body as Record<string, unknown>) : {};
+      const title = typeof body.title === "string" ? body.title.trim() : "";
+      const subject = typeof body.subject === "string" ? body.subject.trim() : "";
+      const description = typeof body.description === "string" ? body.description.trim() : null;
+
+      if (!title || title.length < 2) {
+        res.status(400).json({ message: "Title is required." });
+        return;
+      }
+      if (!subject || subject.length < 2) {
+        res.status(400).json({ message: "Subject is required." });
+        return;
+      }
+
+      const row = await service.createLearningMaterial({
+        title,
+        description,
+        subject,
+        materialType: "file",
+        resourceUrl: `/uploads/${req.file.filename}`,
+        fileName: req.file.originalname,
+        createdById: creatorId,
+      });
+
+      res.status(201).json(row);
+      clearBootstrapCache();
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+app.delete("/api/materials/:id", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    const requesterRole = req.auth?.role;
+    if (!requesterId || !requesterRole) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const deleted = await service.deleteLearningMaterial({
+      id: req.params.id,
+      requesterId,
+      requesterRole,
+    });
+
+    if (!deleted) {
+      res.status(404).json({ message: "Learning material not found." });
+      return;
+    }
+
+    res.status(204).send();
+    clearBootstrapCache();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/messages/users", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    const requesterRole = req.auth?.role;
+
+    if (!requesterId || !requesterRole) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const rows = await service.listMessageRecipients({ requesterId, requesterRole });
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/messages", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    const requesterRole = req.auth?.role;
+
+    if (!requesterId || !requesterRole) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const query = listMessagesSchema.parse(req.query);
+    const otherUser = await service.findUserWithPasswordById(query.withUserId);
+
+    if (!otherUser) {
+      res.status(404).json({ message: "User not found." });
+      return;
+    }
+
+    if (!canDirectMessage(requesterRole, otherUser.role)) {
+      res.status(403).json({ message: "Messaging is not allowed for this recipient." });
+      return;
+    }
+
+    const rows = await service.listMessagesBetweenUsers({
+      requesterId,
+      otherUserId: query.withUserId,
+    });
+    res.json(rows);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/messages", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    const requesterRole = req.auth?.role;
+
+    if (!requesterId || !requesterRole) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const payload = sendMessageSchema.parse(req.body);
+    const receiver = await service.findUserWithPasswordById(payload.receiverId);
+
+    if (!receiver) {
+      res.status(404).json({ message: "Receiver not found." });
+      return;
+    }
+
+    if (!canDirectMessage(requesterRole, receiver.role)) {
+      res.status(403).json({ message: "Messaging is not allowed for this recipient." });
+      return;
+    }
+
+    const message = await service.sendMessage({
+      senderId: requesterId,
+      receiverId: payload.receiverId,
+      body: payload.body.trim(),
+    });
+
+    res.status(201).json(message);
   } catch (error) {
     next(error);
   }
