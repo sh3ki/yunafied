@@ -1,6 +1,7 @@
 import React from 'react';
 import { BookOpenCheck, CalendarClock, GraduationCap, Sparkles, Users2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { SystemLogo } from '@/app/components/SystemLogo';
 
 export function LandingPage() {
   const navigate = useNavigate();
@@ -10,15 +11,7 @@ export function LandingPage() {
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_20%,rgba(167,139,250,0.25),transparent_35%),radial-gradient(circle_at_80%_10%,rgba(99,102,241,0.30),transparent_32%),radial-gradient(circle_at_50%_80%,rgba(56,189,248,0.20),transparent_30%)]" />
 
       <header className="relative max-w-7xl mx-auto px-6 md:px-10 pt-8 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl bg-violet-600 flex items-center justify-center shadow-lg shadow-violet-700/40">
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight">YUNAFied</h1>
-            <p className="text-xs text-violet-200/80">AI-Powered Tutorial Management System</p>
-          </div>
-        </div>
+        <SystemLogo textClassName="text-white" imageClassName="ring-1 ring-white/15 shadow-lg shadow-violet-700/30" />
         <button
           onClick={() => navigate('/login')}
           className="px-4 py-2 rounded-lg bg-white text-indigo-900 font-semibold hover:bg-indigo-100 transition"
