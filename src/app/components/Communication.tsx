@@ -36,16 +36,20 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
   };
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-          <Megaphone className="h-6 w-6 text-indigo-600" />
-          Announcements
-        </h2>
+    <div className="p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
+            <Megaphone className="h-7 w-7 text-violet-600" />
+            Announcements
+          </h1>
+          <p className="text-gray-500 mt-1">Post updates and reminders for the community.</p>
+        </div>
+
         {canPost && (
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition"
+            className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg transition"
           >
             <Plus className="h-4 w-4" />
             Post
@@ -53,7 +57,7 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50">
+      <div className="space-y-3">
         {announcements.map((item) => (
           <div key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
             <div className="flex items-center justify-between gap-3">
@@ -65,9 +69,7 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
           </div>
         ))}
 
-        {announcements.length === 0 && (
-          <div className="text-center text-gray-400 py-16">No announcements posted yet.</div>
-        )}
+        {announcements.length === 0 && <div className="text-center text-gray-400 py-16">No announcements posted yet.</div>}
       </div>
 
       {isModalOpen && (
