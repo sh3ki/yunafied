@@ -1,9 +1,10 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Loader2, MessageCircle, Send, Sparkles, X } from 'lucide-react';
+import { Loader2, Send, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiClient } from '@/app/services/apiClient';
 import { UserRole } from '@/app/types/models';
 import { toast } from 'sonner';
+import { SystemLogo } from '@/app/components/SystemLogo';
 
 interface ChatMessage {
   id: string;
@@ -102,9 +103,7 @@ export function AIChatbot({ role, currentView }: AIChatbotProps) {
           >
             <div className="bg-indigo-600 p-4 flex justify-between items-center text-white">
               <div className="flex items-center gap-2">
-                <div className="bg-white/20 p-1.5 rounded-full">
-                  <Sparkles className="h-5 w-5 text-yellow-300" />
-                </div>
+                <SystemLogo compact showText={false} imageClassName="h-8 w-8 rounded-full ring-1 ring-white/20" />
                 <div>
                   <h3 className="font-bold text-sm">YUNA AI</h3>
                   <div className="flex items-center gap-1 text-[10px] text-indigo-200">
@@ -166,7 +165,7 @@ export function AIChatbot({ role, currentView }: AIChatbotProps) {
         onClick={() => setIsOpen((v) => !v)}
         className="fixed bottom-20 md:bottom-8 right-4 bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-lg shadow-indigo-600/30 transition-transform active:scale-90 z-50 flex items-center gap-2 group"
       >
-        <MessageCircle className="h-6 w-6" />
+        <SystemLogo compact showText={false} imageClassName="h-6 w-6 rounded-full" />
         <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 ease-out font-medium whitespace-nowrap">
           YUNA AI
         </span>
