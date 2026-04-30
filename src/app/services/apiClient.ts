@@ -2,16 +2,25 @@ import {
   AnnouncementItem,
   AssignmentItem,
   AuthUser,
+  ChatMessageItem,
+  ChatSummaryItem,
+  EnrollmentRecordItem,
+  EnrollmentStatus,
   GamifiedAttemptResultItem,
   GamifiedCategoryItem,
   GamifiedLeaderboardItem,
   GamifiedQuizDetailItem,
   GamifiedQuizItem,
+  LearningMaterialItem,
+  MessageItem,
+  MessageUserItem,
+  NotificationItem,
   ScheduleItem,
   SubmissionItem,
   TranslationHistoryItem,
   UserRole,
   UserStatus,
+  VideoSummaryResponse,
 } from "@/app/types/models";
 
 interface LoginResponse {
@@ -480,6 +489,163 @@ class YunafiedApiClient {
     }
 
     return this.request<TranslationHistoryResponse>(`/api/translations/history?${params.toString()}`);
+  }
+
+  async summarizeVideo(
+    payload:
+      | { videoUrl: string; context?: string }
+      | { videoFile: File; context?: string },
+  ): Promise<VideoSummaryResponse> {
+    if ("videoFile" in payload) {
+      const formData = new FormData();
+      formData.append("file", payload.videoFile);
+      if (payload.context) {
+        formData.append("context", payload.context);
+      }
+
+      return this.request<VideoSummaryResponse>("/api/ai/video-summary", {
+        method: "POST",
+        body: formData,
+      });
+    }
+
+    return this.request<VideoSummaryResponse>("/api/ai/video-summary", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listNotifications(limit = 20): Promise<NotificationItem[]> {
+    const params = new URLSearchParams();
+    params.set("limit", String(limit));
+    return this.request<NotificationItem[]>(`/api/notifications?${params.toString()}`);
+  }
+
+  async listMessageUsers(): Promise<MessageUserItem[]> {
+    return this.request<MessageUserItem[]>("/api/messages/users");
+  }
+
+  async listMessages(withUserId: string): Promise<MessageItem[]> {
+    const params = new URLSearchParams();
+    params.set("withUserId", withUserId);
+    return this.request<MessageItem[]>(`/api/messages?${params.toString()}`);
+  }
+
+  async sendMessage(payload: { receiverId: string; body: string }): Promise<MessageItem> {
+    return this.request<MessageItem>("/api/messages", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listChatUsers(): Promise<MessageUserItem[]> {
+    return this.request<MessageUserItem[]>("/api/chats/users");
+  }
+
+  async listChats(): Promise<ChatSummaryItem[]> {
+    return this.request<ChatSummaryItem[]>("/api/chats");
+  }
+
+  async openDirectChat(otherUserId: string): Promise<ChatSummaryItem> {
+    return this.request<ChatSummaryItem>("/api/chats/direct", {
+      method: "POST",
+      body: JSON.stringify({ otherUserId }),
+    });
+  }
+
+  async createGroupChat(payload: { name: string; participantIds: string[] }): Promise<ChatSummaryItem> {
+    return this.request<ChatSummaryItem>("/api/chats/group", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listChatMessages(chatId: string): Promise<ChatMessageItem[]> {
+    return this.request<ChatMessageItem[]>(`/api/chats/${chatId}/messages`);
+  }
+
+  async sendChatMessage(chatId: string, payload: { body: string }): Promise<ChatMessageItem> {
+    return this.request<ChatMessageItem>(`/api/chats/${chatId}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listEnrollments(): Promise<EnrollmentRecordItem[]> {
+    return this.request<EnrollmentRecordItem[]>("/api/enrollments");
+  }
+
+  async createEnrollment(payload: {
+    studentId: string;
+    teacherId: string;
+    subject: string;
+    tutorialGroup?: string;
+    status?: EnrollmentStatus;
+    note?: string;
+  }): Promise<EnrollmentRecordItem> {
+    return this.request<EnrollmentRecordItem>("/api/enrollments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateEnrollment(
+    id: string,
+    payload: {
+      subject?: string;
+      tutorialGroup?: string | null;
+      status?: EnrollmentStatus;
+      note?: string | null;
+    },
+  ): Promise<EnrollmentRecordItem> {
+    return this.request<EnrollmentRecordItem>(`/api/enrollments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteEnrollment(id: string): Promise<void> {
+    await this.request<void>(`/api/enrollments/${id}`, { method: "DELETE" });
+  }
+
+  async listLearningMaterials(): Promise<LearningMaterialItem[]> {
+    return this.request<LearningMaterialItem[]>("/api/materials");
+  }
+
+  async createLearningMaterialLink(payload: {
+    title: string;
+    subject: string;
+    description?: string;
+    url: string;
+  }): Promise<LearningMaterialItem> {
+    return this.request<LearningMaterialItem>("/api/materials/link", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async createLearningMaterialFile(payload: {
+    title: string;
+    subject: string;
+    description?: string;
+    file: File;
+  }): Promise<LearningMaterialItem> {
+    const formData = new FormData();
+    formData.append("title", payload.title);
+    formData.append("subject", payload.subject);
+    if (payload.description) {
+      formData.append("description", payload.description);
+    }
+    formData.append("file", payload.file);
+
+    return this.request<LearningMaterialItem>("/api/materials/file", {
+      method: "POST",
+      body: formData,
+    });
+  }
+
+  async deleteLearningMaterial(id: string): Promise<void> {
+    await this.request<void>(`/api/materials/${id}`, { method: "DELETE" });
   }
 }
 
