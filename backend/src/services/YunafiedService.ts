@@ -3,12 +3,19 @@ import {
   AnnouncementItem,
   AssignmentItem,
   AuthUser,
+  ChatMessageItem,
+  ChatSummaryItem,
+  EnrollmentRecordItem,
+  EnrollmentStatus,
   GamifiedAttemptResultItem,
   GamifiedCategoryItem,
   GamifiedLeaderboardItem,
   GamifiedQuestionItem,
   GamifiedQuizDetailItem,
   GamifiedQuizItem,
+  LearningMaterialItem,
+  MessageItem,
+  MessageUserItem,
   ScheduleItem,
   ScheduleStatus,
   SubmissionItem,
@@ -62,6 +69,38 @@ interface DbGamifiedCategoryRow {
   quizCount: number;
   createdAt: string;
   updatedAt: string;
+}
+
+interface DbChatSummaryRow {
+  id: string;
+  name: string | null;
+  chatType: "direct" | "group";
+  directKey: string | null;
+  createdById: string;
+  createdByName: string;
+  lastMessageId: string | null;
+  lastMessageBody: string | null;
+  lastMessageAt: string | null;
+  participantCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface DbChatParticipantRow {
+  chatId: string;
+  id: string;
+  fullName: string;
+  role: UserRole;
+  profileImageUrl: string | null;
+}
+
+interface DbChatMessageRow {
+  id: string;
+  chatId: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  sentAt: string;
 }
 
 interface DbGamifiedQuizRow {
@@ -933,7 +972,7 @@ export class YunafiedService {
   }): Promise<SubmissionItem> {
     const result = await pool.query(
       `INSERT INTO submissions (assignment_id, student_id, submission_type, content_text, file_name, content_url)
-       VALUES ($1, $2, CASE WHEN $5 IS NOT NULL THEN 'file' ELSE 'text' END, $3, $4, $5)
+       VALUES ($1, $2, CASE WHEN $5::text IS NOT NULL THEN 'file' ELSE 'text' END, $3, $4, $5)
        ON CONFLICT (assignment_id, student_id)
        DO UPDATE SET content_text = EXCLUDED.content_text,
                      file_name = EXCLUDED.file_name,
@@ -1050,6 +1089,543 @@ export class YunafiedService {
     return {
       ...announcement,
       postedByName: userResult.rows[0]?.full_name || "Teacher",
+    };
+  }
+
+  async listEnrollmentRecords(requester: { id: string; role: UserRole }): Promise<EnrollmentRecordItem[]> {
+    const baseSql = `SELECT e.id,
+                            e.student_id AS "studentId",
+                            student.full_name AS "studentName",
+                            e.teacher_id AS "teacherId",
+                            teacher.full_name AS "teacherName",
+                            e.subject,
+                            e.tutorial_group AS "tutorialGroup",
+                            e.status,
+                            e.note,
+                            e.created_by_id AS "createdById",
+                            e.created_at AS "createdAt",
+                            e.updated_at AS "updatedAt"
+                       FROM enrollment_records e
+                       JOIN users student ON student.id = e.student_id
+                       JOIN users teacher ON teacher.id = e.teacher_id`;
+
+    if (requester.role === "admin") {
+      const result = await pool.query(`${baseSql} ORDER BY e.updated_at DESC`);
+      return result.rows as EnrollmentRecordItem[];
+    }
+
+    if (requester.role === "teacher") {
+      const result = await pool.query(`${baseSql} WHERE e.teacher_id = $1 ORDER BY e.updated_at DESC`, [requester.id]);
+      return result.rows as EnrollmentRecordItem[];
+    }
+
+    const result = await pool.query(`${baseSql} WHERE e.student_id = $1 ORDER BY e.updated_at DESC`, [requester.id]);
+    return result.rows as EnrollmentRecordItem[];
+  }
+
+  async createEnrollmentRecord(input: {
+    studentId: string;
+    teacherId: string;
+    subject: string;
+    tutorialGroup?: string | null;
+    status?: EnrollmentStatus;
+    note?: string | null;
+    createdById: string;
+  }): Promise<EnrollmentRecordItem> {
+    const result = await pool.query(
+      `INSERT INTO enrollment_records (student_id, teacher_id, subject, tutorial_group, status, note, created_by_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id,
+                 student_id AS "studentId",
+                 teacher_id AS "teacherId",
+                 subject,
+                 tutorial_group AS "tutorialGroup",
+                 status,
+                 note,
+                 created_by_id AS "createdById",
+                 created_at AS "createdAt",
+                 updated_at AS "updatedAt"`,
+      [
+        input.studentId,
+        input.teacherId,
+        input.subject,
+        input.tutorialGroup || null,
+        input.status || "active",
+        input.note || null,
+        input.createdById,
+      ],
+    );
+
+    const row = result.rows[0] as Omit<EnrollmentRecordItem, "studentName" | "teacherName">;
+    const names = await pool.query(
+      `SELECT id, full_name
+         FROM users
+        WHERE id IN ($1, $2)`,
+      [input.studentId, input.teacherId],
+    );
+    const nameById = new Map<string, string>(names.rows.map((entry: { id: string; full_name: string }) => [entry.id, entry.full_name]));
+
+    return {
+      ...row,
+      studentName: nameById.get(input.studentId) || "Student",
+      teacherName: nameById.get(input.teacherId) || "Teacher",
+    };
+  }
+
+  async updateEnrollmentRecord(
+    id: string,
+    input: {
+      subject?: string;
+      tutorialGroup?: string | null;
+      status?: EnrollmentStatus;
+      note?: string | null;
+    },
+  ): Promise<EnrollmentRecordItem | null> {
+    const existing = await pool.query(
+      `SELECT id, student_id, teacher_id, subject, tutorial_group, status, note, created_by_id, created_at, updated_at
+         FROM enrollment_records
+        WHERE id = $1`,
+      [id],
+    );
+
+    if (!existing.rows[0]) {
+      return null;
+    }
+
+    const row = existing.rows[0];
+    const result = await pool.query(
+      `UPDATE enrollment_records
+          SET subject = $1,
+              tutorial_group = $2,
+              status = $3,
+              note = $4,
+              updated_at = NOW()
+        WHERE id = $5
+        RETURNING id,
+                  student_id AS "studentId",
+                  teacher_id AS "teacherId",
+                  subject,
+                  tutorial_group AS "tutorialGroup",
+                  status,
+                  note,
+                  created_by_id AS "createdById",
+                  created_at AS "createdAt",
+                  updated_at AS "updatedAt"`,
+      [
+        input.subject ?? row.subject,
+        input.tutorialGroup === undefined ? row.tutorial_group : input.tutorialGroup,
+        input.status ?? row.status,
+        input.note === undefined ? row.note : input.note,
+        id,
+      ],
+    );
+
+    const updated = result.rows[0] as Omit<EnrollmentRecordItem, "studentName" | "teacherName">;
+    const names = await pool.query(
+      `SELECT id, full_name
+         FROM users
+        WHERE id IN ($1, $2)`,
+      [updated.studentId, updated.teacherId],
+    );
+    const nameById = new Map<string, string>(names.rows.map((entry: { id: string; full_name: string }) => [entry.id, entry.full_name]));
+
+    return {
+      ...updated,
+      studentName: nameById.get(updated.studentId) || "Student",
+      teacherName: nameById.get(updated.teacherId) || "Teacher",
+    };
+  }
+
+  async deleteEnrollmentRecord(id: string): Promise<boolean> {
+    const result = await pool.query("DELETE FROM enrollment_records WHERE id = $1", [id]);
+    return (result.rowCount || 0) > 0;
+  }
+
+  async listLearningMaterials(requester: { id: string; role: UserRole }): Promise<LearningMaterialItem[]> {
+    if (requester.role === "student") {
+      const result = await pool.query(
+        `SELECT m.id,
+                m.title,
+                m.description,
+                m.subject,
+                m.material_type AS "materialType",
+                m.resource_url AS "resourceUrl",
+                m.file_name AS "fileName",
+                m.created_by_id AS "createdById",
+                u.full_name AS "createdByName",
+                m.created_at AS "createdAt",
+                m.updated_at AS "updatedAt"
+           FROM learning_materials m
+           JOIN users u ON u.id = m.created_by_id
+           JOIN enrollment_records e ON e.teacher_id = m.created_by_id
+          WHERE e.student_id = $1
+            AND e.status = 'active'
+          ORDER BY m.created_at DESC`,
+        [requester.id],
+      );
+
+      return result.rows as LearningMaterialItem[];
+    }
+
+    if (requester.role === "teacher") {
+      const result = await pool.query(
+        `SELECT m.id,
+                m.title,
+                m.description,
+                m.subject,
+                m.material_type AS "materialType",
+                m.resource_url AS "resourceUrl",
+                m.file_name AS "fileName",
+                m.created_by_id AS "createdById",
+                u.full_name AS "createdByName",
+                m.created_at AS "createdAt",
+                m.updated_at AS "updatedAt"
+           FROM learning_materials m
+           JOIN users u ON u.id = m.created_by_id
+          WHERE m.created_by_id = $1
+          ORDER BY m.created_at DESC`,
+        [requester.id],
+      );
+
+      return result.rows as LearningMaterialItem[];
+    }
+
+    const result = await pool.query(
+      `SELECT m.id,
+              m.title,
+              m.description,
+              m.subject,
+              m.material_type AS "materialType",
+              m.resource_url AS "resourceUrl",
+              m.file_name AS "fileName",
+              m.created_by_id AS "createdById",
+              u.full_name AS "createdByName",
+              m.created_at AS "createdAt",
+              m.updated_at AS "updatedAt"
+         FROM learning_materials m
+         JOIN users u ON u.id = m.created_by_id
+        ORDER BY m.created_at DESC`,
+    );
+
+    return result.rows as LearningMaterialItem[];
+  }
+
+  async createLearningMaterial(input: {
+    title: string;
+    description?: string | null;
+    subject: string;
+    materialType: "link" | "file";
+    resourceUrl: string;
+    fileName?: string | null;
+    createdById: string;
+  }): Promise<LearningMaterialItem> {
+    const result = await pool.query(
+      `INSERT INTO learning_materials (title, description, subject, material_type, resource_url, file_name, created_by_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id,
+                 title,
+                 description,
+                 subject,
+                 material_type AS "materialType",
+                 resource_url AS "resourceUrl",
+                 file_name AS "fileName",
+                 created_by_id AS "createdById",
+                 created_at AS "createdAt",
+                 updated_at AS "updatedAt"`,
+      [
+        input.title,
+        input.description || null,
+        input.subject,
+        input.materialType,
+        input.resourceUrl,
+        input.fileName || null,
+        input.createdById,
+      ],
+    );
+
+    const row = result.rows[0] as Omit<LearningMaterialItem, "createdByName">;
+    const createdBy = await pool.query("SELECT full_name FROM users WHERE id = $1", [input.createdById]);
+
+    return {
+      ...row,
+      createdByName: createdBy.rows[0]?.full_name || "Teacher",
+    };
+  }
+
+  async deleteLearningMaterial(input: { id: string; requesterId: string; requesterRole: UserRole }): Promise<boolean> {
+    const whereSql = input.requesterRole === "admin" ? "WHERE id = $1" : "WHERE id = $1 AND created_by_id = $2";
+    const params = input.requesterRole === "admin" ? [input.id] : [input.id, input.requesterId];
+    const result = await pool.query(`DELETE FROM learning_materials ${whereSql}`, params);
+    return (result.rowCount || 0) > 0;
+  }
+
+  async listChatUsers(requesterId: string): Promise<MessageUserItem[]> {
+    const result = await pool.query(
+      `SELECT id, full_name AS "fullName", role, profile_image_url AS "profileImageUrl"
+         FROM users
+        WHERE id <> $1
+          AND status = 'active'
+        ORDER BY full_name ASC`,
+      [requesterId],
+    );
+
+    return result.rows as MessageUserItem[];
+  }
+
+  async listChatsForUser(requesterId: string): Promise<ChatSummaryItem[]> {
+    const chats = await pool.query<DbChatSummaryRow>(
+      `SELECT c.id,
+              c.name,
+              c.chat_type AS "chatType",
+              c.direct_key AS "directKey",
+              c.created_by_id AS "createdById",
+              creator.full_name AS "createdByName",
+              last_message.id AS "lastMessageId",
+              last_message.body AS "lastMessageBody",
+              last_message.sent_at AS "lastMessageAt",
+              (
+                SELECT COUNT(*)::int
+                  FROM chat_participants cp
+                 WHERE cp.chat_id = c.id
+              ) AS "participantCount",
+              c.created_at AS "createdAt",
+              c.updated_at AS "updatedAt"
+         FROM chats c
+         JOIN chat_participants me ON me.chat_id = c.id AND me.user_id = $1
+         JOIN users creator ON creator.id = c.created_by_id
+    LEFT JOIN LATERAL (
+              SELECT m.id, m.body, m.sent_at
+                FROM chat_messages m
+               WHERE m.chat_id = c.id
+            ORDER BY m.sent_at DESC
+               LIMIT 1
+         ) last_message ON TRUE
+        ORDER BY COALESCE(last_message.sent_at, c.updated_at) DESC, c.updated_at DESC`,
+      [requesterId],
+    );
+
+    if (chats.rows.length === 0) {
+      return [];
+    }
+
+    const chatIds = chats.rows.map((chat) => chat.id);
+    const participantRows = await pool.query<DbChatParticipantRow>(
+      `SELECT cp.chat_id AS "chatId",
+              u.id,
+              u.full_name AS "fullName",
+              u.role,
+              u.profile_image_url AS "profileImageUrl"
+         FROM chat_participants cp
+         JOIN users u ON u.id = cp.user_id
+        WHERE cp.chat_id = ANY($1::uuid[])
+        ORDER BY u.full_name ASC`,
+      [chatIds],
+    );
+
+    const participantsByChatId = new Map<string, MessageUserItem[]>();
+    for (const row of participantRows.rows) {
+      const existing = participantsByChatId.get(row.chatId) || [];
+      existing.push({
+        id: row.id,
+        fullName: row.fullName,
+        role: row.role,
+        profileImageUrl: row.profileImageUrl,
+      });
+      participantsByChatId.set(row.chatId, existing);
+    }
+
+    return chats.rows.map((chat) => ({
+      id: chat.id,
+      name: chat.name,
+      chatType: chat.chatType,
+      directKey: chat.directKey,
+      createdById: chat.createdById,
+      createdByName: chat.createdByName,
+      lastMessageId: chat.lastMessageId,
+      lastMessageBody: chat.lastMessageBody,
+      lastMessageAt: chat.lastMessageAt,
+      participantCount: chat.participantCount,
+      participants: participantsByChatId.get(chat.id) || [],
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    }));
+  }
+
+  async openOrCreateDirectChat(requesterId: string, otherUserId: string): Promise<ChatSummaryItem> {
+    const [firstId, secondId] = [requesterId, otherUserId].sort();
+    const directKey = `${firstId}:${secondId}`;
+
+    const existing = await pool.query<{ id: string }>("SELECT id FROM chats WHERE direct_key = $1", [directKey]);
+    if (existing.rows[0]) {
+      const chats = await this.listChatsForUser(requesterId);
+      const found = chats.find((chat) => chat.id === existing.rows[0].id);
+      if (found) {
+        return found;
+      }
+    }
+
+    const inserted = await pool.query<{ id: string }>(
+      `INSERT INTO chats (name, chat_type, direct_key, created_by_id)
+       VALUES ($1, 'direct', $2, $3)
+       RETURNING id`,
+      [null, directKey, requesterId],
+    );
+
+    const chatId = inserted.rows[0].id;
+    await pool.query(
+      `INSERT INTO chat_participants (chat_id, user_id, is_owner)
+       VALUES ($1, $2, TRUE), ($1, $3, FALSE)
+       ON CONFLICT (chat_id, user_id) DO NOTHING`,
+      [chatId, requesterId, otherUserId],
+    );
+
+    const chats = await this.listChatsForUser(requesterId);
+    const chat = chats.find((item) => item.id === chatId);
+    if (!chat) {
+      throw new Error("Unable to open direct chat.");
+    }
+
+    return chat;
+  }
+
+  async createGroupChat(input: { requesterId: string; name: string; participantIds: string[] }): Promise<ChatSummaryItem> {
+    const uniqueParticipants = Array.from(new Set([input.requesterId, ...input.participantIds])).filter(Boolean);
+    if (uniqueParticipants.length < 2) {
+      throw new Error("Group chats require at least two participants.");
+    }
+
+    const inserted = await pool.query<{ id: string }>(
+      `INSERT INTO chats (name, chat_type, created_by_id)
+       VALUES ($1, 'group', $2)
+       RETURNING id`,
+      [input.name, input.requesterId],
+    );
+
+    const chatId = inserted.rows[0].id;
+    const participantValues = uniqueParticipants.map((participantId) => [chatId, participantId, participantId === input.requesterId]);
+    for (const [chatIdValue, participantId, isOwner] of participantValues) {
+      await pool.query(
+        `INSERT INTO chat_participants (chat_id, user_id, is_owner)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (chat_id, user_id) DO NOTHING`,
+        [chatIdValue, participantId, isOwner],
+      );
+    }
+
+    const chats = await this.listChatsForUser(input.requesterId);
+    const chat = chats.find((item) => item.id === chatId);
+    if (!chat) {
+      throw new Error("Unable to create group chat.");
+    }
+
+    return chat;
+  }
+
+  async listChatMessages(chatId: string, requesterId: string): Promise<ChatMessageItem[] | null> {
+    const access = await pool.query("SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2", [chatId, requesterId]);
+    if (!access.rows[0]) {
+      return null;
+    }
+
+    const result = await pool.query<DbChatMessageRow>(
+      `SELECT m.id,
+              m.chat_id AS "chatId",
+              m.sender_id AS "senderId",
+              sender.full_name AS "senderName",
+              m.body,
+              m.sent_at AS "sentAt"
+         FROM chat_messages m
+         JOIN users sender ON sender.id = m.sender_id
+        WHERE m.chat_id = $1
+        ORDER BY m.sent_at ASC`,
+      [chatId],
+    );
+
+    return result.rows as ChatMessageItem[];
+  }
+
+  async sendChatMessage(input: { chatId: string; senderId: string; body: string }): Promise<ChatMessageItem | null> {
+    const access = await pool.query("SELECT 1 FROM chat_participants WHERE chat_id = $1 AND user_id = $2", [input.chatId, input.senderId]);
+    if (!access.rows[0]) {
+      return null;
+    }
+
+    const result = await pool.query<DbChatMessageRow>(
+      `INSERT INTO chat_messages (chat_id, sender_id, body)
+       VALUES ($1, $2, $3)
+       RETURNING id,
+                 chat_id AS "chatId",
+                 sender_id AS "senderId",
+                 body,
+                 sent_at AS "sentAt"`,
+      [input.chatId, input.senderId, input.body],
+    );
+
+    await pool.query("UPDATE chats SET updated_at = NOW() WHERE id = $1", [input.chatId]);
+
+    const sender = await pool.query("SELECT full_name FROM users WHERE id = $1", [input.senderId]);
+    const row = result.rows[0];
+    return {
+      id: row.id,
+      chatId: row.chatId,
+      senderId: row.senderId,
+      senderName: sender.rows[0]?.full_name || "User",
+      body: row.body,
+      sentAt: row.sentAt,
+    };
+  }
+
+  async listMessageRecipients(input: { requesterId: string; requesterRole: UserRole }): Promise<MessageUserItem[]> {
+    return this.listChatUsers(input.requesterId);
+  }
+
+  async listMessagesBetweenUsers(input: { requesterId: string; otherUserId: string }): Promise<MessageItem[]> {
+    const result = await pool.query(
+      `SELECT m.id,
+              m.sender_id AS "senderId",
+              sender.full_name AS "senderName",
+              m.receiver_id AS "receiverId",
+              receiver.full_name AS "receiverName",
+              m.body,
+              m.sent_at AS "sentAt"
+         FROM messages m
+         JOIN users sender ON sender.id = m.sender_id
+         JOIN users receiver ON receiver.id = m.receiver_id
+        WHERE (m.sender_id = $1 AND m.receiver_id = $2)
+           OR (m.sender_id = $2 AND m.receiver_id = $1)
+        ORDER BY m.sent_at ASC`,
+      [input.requesterId, input.otherUserId],
+    );
+
+    return result.rows as MessageItem[];
+  }
+
+  async sendMessage(input: { senderId: string; receiverId: string; body: string }): Promise<MessageItem> {
+    const result = await pool.query(
+      `INSERT INTO messages (sender_id, receiver_id, body)
+       VALUES ($1, $2, $3)
+       RETURNING id,
+                 sender_id AS "senderId",
+                 receiver_id AS "receiverId",
+                 body,
+                 sent_at AS "sentAt"`,
+      [input.senderId, input.receiverId, input.body],
+    );
+
+    const row = result.rows[0] as Omit<MessageItem, "senderName" | "receiverName">;
+    const names = await pool.query(
+      `SELECT id, full_name
+         FROM users
+        WHERE id IN ($1, $2)`,
+      [input.senderId, input.receiverId],
+    );
+
+    const nameById = new Map<string, string>(names.rows.map((entry: { id: string; full_name: string }) => [entry.id, entry.full_name]));
+
+    return {
+      ...row,
+      senderName: nameById.get(input.senderId) || "User",
+      receiverName: nameById.get(input.receiverId) || "User",
     };
   }
 
