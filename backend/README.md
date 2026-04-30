@@ -36,12 +36,19 @@ Start development server:
 npm run dev
 ```
 
+Install Python dependencies for video summarization:
+
+```bash
+pip install -r python/requirements.txt
+```
+
 ## Environment
 
 Copy `.env.example` to `.env` and set values:
 
 - `PORT`
 - `DATABASE_URL`
+- `GROQ_API_KEY` (for summary generation)
 
 ## Available Scripts
 
