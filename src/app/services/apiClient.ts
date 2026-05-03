@@ -12,6 +12,8 @@ import {
   GamifiedQuizDetailItem,
   GamifiedQuizItem,
   LearningMaterialItem,
+  MeetingRoom,
+  MeetingRoomStatus,
   MessageItem,
   MessageUserItem,
   NotificationItem,
@@ -646,6 +648,49 @@ class YunafiedApiClient {
 
   async deleteLearningMaterial(id: string): Promise<void> {
     await this.request<void>(`/api/materials/${id}`, { method: "DELETE" });
+  }
+
+  // ─── Meeting Rooms (Video Call) ─────────────────────────────────────────────
+
+  async createMeeting(payload: {
+    scheduleId?: string | null;
+    studentId?: string | null;
+    studentName?: string | null;
+    scheduleTitle?: string | null;
+  }): Promise<MeetingRoom> {
+    return this.request<MeetingRoom>("/api/meetings", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getIncomingCall(): Promise<MeetingRoom | null> {
+    return this.request<MeetingRoom | null>("/api/meetings/incoming");
+  }
+
+  async getMeeting(roomToken: string): Promise<MeetingRoom> {
+    return this.request<MeetingRoom>(`/api/meetings/${roomToken}`);
+  }
+
+  async sendMeetingSignal(
+    roomToken: string,
+    payload: {
+      offer?: Record<string, unknown> | null;
+      answer?: Record<string, unknown> | null;
+      addIceCandidate?: Record<string, unknown>;
+    },
+  ): Promise<MeetingRoom> {
+    return this.request<MeetingRoom>(`/api/meetings/${roomToken}/signal`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateMeetingStatus(roomToken: string, status: MeetingRoomStatus): Promise<MeetingRoom> {
+    return this.request<MeetingRoom>(`/api/meetings/${roomToken}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
   }
 }
 
