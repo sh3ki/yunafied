@@ -26,6 +26,7 @@ import { EnrollmentRecords } from '@/app/components/EnrollmentRecords';
 import { LearningMaterials } from '@/app/components/LearningMaterials';
 import { VideoCall } from '@/app/components/VideoCall';
 import { IncomingCall } from '@/app/components/IncomingCall';
+import { Meetings } from '@/app/components/Meetings';
 import { apiClient } from '@/app/services/apiClient';
 import {
   AnnouncementItem,
@@ -153,7 +154,7 @@ const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
   admin: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'users', 'profile'],
-  teacher: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'assignments', 'materials', 'enrollments', 'gamified-learning', 'performance', 'profile'],
+  teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'materials', 'enrollments', 'gamified-learning', 'performance', 'profile'],
   student: [
     'dashboard',
     'schedule',
@@ -301,6 +302,14 @@ function AuthenticatedShell({
                     onStartMeeting={onStartMeeting}
                   />
                 </div>
+              )}
+
+              {currentView === 'meetings' && (
+                <Meetings
+                  schedules={data.schedules}
+                  userId={session.user.id}
+                  onStartMeeting={onStartMeeting}
+                />
               )}
 
               {currentView === 'announcements' && (
