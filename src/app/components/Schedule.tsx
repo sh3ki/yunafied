@@ -114,6 +114,31 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   const [saving, setSaving] = useState(false);
   const [startingMeeting, setStartingMeeting] = useState<string | null>(null);
 
+  // Accept modal
+  const [acceptOpen, setAcceptOpen] = useState(false);
+  const [acceptItem, setAcceptItem] = useState<ScheduleItem | null>(null);
+  const [acceptForm, setAcceptForm] = useState({ title: '', description: '', date: '', startTime: '', endTime: '', responseNote: '' });
+
+  // Decline modal
+  const [declineOpen, setDeclineOpen] = useState(false);
+  const [declineItem, setDeclineItem] = useState<ScheduleItem | null>(null);
+  const [declineNote, setDeclineNote] = useState('');
+
+  // Move modal
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveItem, setMoveItem] = useState<ScheduleItem | null>(null);
+  const [moveForm, setMoveForm] = useState({ date: '', startTime: '', endTime: '' });
+
+  // Cancel modal
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelItem, setCancelItem] = useState<ScheduleItem | null>(null);
+  const [cancelNote, setCancelNote] = useState('');
+
+  // Admin edit modal
+  const [adminEditOpen, setAdminEditOpen] = useState(false);
+  const [adminEditItem, setAdminEditItem] = useState<ScheduleItem | null>(null);
+  const [adminEditForm, setAdminEditForm] = useState({ title: '', description: '', date: '', startTime: '', endTime: '', status: 'pending' as 'pending' | 'accepted' | 'declined' | 'cancelled', responseNote: '' });
+
   const [requestForm, setRequestForm] = useState({
     title: '',
     description: '',
@@ -299,119 +324,138 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
     }
   };
 
-  const acceptRequest = async (item: ScheduleItem) => {
-    const nextTitle = window.prompt('Edit title before accepting', item.title);
-    if (nextTitle === null) return;
-    const nextDescription = window.prompt('Edit description before accepting', item.description);
-    if (nextDescription === null) return;
-    const nextDate = window.prompt('Edit date (YYYY-MM-DD)', item.date);
-    if (!nextDate) return;
-    const nextStart = window.prompt('Edit start time (HH:MM)', item.startTime);
-    if (!nextStart) return;
-    const nextEnd = window.prompt('Edit end time (HH:MM)', item.endTime);
-    if (!nextEnd) return;
-    const note = window.prompt('Optional acceptance note for student', item.responseNote || '') || undefined;
+  const acceptRequest = (item: ScheduleItem) => {
+    setAcceptItem(item);
+    setAcceptForm({
+      title: item.title,
+      description: item.description,
+      date: item.date,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      responseNote: item.responseNote || '',
+    });
+    setAcceptOpen(true);
+  };
 
+  const submitAccept = async () => {
+    if (!acceptItem) return;
+    if (!acceptForm.title.trim()) { toast.error('Title is required.'); return; }
     try {
-      await onRespond(item.id, {
+      setSaving(true);
+      await onRespond(acceptItem.id, {
         decision: 'accepted',
-        title: nextTitle.trim(),
-        description: nextDescription.trim(),
-        date: nextDate.trim(),
-        startTime: nextStart.trim(),
-        endTime: nextEnd.trim(),
-        responseNote: note,
+        title: acceptForm.title.trim(),
+        description: acceptForm.description.trim(),
+        date: acceptForm.date,
+        startTime: acceptForm.startTime,
+        endTime: acceptForm.endTime,
+        responseNote: acceptForm.responseNote.trim() || undefined,
       });
       toast.success('Schedule request accepted.');
+      setAcceptOpen(false);
     } catch (error: any) {
       toast.error(error.message || 'Failed to accept schedule request.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const declineRequest = async (item: ScheduleItem) => {
-    const note = window.prompt('Decline note (required)', item.responseNote || '');
-    if (!note || !note.trim()) {
-      toast.error('Decline note is required.');
-      return;
-    }
+  const declineRequest = (item: ScheduleItem) => {
+    setDeclineItem(item);
+    setDeclineNote(item.responseNote || '');
+    setDeclineOpen(true);
+  };
 
+  const submitDecline = async () => {
+    if (!declineItem) return;
+    if (!declineNote.trim()) { toast.error('Decline note is required.'); return; }
     try {
-      await onRespond(item.id, { decision: 'declined', responseNote: note.trim() });
+      setSaving(true);
+      await onRespond(declineItem.id, { decision: 'declined', responseNote: declineNote.trim() });
       toast.success('Schedule request declined.');
+      setDeclineOpen(false);
     } catch (error: any) {
       toast.error(error.message || 'Failed to decline schedule request.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const moveSchedule = async (item: ScheduleItem) => {
-    const nextDate = window.prompt('New date (YYYY-MM-DD)', item.date);
-    if (!nextDate) return;
-    const nextStart = window.prompt('New start time (HH:MM)', item.startTime);
-    if (!nextStart) return;
-    const nextEnd = window.prompt('New end time (HH:MM)', item.endTime);
-    if (!nextEnd) return;
+  const moveSchedule = (item: ScheduleItem) => {
+    setMoveItem(item);
+    setMoveForm({ date: item.date, startTime: item.startTime, endTime: item.endTime });
+    setMoveOpen(true);
+  };
 
+  const submitMove = async () => {
+    if (!moveItem) return;
     try {
-      await onMove(item.id, {
-        date: nextDate.trim(),
-        startTime: nextStart.trim(),
-        endTime: nextEnd.trim(),
-        title: item.title,
-        description: item.description,
-      });
+      setSaving(true);
+      await onMove(moveItem.id, { date: moveForm.date, startTime: moveForm.startTime, endTime: moveForm.endTime, title: moveItem.title, description: moveItem.description });
       toast.success('Schedule moved successfully.');
+      setMoveOpen(false);
     } catch (error: any) {
       toast.error(error.message || 'Failed to move schedule.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const cancelSchedule = async (item: ScheduleItem) => {
-    const note = window.prompt('Cancellation note (required)', item.responseNote || '');
-    if (!note || !note.trim()) {
-      toast.error('Cancellation note is required.');
-      return;
-    }
+  const cancelSchedule = (item: ScheduleItem) => {
+    setCancelItem(item);
+    setCancelNote(item.responseNote || '');
+    setCancelOpen(true);
+  };
 
+  const submitCancel = async () => {
+    if (!cancelItem) return;
+    if (!cancelNote.trim()) { toast.error('Cancellation note is required.'); return; }
     try {
-      await onCancel(item.id, note.trim());
+      setSaving(true);
+      await onCancel(cancelItem.id, cancelNote.trim());
       toast.success('Schedule cancelled.');
+      setCancelOpen(false);
     } catch (error: any) {
       toast.error(error.message || 'Failed to cancel schedule.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const editByAdmin = async (item: ScheduleItem) => {
-    const nextStatus = window.prompt('Status (pending/accepted/declined/cancelled)', item.status) as
-      | 'pending'
-      | 'accepted'
-      | 'declined'
-      | 'cancelled'
-      | null;
-    if (!nextStatus) return;
+  const editByAdmin = (item: ScheduleItem) => {
+    setAdminEditItem(item);
+    setAdminEditForm({
+      title: item.title,
+      description: item.description,
+      date: item.date,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      status: item.status as 'pending' | 'accepted' | 'declined' | 'cancelled',
+      responseNote: item.responseNote || '',
+    });
+    setAdminEditOpen(true);
+  };
 
-    const nextTitle = window.prompt('Title', item.title);
-    if (nextTitle === null) return;
-    const nextDescription = window.prompt('Description', item.description);
-    if (nextDescription === null) return;
-    const nextDate = window.prompt('Date (YYYY-MM-DD)', item.date);
-    if (!nextDate) return;
-    const nextStart = window.prompt('Start Time (HH:MM)', item.startTime);
-    if (!nextStart) return;
-    const nextEnd = window.prompt('End Time (HH:MM)', item.endTime);
-    if (!nextEnd) return;
-
+  const submitAdminEdit = async () => {
+    if (!adminEditItem) return;
+    if (!adminEditForm.title.trim()) { toast.error('Title is required.'); return; }
     try {
-      await onAdminEdit(item.id, {
-        title: nextTitle.trim(),
-        description: nextDescription.trim(),
-        date: nextDate.trim(),
-        startTime: nextStart.trim(),
-        endTime: nextEnd.trim(),
-        status: nextStatus,
+      setSaving(true);
+      await onAdminEdit(adminEditItem.id, {
+        title: adminEditForm.title.trim(),
+        description: adminEditForm.description.trim(),
+        date: adminEditForm.date,
+        startTime: adminEditForm.startTime,
+        endTime: adminEditForm.endTime,
+        status: adminEditForm.status,
+        responseNote: adminEditForm.responseNote.trim() || null,
       });
       toast.success('Schedule updated by admin.');
+      setAdminEditOpen(false);
     } catch (error: any) {
       toast.error(error.message || 'Failed to update schedule.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -816,12 +860,187 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => acceptRequest(item)}>Accept + Edit</Button>
-                  <Button size="sm" variant="destructive" onClick={() => declineRequest(item)}>Decline</Button>
+                  <Button size="sm" onClick={() => { setTeacherRequestsOpen(false); acceptRequest(item); }}>Accept + Edit</Button>
+                  <Button size="sm" variant="destructive" onClick={() => { setTeacherRequestsOpen(false); declineRequest(item); }}>Decline</Button>
                 </div>
               </div>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Accept + Edit modal */}
+      <Dialog open={acceptOpen} onOpenChange={setAcceptOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Accept &amp; Edit Schedule</DialogTitle>
+            <DialogDescription>
+              Review and adjust the details before accepting{acceptItem?.studentName ? ` for ${acceptItem.studentName}` : ''}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Title</label>
+              <Input value={acceptForm.title} onChange={(e) => setAcceptForm((p) => ({ ...p, title: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Textarea value={acceptForm.description} onChange={(e) => setAcceptForm((p) => ({ ...p, description: e.target.value }))} rows={2} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-sm font-medium">Date</label>
+                <Input type="date" value={acceptForm.date} onChange={(e) => setAcceptForm((p) => ({ ...p, date: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Start</label>
+                <Input type="time" value={acceptForm.startTime} onChange={(e) => setAcceptForm((p) => ({ ...p, startTime: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">End</label>
+                <Input type="time" value={acceptForm.endTime} onChange={(e) => setAcceptForm((p) => ({ ...p, endTime: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Note to student (optional)</label>
+              <Textarea value={acceptForm.responseNote} onChange={(e) => setAcceptForm((p) => ({ ...p, responseNote: e.target.value }))} placeholder="Any message for the student…" rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAcceptOpen(false)}>Cancel</Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={submitAccept} disabled={saving}>{saving ? 'Saving…' : 'Accept Schedule'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Decline modal */}
+      <Dialog open={declineOpen} onOpenChange={setDeclineOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Decline Request</DialogTitle>
+            <DialogDescription>
+              Provide a reason for declining{declineItem?.studentName ? ` ${declineItem.studentName}'s` : ' this'} request.
+            </DialogDescription>
+          </DialogHeader>
+          {declineItem && (
+            <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 border">
+              <p className="font-medium text-gray-800">{declineItem.title}</p>
+              <p className="text-xs mt-0.5">{declineItem.date} | {declineItem.startTime} – {declineItem.endTime}</p>
+            </div>
+          )}
+          <div>
+            <label className="text-sm font-medium">Decline note <span className="text-red-500">*</span></label>
+            <Textarea value={declineNote} onChange={(e) => setDeclineNote(e.target.value)} placeholder="Reason for declining…" rows={3} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeclineOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={submitDecline} disabled={saving}>{saving ? 'Declining…' : 'Decline'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Move modal */}
+      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Move Schedule</DialogTitle>
+            <DialogDescription>Choose a new date and time for this session.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Date</label>
+              <Input type="date" value={moveForm.date} onChange={(e) => setMoveForm((p) => ({ ...p, date: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Start</label>
+                <Input type="time" value={moveForm.startTime} onChange={(e) => setMoveForm((p) => ({ ...p, startTime: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">End</label>
+                <Input type="time" value={moveForm.endTime} onChange={(e) => setMoveForm((p) => ({ ...p, endTime: e.target.value }))} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMoveOpen(false)}>Cancel</Button>
+            <Button onClick={submitMove} disabled={saving}>{saving ? 'Saving…' : 'Move Schedule'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel modal */}
+      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel Schedule</DialogTitle>
+            <DialogDescription>Provide a cancellation reason for the student.</DialogDescription>
+          </DialogHeader>
+          {cancelItem && (
+            <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-3 border">
+              <p className="font-medium text-gray-800">{cancelItem.title}</p>
+              <p className="text-xs mt-0.5">{cancelItem.date} | {cancelItem.startTime} – {cancelItem.endTime}</p>
+            </div>
+          )}
+          <div>
+            <label className="text-sm font-medium">Cancellation note <span className="text-red-500">*</span></label>
+            <Textarea value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} placeholder="Reason for cancellation…" rows={3} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={submitCancel} disabled={saving}>{saving ? 'Cancelling…' : 'Cancel Schedule'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Admin edit modal */}
+      <Dialog open={adminEditOpen} onOpenChange={setAdminEditOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Admin Edit Schedule</DialogTitle>
+            <DialogDescription>Edit any field including status.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium">Status</label>
+              <select className="mt-1 w-full border rounded-lg px-3 py-2 text-sm" value={adminEditForm.status} onChange={(e) => setAdminEditForm((p) => ({ ...p, status: e.target.value as any }))}>
+                <option value="pending">Pending</option>
+                <option value="accepted">Accepted</option>
+                <option value="declined">Declined</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Title</label>
+              <Input value={adminEditForm.title} onChange={(e) => setAdminEditForm((p) => ({ ...p, title: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Description</label>
+              <Textarea value={adminEditForm.description} onChange={(e) => setAdminEditForm((p) => ({ ...p, description: e.target.value }))} rows={2} />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-sm font-medium">Date</label>
+                <Input type="date" value={adminEditForm.date} onChange={(e) => setAdminEditForm((p) => ({ ...p, date: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Start</label>
+                <Input type="time" value={adminEditForm.startTime} onChange={(e) => setAdminEditForm((p) => ({ ...p, startTime: e.target.value }))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">End</label>
+                <Input type="time" value={adminEditForm.endTime} onChange={(e) => setAdminEditForm((p) => ({ ...p, endTime: e.target.value }))} />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Response note (optional)</label>
+              <Textarea value={adminEditForm.responseNote} onChange={(e) => setAdminEditForm((p) => ({ ...p, responseNote: e.target.value }))} rows={2} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdminEditOpen(false)}>Cancel</Button>
+            <Button onClick={submitAdminEdit} disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
