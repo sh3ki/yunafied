@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AuthUser, ScheduleItem, UserRole } from '@/app/types/models';
+import { AuthUser, MeetingRoom, ScheduleItem, UserRole } from '@/app/types/models';
 import { Button } from '@/app/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { Input } from '@/app/components/ui/input';
 import { Textarea } from '@/app/components/ui/textarea';
+import { apiClient } from '@/app/services/apiClient';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -61,6 +62,7 @@ interface ScheduleProps {
       responseNote?: string | null;
     },
   ) => Promise<void>;
+  onStartMeeting: (roomToken: string) => void;
 }
 
 function todayIso() {
@@ -97,7 +99,7 @@ function statusClass(status: ScheduleItem['status']): string {
   return 'bg-gray-200 text-gray-700';
 }
 
-export function Schedule({ schedules, users, role, userId, onCreate, onRespond, onMove, onCancel, onAdminEdit }: ScheduleProps) {
+export function Schedule({ schedules, users, role, userId, onCreate, onRespond, onMove, onCancel, onAdminEdit, onStartMeeting }: ScheduleProps) {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [currentMonth, setCurrentMonth] = useState<Date>(() => {
     const now = new Date();
@@ -110,6 +112,7 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   const [createOpen, setCreateOpen] = useState(false);
   const [teacherRequestsOpen, setTeacherRequestsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [startingMeeting, setStartingMeeting] = useState<string | null>(null);
 
   const [requestForm, setRequestForm] = useState({
     title: '',
@@ -414,6 +417,24 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
 
   const showTeacherPicker = role === 'admin' || role === 'student';
 
+  const startMeeting = async (item: ScheduleItem) => {
+    if (startingMeeting) return;
+    setStartingMeeting(item.id);
+    try {
+      const meeting: MeetingRoom = await apiClient.createMeeting({
+        scheduleId: item.id,
+        studentId: item.studentId,
+        studentName: item.studentName,
+        scheduleTitle: item.title,
+      });
+      onStartMeeting(meeting.roomToken);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to start meeting.');
+    } finally {
+      setStartingMeeting(null);
+    }
+  };
+
   return (
     <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 space-y-6">
       <div className="flex flex-wrap gap-3 items-start justify-between">
@@ -604,6 +625,16 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
                           Cancel
                         </button>
                       </>
+                    ) : null}
+
+                    {role === 'teacher' && item.status === 'accepted' && item.teacherId === userId ? (
+                      <button
+                        onClick={() => startMeeting(item)}
+                        disabled={startingMeeting === item.id}
+                        className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-md flex items-center gap-1 font-semibold"
+                      >
+                        📹 {startingMeeting === item.id ? 'Starting…' : 'Start Video Call'}
+                      </button>
                     ) : null}
 
                     {role === 'admin' ? (
