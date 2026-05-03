@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { clsx } from 'clsx';
@@ -24,11 +24,14 @@ import { Performance } from '@/app/components/Performance';
 import { Notifications } from '@/app/components/Notifications';
 import { EnrollmentRecords } from '@/app/components/EnrollmentRecords';
 import { LearningMaterials } from '@/app/components/LearningMaterials';
+import { VideoCall } from '@/app/components/VideoCall';
+import { IncomingCall } from '@/app/components/IncomingCall';
 import { apiClient } from '@/app/services/apiClient';
 import {
   AnnouncementItem,
   AssignmentItem,
   AuthUser,
+  MeetingRoom,
   ScheduleItem,
   SubmissionItem,
   UserRole,
@@ -143,6 +146,7 @@ interface AuthenticatedShellProps {
     currentPassword?: string;
     newPassword?: string;
   }) => Promise<AuthUser>;
+  onStartMeeting: (roomToken: string) => void;
 }
 
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -190,6 +194,7 @@ function AuthenticatedShell({
   onCreateAnnouncement,
   onUploadProfileImage,
   onUpdateMyProfile,
+  onStartMeeting,
 }: AuthenticatedShellProps) {
   const navigate = useNavigate();
   const params = useParams<{ view: string }>();
@@ -276,6 +281,7 @@ function AuthenticatedShell({
                     onMove={onMoveSchedule}
                     onCancel={onCancelSchedule}
                     onAdminEdit={onAdminEditSchedule}
+                    onStartMeeting={onStartMeeting}
                   />
                 </div>
               )}
@@ -292,6 +298,7 @@ function AuthenticatedShell({
                     onMove={onMoveSchedule}
                     onCancel={onCancelSchedule}
                     onAdminEdit={onAdminEditSchedule}
+                    onStartMeeting={onStartMeeting}
                   />
                 </div>
               )}
@@ -635,6 +642,39 @@ export default function App() {
     navigate(`/app/${view}`);
   };
 
+  // ── Incoming call polling (students only) ──────────────────────────────────
+  const [incomingCall, setIncomingCall] = useState<MeetingRoom | null>(null);
+
+  useEffect(() => {
+    if (!session || session.user.role !== 'student') return;
+    const poll = setInterval(async () => {
+      try {
+        const call = await apiClient.getIncomingCall();
+        if (call && call.status === 'calling') {
+          setIncomingCall((prev) => (prev?.roomToken === call.roomToken ? prev : call));
+        } else {
+          setIncomingCall(null);
+        }
+      } catch (_e) {
+        // ignore network errors during polling
+      }
+    }, 4000);
+    return () => clearInterval(poll);
+  }, [session]);
+
+  const handleAcceptCall = (roomToken: string) => {
+    setIncomingCall(null);
+    navigate(`/app/video-call/${roomToken}`);
+  };
+
+  const handleDeclineCall = () => {
+    setIncomingCall(null);
+  };
+
+  const handleStartMeeting = (roomToken: string) => {
+    navigate(`/app/video-call/${roomToken}`);
+  };
+
   if (loading) {
     return <div className="h-screen flex items-center justify-center text-indigo-600 animate-pulse">Loading System...</div>;
   }
@@ -642,6 +682,13 @@ export default function App() {
   return (
     <>
       <Toaster position="top-right" richColors />
+      {incomingCall && (
+        <IncomingCall
+          call={incomingCall}
+          onAccept={handleAcceptCall}
+          onDecline={handleDeclineCall}
+        />
+      )}
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route
@@ -655,6 +702,16 @@ export default function App() {
           }
         />
         <Route path="/app" element={<Navigate to="/app/dashboard" replace />} />
+        <Route
+          path="/app/video-call/:roomToken"
+          element={
+            session ? (
+              <VideoCall userId={session.user.id} role={session.user.role as 'teacher' | 'student'} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
         <Route
           path="/app/:view"
           element={
@@ -680,6 +737,7 @@ export default function App() {
                 onCreateAnnouncement={createAnnouncement}
                 onUploadProfileImage={uploadProfileImage}
                 onUpdateMyProfile={updateMyProfile}
+                onStartMeeting={handleStartMeeting}
               />
             ) : (
               <Navigate to="/login" replace />
