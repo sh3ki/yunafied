@@ -3,6 +3,25 @@ export type UserStatus = "active" | "inactive";
 export type ScheduleStatus = "pending" | "accepted" | "declined" | "cancelled";
 export type EnrollmentStatus = "active" | "completed" | "dropped";
 export type ChatType = "direct" | "group";
+export type MeetingRoomStatus = "calling" | "active" | "declined" | "ended";
+
+export interface MeetingRoom {
+  id: string;
+  roomToken: string;
+  scheduleId: string | null;
+  teacherId: string;
+  studentId: string | null;
+  teacherName: string;
+  studentName: string | null;
+  scheduleTitle: string | null;
+  status: MeetingRoomStatus;
+  offer: Record<string, unknown> | null;
+  answer: Record<string, unknown> | null;
+  teacherIceCandidates: Record<string, unknown>[];
+  studentIceCandidates: Record<string, unknown>[];
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface AuthUser {
   id: string;
