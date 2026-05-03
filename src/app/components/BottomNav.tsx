@@ -10,7 +10,8 @@ import {
   Library,
   Megaphone,
   Sparkles,
-  UserRound
+  UserRound,
+  Video
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -24,6 +25,7 @@ export function BottomNav({ role, currentView, onNavigate }: BottomNavProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student'] },
     { id: 'schedule', label: 'Schedule', icon: Calendar, roles: ['admin', 'teacher', 'student'] },
+    { id: 'meetings', label: 'Meetings', icon: Video, roles: ['teacher'] },
     { id: 'assignments', label: 'Tasks', icon: BookOpen, roles: ['teacher', 'student'] },
     { id: 'announcements', label: 'Announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student'] },
     { id: 'chats', label: 'Chats', icon: MessageCircle, roles: ['admin', 'teacher', 'student'] },
