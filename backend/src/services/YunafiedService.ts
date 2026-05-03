@@ -2384,4 +2384,190 @@ export class YunafiedService {
 
     return result.rows;
   }
+
+  // ─── Meeting Rooms (WebRTC Video Calls) ─────────────────────────────────────
+
+  async createMeetingRoom(input: {
+    roomToken: string;
+    scheduleId: string | null;
+    teacherId: string;
+    studentId: string | null;
+    teacherName: string;
+    studentName: string | null;
+    scheduleTitle: string | null;
+  }): Promise<import("../types/models.js").MeetingRoom> {
+    const result = await pool.query(
+      `INSERT INTO meeting_rooms (
+          room_token, schedule_id, teacher_id, student_id,
+          teacher_name, student_name, schedule_title, status,
+          offer, answer, teacher_ice_candidates, student_ice_candidates
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'calling', NULL, NULL, '[]', '[]')
+       RETURNING
+          id,
+          room_token AS "roomToken",
+          schedule_id AS "scheduleId",
+          teacher_id AS "teacherId",
+          student_id AS "studentId",
+          teacher_name AS "teacherName",
+          student_name AS "studentName",
+          schedule_title AS "scheduleTitle",
+          status,
+          offer,
+          answer,
+          teacher_ice_candidates AS "teacherIceCandidates",
+          student_ice_candidates AS "studentIceCandidates",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"`,
+      [
+        input.roomToken,
+        input.scheduleId,
+        input.teacherId,
+        input.studentId,
+        input.teacherName,
+        input.studentName,
+        input.scheduleTitle,
+      ],
+    );
+
+    return result.rows[0] as import("../types/models.js").MeetingRoom;
+  }
+
+  async getMeetingRoom(roomToken: string): Promise<import("../types/models.js").MeetingRoom | null> {
+    const result = await pool.query(
+      `SELECT id,
+              room_token AS "roomToken",
+              schedule_id AS "scheduleId",
+              teacher_id AS "teacherId",
+              student_id AS "studentId",
+              teacher_name AS "teacherName",
+              student_name AS "studentName",
+              schedule_title AS "scheduleTitle",
+              status,
+              offer,
+              answer,
+              teacher_ice_candidates AS "teacherIceCandidates",
+              student_ice_candidates AS "studentIceCandidates",
+              created_at AS "createdAt",
+              updated_at AS "updatedAt"
+         FROM meeting_rooms
+        WHERE room_token = $1`,
+      [roomToken],
+    );
+
+    return (result.rows[0] as import("../types/models.js").MeetingRoom) || null;
+  }
+
+  async getIncomingCallForStudent(studentId: string): Promise<import("../types/models.js").MeetingRoom | null> {
+    const result = await pool.query(
+      `SELECT id,
+              room_token AS "roomToken",
+              schedule_id AS "scheduleId",
+              teacher_id AS "teacherId",
+              student_id AS "studentId",
+              teacher_name AS "teacherName",
+              student_name AS "studentName",
+              schedule_title AS "scheduleTitle",
+              status,
+              offer,
+              answer,
+              teacher_ice_candidates AS "teacherIceCandidates",
+              student_ice_candidates AS "studentIceCandidates",
+              created_at AS "createdAt",
+              updated_at AS "updatedAt"
+         FROM meeting_rooms
+        WHERE student_id = $1
+          AND status = 'calling'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [studentId],
+    );
+
+    return (result.rows[0] as import("../types/models.js").MeetingRoom) || null;
+  }
+
+  async updateMeetingStatus(
+    roomToken: string,
+    status: import("../types/models.js").MeetingRoomStatus,
+  ): Promise<import("../types/models.js").MeetingRoom | null> {
+    const result = await pool.query(
+      `UPDATE meeting_rooms
+          SET status = $1,
+              updated_at = NOW()
+        WHERE room_token = $2
+       RETURNING
+          id,
+          room_token AS "roomToken",
+          schedule_id AS "scheduleId",
+          teacher_id AS "teacherId",
+          student_id AS "studentId",
+          teacher_name AS "teacherName",
+          student_name AS "studentName",
+          schedule_title AS "scheduleTitle",
+          status,
+          offer,
+          answer,
+          teacher_ice_candidates AS "teacherIceCandidates",
+          student_ice_candidates AS "studentIceCandidates",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"`,
+      [status, roomToken],
+    );
+
+    return (result.rows[0] as import("../types/models.js").MeetingRoom) || null;
+  }
+
+  async updateMeetingSignal(
+    roomToken: string,
+    role: "teacher" | "student",
+    input: {
+      offer?: Record<string, unknown> | null;
+      answer?: Record<string, unknown> | null;
+      addIceCandidate?: Record<string, unknown>;
+    },
+  ): Promise<import("../types/models.js").MeetingRoom | null> {
+    const setParts: string[] = ["updated_at = NOW()"];
+    const params: unknown[] = [roomToken];
+
+    if (input.offer !== undefined) {
+      params.push(input.offer);
+      setParts.push(`offer = $${params.length}`);
+    }
+
+    if (input.answer !== undefined) {
+      params.push(input.answer);
+      setParts.push(`answer = $${params.length}`);
+    }
+
+    if (input.addIceCandidate) {
+      const column = role === "teacher" ? "teacher_ice_candidates" : "student_ice_candidates";
+      params.push(JSON.stringify(input.addIceCandidate));
+      setParts.push(`${column} = ${column} || $${params.length}::jsonb`);
+    }
+
+    const result = await pool.query(
+      `UPDATE meeting_rooms
+          SET ${setParts.join(", ")}
+        WHERE room_token = $1
+       RETURNING
+          id,
+          room_token AS "roomToken",
+          schedule_id AS "scheduleId",
+          teacher_id AS "teacherId",
+          student_id AS "studentId",
+          teacher_name AS "teacherName",
+          student_name AS "studentName",
+          schedule_title AS "scheduleTitle",
+          status,
+          offer,
+          answer,
+          teacher_ice_candidates AS "teacherIceCandidates",
+          student_ice_candidates AS "studentIceCandidates",
+          created_at AS "createdAt",
+          updated_at AS "updatedAt"`,
+      params,
+    );
+
+    return (result.rows[0] as import("../types/models.js").MeetingRoom) || null;
+  }
 }
