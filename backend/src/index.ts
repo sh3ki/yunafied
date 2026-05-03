@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { execFile } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -14,7 +15,7 @@ import morgan from "morgan";
 import multer from "multer";
 import ffmpegPath from "ffmpeg-static";
 import { z } from "zod";
-import { testDatabaseConnection } from "./lib/db.js";
+import { testDatabaseConnection, pool } from "./lib/db.js";
 import { AuthenticatedRequest, requireAuth, requireRole, signAccessToken } from "./middleware/auth.js";
 import { YunafiedService } from "./services/YunafiedService.js";
 
@@ -2247,6 +2248,180 @@ app.post("/api/messages", requireAuth, async (req: AuthenticatedRequest, res, ne
     });
 
     res.status(201).json(message);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Meeting Room API (WebRTC Video Calls) ─────────────────────────────────────
+
+const createMeetingSchema = z.object({
+  scheduleId: z.string().uuid().nullable().optional(),
+  studentId: z.string().uuid().nullable().optional(),
+  studentName: z.string().max(200).nullable().optional(),
+  scheduleTitle: z.string().max(200).nullable().optional(),
+});
+
+const meetingSignalSchema = z.object({
+  offer: z.record(z.unknown()).nullable().optional(),
+  answer: z.record(z.unknown()).nullable().optional(),
+  addIceCandidate: z.record(z.unknown()).optional(),
+});
+
+const meetingStatusSchema = z.object({
+  status: z.enum(["active", "declined", "ended"]),
+});
+
+app.post("/api/meetings", requireAuth, requireRole("teacher"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const payload = createMeetingSchema.parse(req.body);
+    const teacher = await service.findUserWithPasswordById(userId);
+    if (!teacher) {
+      res.status(404).json({ message: "Teacher not found." });
+      return;
+    }
+
+    // End any existing active calling rooms for this teacher before creating new one
+    await pool.query(
+      `UPDATE meeting_rooms SET status = 'ended', updated_at = NOW()
+        WHERE teacher_id = $1 AND status IN ('calling', 'active')`,
+      [userId],
+    );
+
+    const roomToken = randomBytes(24).toString("hex");
+
+    const room = await service.createMeetingRoom({
+      roomToken,
+      scheduleId: payload.scheduleId || null,
+      teacherId: userId,
+      studentId: payload.studentId || null,
+      teacherName: teacher.full_name,
+      studentName: payload.studentName || null,
+      scheduleTitle: payload.scheduleTitle || null,
+    });
+
+    res.status(201).json(room);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/meetings/incoming", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const room = await service.getIncomingCallForStudent(userId);
+    res.json(room || null);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/meetings/:roomToken", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const room = await service.getMeetingRoom(req.params.roomToken);
+    if (!room) {
+      res.status(404).json({ message: "Meeting room not found." });
+      return;
+    }
+
+    // Only teacher or assigned student can access the room
+    if (room.teacherId !== userId && room.studentId !== userId) {
+      res.status(403).json({ message: "Access denied." });
+      return;
+    }
+
+    res.json(room);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/meetings/:roomToken/signal", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    const userRole = req.auth?.role;
+    if (!userId || !userRole) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const room = await service.getMeetingRoom(req.params.roomToken);
+    if (!room) {
+      res.status(404).json({ message: "Meeting room not found." });
+      return;
+    }
+
+    if (room.teacherId !== userId && room.studentId !== userId) {
+      res.status(403).json({ message: "Access denied." });
+      return;
+    }
+
+    if (room.status === "ended" || room.status === "declined") {
+      res.status(400).json({ message: "Meeting has ended." });
+      return;
+    }
+
+    const payload = meetingSignalSchema.parse(req.body);
+    const callerRole = room.teacherId === userId ? "teacher" : "student";
+
+    const updated = await service.updateMeetingSignal(req.params.roomToken, callerRole, {
+      offer: payload.offer,
+      answer: payload.answer,
+      addIceCandidate: payload.addIceCandidate,
+    });
+
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/meetings/:roomToken/status", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const room = await service.getMeetingRoom(req.params.roomToken);
+    if (!room) {
+      res.status(404).json({ message: "Meeting room not found." });
+      return;
+    }
+
+    if (room.teacherId !== userId && room.studentId !== userId) {
+      res.status(403).json({ message: "Access denied." });
+      return;
+    }
+
+    const payload = meetingStatusSchema.parse(req.body);
+
+    // Only student can decline, anyone can set active or ended
+    if (payload.status === "declined" && room.studentId !== userId) {
+      res.status(403).json({ message: "Only the student can decline a call." });
+      return;
+    }
+
+    const updated = await service.updateMeetingStatus(req.params.roomToken, payload.status);
+    res.json(updated);
   } catch (error) {
     next(error);
   }
