@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Plus, FileText, CheckCircle, Clock, Upload, Download } from 'lucide-react';
+import { Plus, FileText, CheckCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { AssignmentItem, SubmissionItem } from '@/app/types/models';
@@ -31,7 +31,6 @@ export function Assignments({
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
 
   const [submissionText, setSubmissionText] = useState('');
-  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
 
   const [gradeInput, setGradeInput] = useState('');
   const [feedbackInput, setFeedbackInput] = useState('');
@@ -89,19 +88,17 @@ export function Assignments({
       return;
     }
 
-    if (!submissionText.trim() && !submissionFile) {
-      toast.error('Please attach a file or add submission text.');
+    if (!submissionText.trim()) {
+      toast.error('Please write your submission text.');
       return;
     }
 
     try {
       setSaving(true);
       await onSubmitAssignment(selectedAssignmentId, {
-        file: submissionFile,
-        contentText: submissionText.trim() || undefined,
+        contentText: submissionText.trim(),
       });
       setSubmissionText('');
-      setSubmissionFile(null);
       toast.success('Submission saved successfully.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to submit assignment.');
@@ -200,7 +197,7 @@ export function Assignments({
               {role === 'student' && (
                 <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm flex-1">
                   <h4 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <Upload className="h-5 w-5" />
+                    <CheckCircle className="h-5 w-5 text-indigo-500" />
                     Your Submission
                   </h4>
 
@@ -208,44 +205,23 @@ export function Assignments({
                     <div className="bg-green-50 border border-green-100 rounded-lg p-6 text-center">
                       <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
                       <h5 className="font-bold text-green-800 text-lg">Submitted</h5>
-                      <p className="text-green-700 mt-1">Your work has been uploaded.</p>
-                      {mySubmission.fileName && (
-                        <a
-                          className="inline-flex items-center gap-2 mt-3 text-indigo-600 hover:text-indigo-700"
-                          href={`${backendBaseUrl}${mySubmission.fileUrl}`}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <Download className="h-4 w-4" />
-                          {mySubmission.fileName}
-                        </a>
+                      <p className="text-green-700 mt-1">Your work has been received.</p>
+                      {mySubmission.contentText && (
+                        <p className="mt-3 text-sm text-gray-600 bg-white border border-green-200 rounded-lg p-3 text-left">{mySubmission.contentText}</p>
                       )}
-                      <div className="mt-4 border-t border-green-200 pt-4">
-                        {mySubmission.grade ? (
-                          <>
-                            <div className="text-xl font-bold text-indigo-600">Grade: {mySubmission.grade}</div>
-                            <p className="mt-2 text-sm text-gray-700">Feedback: {mySubmission.feedback}</p>
-                          </>
-                        ) : (
-                          <span className="text-xs text-gray-500 bg-white px-3 py-1 rounded-full border">Pending grading</span>
-                        )}
-                      </div>
+                      <p className="mt-4 text-xs text-gray-500">
+                        View your grade and feedback in <span className="font-semibold text-indigo-600">Grades &amp; Feedback</span>.
+                      </p>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <textarea
-                        className="w-full h-28 border border-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
-                        placeholder="Optional notes about your submission"
-                        value={submissionText}
-                        onChange={(e) => setSubmissionText(e.target.value)}
-                      />
-                      <div className="space-y-2">
-                        <label className="block text-sm font-medium text-gray-700">Attach file (PDF, DOC, DOCX, TXT)</label>
-                        <input
-                          type="file"
-                          accept=".pdf,.doc,.docx,.txt"
-                          onChange={(e) => setSubmissionFile(e.target.files?.[0] || null)}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2"
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Your Answer / Response</label>
+                        <textarea
+                          className="w-full h-36 border border-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                          placeholder="Type your answer, response, or notes here..."
+                          value={submissionText}
+                          onChange={(e) => setSubmissionText(e.target.value)}
                         />
                       </div>
                       <button
@@ -253,7 +229,7 @@ export function Assignments({
                         onClick={handleStudentSubmit}
                         className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:opacity-60 transition"
                       >
-                        Submit Assignment
+                        {saving ? 'Submitting...' : 'Submit Assignment'}
                       </button>
                     </div>
                   )}
@@ -274,17 +250,6 @@ export function Assignments({
                           <div>
                             <div className="font-medium text-gray-800">{submission.studentName}</div>
                             {submission.contentText && <div className="text-sm text-gray-500 mt-1">{submission.contentText}</div>}
-                            {submission.fileName && (
-                              <a
-                                className="inline-flex items-center gap-2 mt-2 text-indigo-600 hover:text-indigo-700 text-sm"
-                                href={`${backendBaseUrl}${submission.fileUrl}`}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                <Download className="h-4 w-4" />
-                                {submission.fileName}
-                              </a>
-                            )}
                           </div>
                           <div className="text-right">
                             {submission.grade ? (
