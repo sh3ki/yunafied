@@ -149,16 +149,43 @@ class YunafiedApiClient {
   }
 
   async login(email: string, password: string): Promise<LoginResponse> {
-    return this.request<LoginResponse>("/api/auth/login", {
+    const response = await fetch(`${this.baseUrl}/api/auth/login`, {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
+    });
+
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (json.needsVerification) {
+        const err = new Error(json.message || "Email verification required") as Error & { needsVerification: true; email: string };
+        err.needsVerification = true;
+        err.email = json.email || email;
+        throw err;
+      }
+      throw new Error(json.message || `Request failed (${response.status})`);
+    }
+    return json as LoginResponse;
+  }
+
+  async register(payload: RegisterPayload): Promise<{ needsVerification: boolean; email: string }> {
+    return this.request<{ needsVerification: boolean; email: string }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
     });
   }
 
-  async register(payload: RegisterPayload): Promise<LoginResponse> {
-    return this.request<LoginResponse>("/api/auth/register", {
+  async verifyOtp(email: string, otp: string): Promise<LoginResponse> {
+    return this.request<LoginResponse>("/api/auth/verify-otp", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ email, otp }),
+    });
+  }
+
+  async resendOtp(email: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/auth/resend-otp", {
+      method: "POST",
+      body: JSON.stringify({ email }),
     });
   }
 
