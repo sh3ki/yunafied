@@ -82,6 +82,7 @@ interface DbChatSummaryRow {
   lastMessageBody: string | null;
   lastMessageAt: string | null;
   participantCount: number;
+  unreadCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -1388,6 +1389,13 @@ export class YunafiedService {
                   FROM chat_participants cp
                  WHERE cp.chat_id = c.id
               ) AS "participantCount",
+              (
+                SELECT COUNT(*)::int
+                  FROM chat_messages cm
+                 WHERE cm.chat_id = c.id
+                   AND cm.sender_id != $1
+                   AND cm.sent_at > COALESCE(me.last_read_at, '-infinity'::timestamptz)
+              ) AS "unreadCount",
               c.created_at AS "createdAt",
               c.updated_at AS "updatedAt"
          FROM chats c
@@ -1446,6 +1454,7 @@ export class YunafiedService {
       lastMessageAt: chat.lastMessageAt,
       participantCount: chat.participantCount,
       participants: participantsByChatId.get(chat.id) || [],
+      unreadCount: chat.unreadCount ?? 0,
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
     }));
@@ -1573,6 +1582,13 @@ export class YunafiedService {
       body: row.body,
       sentAt: row.sentAt,
     };
+  }
+
+  async markChatRead(chatId: string, userId: string): Promise<void> {
+    await pool.query(
+      `UPDATE chat_participants SET last_read_at = NOW() WHERE chat_id = $1 AND user_id = $2`,
+      [chatId, userId],
+    );
   }
 
   async listMessageRecipients(input: { requesterId: string; requesterRole: UserRole }): Promise<MessageUserItem[]> {
@@ -2395,14 +2411,15 @@ export class YunafiedService {
     teacherName: string;
     studentName: string | null;
     scheduleTitle: string | null;
+    scheduleDescription: string | null;
   }): Promise<import("../types/models.js").MeetingRoom> {
     const result = await pool.query(
       `INSERT INTO meeting_rooms (
           room_token, schedule_id, teacher_id, student_id,
-          teacher_name, student_name, schedule_title, status,
+          teacher_name, student_name, schedule_title, schedule_description, status,
           offer, answer, teacher_ice_candidates, student_ice_candidates
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'calling', NULL, NULL, '[]', '[]')
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'calling', NULL, NULL, '[]', '[]')
        RETURNING
           id,
           room_token AS "roomToken",
@@ -2412,6 +2429,7 @@ export class YunafiedService {
           teacher_name AS "teacherName",
           student_name AS "studentName",
           schedule_title AS "scheduleTitle",
+          schedule_description AS "scheduleDescription",
           status,
           offer,
           answer,
@@ -2427,6 +2445,7 @@ export class YunafiedService {
         input.teacherName,
         input.studentName,
         input.scheduleTitle,
+        input.scheduleDescription,
       ],
     );
 
@@ -2443,6 +2462,7 @@ export class YunafiedService {
               teacher_name AS "teacherName",
               student_name AS "studentName",
               schedule_title AS "scheduleTitle",
+              schedule_description AS "scheduleDescription",
               status,
               offer,
               answer,
@@ -2468,6 +2488,7 @@ export class YunafiedService {
               teacher_name AS "teacherName",
               student_name AS "studentName",
               schedule_title AS "scheduleTitle",
+              schedule_description AS "scheduleDescription",
               status,
               offer,
               answer,
@@ -2504,6 +2525,7 @@ export class YunafiedService {
           teacher_name AS "teacherName",
           student_name AS "studentName",
           schedule_title AS "scheduleTitle",
+          schedule_description AS "scheduleDescription",
           status,
           offer,
           answer,
@@ -2558,6 +2580,7 @@ export class YunafiedService {
           teacher_name AS "teacherName",
           student_name AS "studentName",
           schedule_title AS "scheduleTitle",
+          schedule_description AS "scheduleDescription",
           status,
           offer,
           answer,
