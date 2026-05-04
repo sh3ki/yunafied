@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mobileApiClient } from '../api/client';
 import {
@@ -6,6 +6,7 @@ import {
   AssignmentItem,
   AuthUser,
   BootstrapResponse,
+  MeetingRoom,
   ScheduleItem,
   SubmissionItem,
   UserRole,
@@ -89,6 +90,11 @@ interface AppContextValue {
   submitAssignment: (assignmentId: string, input: { contentText?: string }) => Promise<void>;
   gradeSubmission: (submissionId: string, input: { grade: string; feedback: string }) => Promise<void>;
   createAnnouncement: (input: { title: string; content: string }) => Promise<void>;
+  toggleAssignmentClosed: (assignmentId: string, isClosed: boolean) => Promise<void>;
+  incomingCall: MeetingRoom | null;
+  dismissIncomingCall: () => void;
+  acceptCall: (roomToken: string) => Promise<void>;
+  declineCall: (roomToken: string) => Promise<void>;
 }
 
 const initialData: BootstrapResponse = {
@@ -105,6 +111,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session>(null);
   const [data, setData] = useState<BootstrapResponse>(initialData);
+  const [incomingCall, setIncomingCall] = useState<MeetingRoom | null>(null);
+  const incomingCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const dashboardStats = useMemo(() => {
     const pending = data.submissions.filter((s) => !s.grade).length;
@@ -308,6 +316,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setData((prev) => ({ ...prev, announcements: [created, ...prev.announcements] }));
   };
 
+  const toggleAssignmentClosed = async (assignmentId: string, isClosed: boolean) => {
+    const updated = await mobileApiClient.toggleAssignmentClosed(assignmentId, isClosed);
+    setData((prev) => ({
+      ...prev,
+      assignments: prev.assignments.map((a) => (a.id === assignmentId ? updated : a)),
+    }));
+  };
+
+  const dismissIncomingCall = () => setIncomingCall(null);
+
+  const acceptCall = async (roomToken: string) => {
+    await mobileApiClient.updateMeetingStatus(roomToken, 'active');
+    setIncomingCall(null);
+  };
+
+  const declineCall = async (roomToken: string) => {
+    await mobileApiClient.updateMeetingStatus(roomToken, 'declined');
+    setIncomingCall(null);
+  };
+
+  // Poll for incoming calls every 6 seconds when a student is logged in
+  useEffect(() => {
+    if (!session || session.user.role !== 'student') {
+      if (incomingCallPollRef.current) {
+        clearInterval(incomingCallPollRef.current);
+        incomingCallPollRef.current = null;
+      }
+      return;
+    }
+
+    const poll = async () => {
+      try {
+        const call = await mobileApiClient.getIncomingCall();
+        if (call && call.status === 'calling') {
+          setIncomingCall(call);
+        }
+      } catch {
+        // ignore poll errors
+      }
+    };
+
+    poll();
+    incomingCallPollRef.current = setInterval(poll, 6000);
+
+    return () => {
+      if (incomingCallPollRef.current) {
+        clearInterval(incomingCallPollRef.current);
+        incomingCallPollRef.current = null;
+      }
+    };
+  }, [session]);
+
   const value: AppContextValue = {
     loading,
     session,
@@ -330,6 +390,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     submitAssignment,
     gradeSubmission,
     createAnnouncement,
+    toggleAssignmentClosed,
+    incomingCall,
+    dismissIncomingCall,
+    acceptCall,
+    declineCall,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
