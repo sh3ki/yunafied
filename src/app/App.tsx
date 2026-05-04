@@ -226,6 +226,29 @@ function AuthenticatedShell({
         onLogout={onLogout}
         userEmail={session.user.email}
         chatUnreadTotal={chatUnreadTotal}
+        schedulePendingCount={
+          userRole === 'teacher'
+            ? data.schedules.filter((s) => s.teacherId === session.user.id && s.status === 'pending').length
+            : 0
+        }
+        assignmentPendingCount={
+          userRole === 'student'
+            ? data.assignments.filter(
+                (a) => !a.isClosed && !data.submissions.some((s) => s.assignmentId === a.id && s.studentId === session.user.id)
+              ).length
+            : 0
+        }
+        meetingsTodayCount={(() => {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const nowTime = new Date().toTimeString().slice(0, 5); // "HH:MM"
+          return data.schedules.filter(
+            (s) =>
+              s.status === 'accepted' &&
+              s.date === todayStr &&
+              s.startTime >= nowTime &&
+              (userRole === 'teacher' ? s.teacherId === session.user.id : s.studentId === session.user.id),
+          ).length;
+        })()}
         user={{
           fullName: session.user.fullName,
           email: session.user.email,
