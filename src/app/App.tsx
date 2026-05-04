@@ -139,9 +139,10 @@ interface AuthenticatedShellProps {
       responseNote?: string | null;
     },
   ) => Promise<void>;
-  onCreateAssignment: (payload: { title: string; description: string; dueDate: string }) => Promise<void>;
+  onCreateAssignment: (payload: { title: string; description: string; dueDate: string; attachmentFile?: File | null }) => Promise<void>;
   onSubmitAssignment: (assignmentId: string, input: { file?: File | null; contentText?: string }) => Promise<void>;
   onGradeSubmission: (submissionId: string, grade: string, feedback: string) => Promise<void>;
+  onToggleAssignmentClosed: (assignmentId: string, isClosed: boolean) => Promise<void>;
   onCreateAnnouncement: (input: { title: string; content: string }) => Promise<void>;
   onUploadProfileImage: (file: File) => Promise<{ secureUrl: string; publicId: string }>;
   onUpdateMyProfile: (input: {
@@ -159,7 +160,7 @@ interface AuthenticatedShellProps {
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'grades', 'users', 'profile'],
+  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'grades', 'users', 'profile'],
   teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'gamified-learning', 'performance', 'profile'],
   student: [
     'dashboard',
@@ -198,6 +199,7 @@ function AuthenticatedShell({
   onCreateAssignment,
   onSubmitAssignment,
   onGradeSubmission,
+  onToggleAssignmentClosed,
   onCreateAnnouncement,
   onUploadProfileImage,
   onUpdateMyProfile,
@@ -264,89 +266,85 @@ function AuthenticatedShell({
 
                   {/* Admin Dashboard */}
                   {userRole === 'admin' && (() => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    const totalStudents = data.users.filter((u) => u.role === 'student').length;
                     const activeStudents = data.users.filter((u) => u.role === 'student' && u.status === 'active').length;
+                    const inactiveStudents = totalStudents - activeStudents;
+                    const totalTeachers = data.users.filter((u) => u.role === 'teacher').length;
                     const activeTeachers = data.users.filter((u) => u.role === 'teacher' && u.status === 'active').length;
-                    const pendingSchedules = data.schedules.filter((s) => s.status === 'pending').length;
-                    const acceptedSchedules = data.schedules.filter((s) => s.status === 'accepted').length;
-                    const gradedSubs = data.submissions.filter((s) => s.grade).length;
-                    const pendingSubs = data.submissions.filter((s) => !s.grade).length;
+                    const inactiveTeachers = totalTeachers - activeTeachers;
+                    const ongoingClasses = data.schedules.filter((s) => s.status === 'accepted' && s.date === today).length;
+                    const bookingsToday = data.schedules.filter((s) => s.date === today).length;
+                    const completedClasses = data.schedules.filter((s) => s.status === 'accepted').length;
+                    const cancelledClasses = data.schedules.filter((s) => s.status === 'cancelled').length;
 
-                    const roleData = [
-                      { name: 'Students', value: activeStudents },
-                      { name: 'Teachers', value: activeTeachers },
-                      { name: 'Admins', value: data.users.filter((u) => u.role === 'admin').length },
+                    const completedVsCancelledData = [
+                      { name: 'Completed', value: completedClasses },
+                      { name: 'Cancelled', value: cancelledClasses },
                     ];
-                    const scheduleStatusData = [
-                      { name: 'Pending', value: pendingSchedules },
-                      { name: 'Accepted', value: acceptedSchedules },
-                      { name: 'Declined', value: data.schedules.filter((s) => s.status === 'declined').length },
-                    ];
-                    const submissionData = [
-                      { name: 'Graded', value: gradedSubs },
-                      { name: 'Pending', value: pendingSubs },
-                    ];
-                    const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
                     return (
                       <>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                          {[
-                            { label: 'Total Users', value: data.users.length, color: 'text-purple-600', bg: 'bg-purple-50' },
-                            { label: 'Active Students', value: activeStudents, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                            { label: 'Active Teachers', value: activeTeachers, color: 'text-blue-600', bg: 'bg-blue-50' },
-                            { label: 'Total Schedules', value: data.schedules.length, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                            { label: 'Pending Schedules', value: pendingSchedules, color: 'text-amber-600', bg: 'bg-amber-50' },
-                            { label: 'Assignments', value: data.assignments.length, color: 'text-rose-600', bg: 'bg-rose-50' },
-                          ].map((stat) => (
-                            <div key={stat.label} className={`${stat.bg} rounded-2xl p-5 border border-white shadow-sm`}>
-                              <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">{stat.label}</p>
-                              <p className={`text-3xl font-extrabold mt-2 ${stat.color}`}>{stat.value}</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                          {/* Students card */}
+                          <div className="bg-indigo-50 rounded-2xl p-5 border border-white shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Total Students</p>
+                            <p className="text-3xl font-extrabold mt-1 text-indigo-600">{totalStudents}</p>
+                            <div className="flex gap-3 mt-2 text-xs">
+                              <span className="text-emerald-600 font-medium">Active: {activeStudents}</span>
+                              <span className="text-red-400 font-medium">Inactive: {inactiveStudents}</span>
                             </div>
-                          ))}
+                          </div>
+                          {/* Teachers card */}
+                          <div className="bg-blue-50 rounded-2xl p-5 border border-white shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Total Teachers</p>
+                            <p className="text-3xl font-extrabold mt-1 text-blue-600">{totalTeachers}</p>
+                            <div className="flex gap-3 mt-2 text-xs">
+                              <span className="text-emerald-600 font-medium">Active: {activeTeachers}</span>
+                              <span className="text-red-400 font-medium">Inactive: {inactiveTeachers}</span>
+                            </div>
+                          </div>
+                          {/* Ongoing classes */}
+                          <div className="bg-emerald-50 rounded-2xl p-5 border border-white shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Ongoing Classes Today</p>
+                            <p className="text-3xl font-extrabold mt-1 text-emerald-600">{ongoingClasses}</p>
+                            <p className="text-xs text-gray-400 mt-2">Live sessions scheduled today</p>
+                          </div>
+                          {/* Bookings Today */}
+                          <div className="bg-amber-50 rounded-2xl p-5 border border-white shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Total Bookings Today</p>
+                            <p className="text-3xl font-extrabold mt-1 text-amber-600">{bookingsToday}</p>
+                            <p className="text-xs text-gray-400 mt-2">All statuses</p>
+                          </div>
+                          {/* Completed classes */}
+                          <div className="bg-teal-50 rounded-2xl p-5 border border-white shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Completed Classes</p>
+                            <p className="text-3xl font-extrabold mt-1 text-teal-600">{completedClasses}</p>
+                          </div>
+                          {/* Cancelled classes */}
+                          <div className="bg-red-50 rounded-2xl p-5 border border-white shadow-sm">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Cancelled Classes</p>
+                            <p className="text-3xl font-extrabold mt-1 text-red-500">{cancelledClasses}</p>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                            <h3 className="text-sm font-semibold text-gray-700 mb-4">Users by Role</h3>
-                            <ResponsiveContainer width="100%" height={180}>
-                              <PieChart>
-                                <Pie data={roleData} dataKey="value" cx="50%" cy="50%" outerRadius={65} paddingAngle={3}>
-                                  {roleData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-                                </Pie>
-                                <Tooltip />
-                                <Legend />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                            <h3 className="text-sm font-semibold text-gray-700 mb-4">Schedule Status</h3>
-                            <ResponsiveContainer width="100%" height={180}>
-                              <BarChart data={scheduleStatusData}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={30} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                            <h3 className="text-sm font-semibold text-gray-700 mb-4">Submissions Status</h3>
-                            <ResponsiveContainer width="100%" height={180}>
-                              <PieChart>
-                                <Pie data={submissionData} dataKey="value" cx="50%" cy="50%" outerRadius={65} paddingAngle={3}>
-                                  <Cell fill="#10b981" />
-                                  <Cell fill="#f59e0b" />
-                                </Pie>
-                                <Tooltip />
-                                <Legend />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 max-w-md">
+                          <h3 className="text-sm font-semibold text-gray-700 mb-4">Completed vs Cancelled Classes</h3>
+                          <ResponsiveContainer width="100%" height={200}>
+                            <BarChart data={completedVsCancelledData}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
+                              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
+                              <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                              <Bar dataKey="value" radius={[4, 4, 0, 0]} barSize={40}>
+                                <Cell fill="#14b8a6" />
+                                <Cell fill="#ef4444" />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
                         </div>
                       </>
                     );
                   })()}
-
                   {/* Teacher Dashboard */}
                   {userRole === 'teacher' && (() => {
                     const mySchedules = data.schedules.filter((s) => s.teacherId === session.user.id);
@@ -570,7 +568,14 @@ function AuthenticatedShell({
               )}
 
               {currentView === 'performance' && (userRole === 'admin' || userRole === 'teacher') && (
-                <Performance submissions={data.submissions} />
+                <Performance
+                  submissions={data.submissions}
+                  assignments={data.assignments}
+                  users={data.users}
+                  schedules={data.schedules}
+                  role={userRole}
+                  userId={session.user.id}
+                />
               )}
 
               {currentView === 'assignments' && (
@@ -582,6 +587,7 @@ function AuthenticatedShell({
                   onCreateAssignment={onCreateAssignment}
                   onSubmitAssignment={onSubmitAssignment}
                   onGradeSubmission={onGradeSubmission}
+                  onToggleClose={onToggleAssignmentClosed}
                   backendBaseUrl={backendBaseUrl}
                 />
               )}
@@ -821,9 +827,14 @@ export default function App() {
     upsertSchedule(updated);
   };
 
-  const createAssignment = async (payload: { title: string; description: string; dueDate: string }) => {
+  const createAssignment = async (payload: { title: string; description: string; dueDate: string; attachmentFile?: File | null }) => {
     const created = await apiClient.createAssignment(payload);
     setData((prev) => ({ ...prev, assignments: [created, ...prev.assignments] }));
+  };
+
+  const toggleAssignmentClosed = async (assignmentId: string, isClosed: boolean) => {
+    const updated = await apiClient.toggleAssignmentClosed(assignmentId, isClosed);
+    setData((prev) => ({ ...prev, assignments: prev.assignments.map((a) => a.id === updated.id ? updated : a) }));
   };
 
   const submitAssignment = async (assignmentId: string, input: { file?: File | null; contentText?: string }) => {
@@ -994,6 +1005,7 @@ export default function App() {
                 onCreateAssignment={createAssignment}
                 onSubmitAssignment={submitAssignment}
                 onGradeSubmission={gradeSubmission}
+                onToggleAssignmentClosed={toggleAssignmentClosed}
                 onCreateAnnouncement={createAnnouncement}
                 onUploadProfileImage={uploadProfileImage}
                 onUpdateMyProfile={updateMyProfile}
