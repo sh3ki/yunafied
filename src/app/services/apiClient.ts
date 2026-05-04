@@ -573,6 +573,10 @@ class YunafiedApiClient {
     });
   }
 
+  async markChatRead(chatId: string): Promise<void> {
+    await this.request<void>(`/api/chats/${chatId}/read`, { method: "PATCH" });
+  }
+
   async listEnrollments(): Promise<EnrollmentRecordItem[]> {
     return this.request<EnrollmentRecordItem[]>("/api/enrollments");
   }
@@ -657,6 +661,7 @@ class YunafiedApiClient {
     studentId?: string | null;
     studentName?: string | null;
     scheduleTitle?: string | null;
+    scheduleDescription?: string | null;
   }): Promise<MeetingRoom> {
     return this.request<MeetingRoom>("/api/meetings", {
       method: "POST",
