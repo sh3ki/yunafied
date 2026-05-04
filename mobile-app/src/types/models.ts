@@ -1,6 +1,24 @@
 export type UserRole = 'admin' | 'teacher' | 'student';
 export type UserStatus = 'active' | 'inactive';
 export type ScheduleStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
+export type MeetingRoomStatus = 'calling' | 'active' | 'declined' | 'ended';
+export type EnrollmentStatus = 'active' | 'completed' | 'dropped';
+export type ChatType = 'direct' | 'group';
+
+export interface MeetingRoom {
+  id: string;
+  roomToken: string;
+  scheduleId: string | null;
+  teacherId: string;
+  studentId: string | null;
+  teacherName: string;
+  studentName: string | null;
+  scheduleTitle: string | null;
+  scheduleDescription: string | null;
+  status: MeetingRoomStatus;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface AuthUser {
   id: string;
@@ -40,6 +58,9 @@ export interface AssignmentItem {
   teacherId: string;
   teacherName: string;
   createdAt: string;
+  attachmentFileName?: string | null;
+  attachmentUrl?: string | null;
+  isClosed?: boolean;
 }
 
 export interface SubmissionItem {
@@ -163,4 +184,81 @@ export interface BootstrapResponse {
   assignments: AssignmentItem[];
   submissions: SubmissionItem[];
   announcements: AnnouncementItem[];
+}
+
+export interface VideoSummaryResponse {
+  title: string;
+  summary: string[];
+  takeaways: string[];
+}
+
+export interface NotificationItem {
+  id: string;
+  type: 'assignment' | 'submission' | 'announcement' | 'schedule' | 'grade';
+  title: string;
+  message: string;
+  priority: 'low' | 'medium' | 'high';
+  createdAt: string;
+  actionView: string;
+}
+
+export interface LearningMaterialItem {
+  id: string;
+  title: string;
+  description: string | null;
+  subject: string;
+  materialType: 'link' | 'file';
+  resourceUrl: string;
+  fileName: string | null;
+  createdById: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EnrollmentRecordItem {
+  id: string;
+  studentId: string;
+  studentName: string;
+  teacherId: string;
+  teacherName: string;
+  subject: string;
+  tutorialGroup: string | null;
+  status: EnrollmentStatus;
+  note: string | null;
+  createdById: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MessageUserItem {
+  id: string;
+  fullName: string;
+  role: UserRole;
+  profileImageUrl: string | null;
+}
+
+export interface ChatSummaryItem {
+  id: string;
+  name: string | null;
+  chatType: ChatType;
+  directKey: string | null;
+  createdById: string;
+  createdByName: string;
+  lastMessageBody: string | null;
+  lastMessageAt: string | null;
+  participantCount: number;
+  participants: MessageUserItem[];
+  unreadCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatMessageItem {
+  id: string;
+  chatId: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  sentAt: string;
 }
