@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { PhoneOff, Video, User } from 'lucide-react';
 import { MeetingRoom } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
 import { toast } from 'sonner';
@@ -11,27 +12,27 @@ interface IncomingCallProps {
 
 export function IncomingCall({ call, onAccept, onDecline }: IncomingCallProps) {
   const [declining, setDeclining] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Play ring tone
+  // Ring tone via Web Audio API
   useEffect(() => {
-    // Create a simple beep ring using Web Audio API
+    let stopped = false;
+    let ctx: AudioContext | null = null;
+
     try {
-      const ctx = new AudioContext();
-      let stopped = false;
+      ctx = new AudioContext();
 
       const ring = () => {
-        if (stopped) return;
+        if (stopped || !ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain);
         gain.connect(ctx.destination);
         osc.type = 'sine';
         osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
         osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.4);
+        osc.stop(ctx.currentTime + 0.45);
       };
 
       ring();
@@ -40,16 +41,14 @@ export function IncomingCall({ call, onAccept, onDecline }: IncomingCallProps) {
       return () => {
         stopped = true;
         clearInterval(interval);
-        ctx.close().catch(() => undefined);
+        ctx?.close().catch(() => undefined);
       };
-    } catch (_e) {
-      // AudioContext not available
+    } catch {
+      // AudioContext unavailable
     }
   }, []);
 
-  const handleAccept = () => {
-    onAccept(call.roomToken);
-  };
+  const handleAccept = () => onAccept(call.roomToken);
 
   const handleDecline = async () => {
     if (declining) return;
@@ -57,54 +56,69 @@ export function IncomingCall({ call, onAccept, onDecline }: IncomingCallProps) {
     try {
       await apiClient.updateMeetingStatus(call.roomToken, 'declined');
       onDecline(call.roomToken);
-    } catch (_e) {
+    } catch {
       toast.error('Failed to decline call.');
       setDeclining(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl p-8 text-center max-w-sm mx-4 animate-in zoom-in-95 duration-300">
-        {/* Avatar pulse animation */}
-        <div className="relative flex items-center justify-center mb-6">
-          <span className="absolute inline-flex h-24 w-24 rounded-full bg-blue-400 opacity-30 animate-ping" />
-          <span className="absolute inline-flex h-20 w-20 rounded-full bg-blue-400 opacity-20 animate-ping [animation-delay:300ms]" />
-          <div className="relative z-10 w-20 h-20 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-4xl shadow-lg">
-            👨‍🏫
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      {/* Card */}
+      <div className="relative w-full max-w-sm mx-4 bg-slate-900 border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
+        {/* Gradient blobs */}
+        <div className="absolute -top-20 -right-16 w-48 h-48 rounded-full bg-violet-500/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-20 -left-16 w-48 h-48 rounded-full bg-indigo-500/20 blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col items-center px-8 py-10 text-center">
+          {/* Pulsing avatar */}
+          <div className="relative flex items-center justify-center mb-6">
+            <span className="absolute w-24 h-24 rounded-full bg-indigo-500/30 animate-ping" />
+            <span className="absolute w-20 h-20 rounded-full bg-indigo-500/20 animate-ping [animation-delay:350ms]" />
+            <div className="relative z-10 w-18 h-18 flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-violet-700/40">
+                <User className="h-8 w-8 text-white" />
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs font-semibold uppercase tracking-widest text-indigo-400 mb-1">Incoming Video Call</p>
+          <h2 className="text-xl font-bold text-white mb-1">{call.teacherName}</h2>
+          {call.scheduleTitle && (
+            <p className="text-sm text-slate-400 mb-6">{call.scheduleTitle}</p>
+          )}
+          {!call.scheduleTitle && <div className="mb-6" />}
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-6">
+            {/* Decline */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={handleDecline}
+                disabled={declining}
+                className="w-14 h-14 rounded-full bg-red-500/20 hover:bg-red-500/40 border border-red-500/40 text-red-400 flex items-center justify-center transition-all disabled:opacity-40"
+                title="Decline"
+              >
+                <PhoneOff className="h-6 w-6" />
+              </button>
+              <span className="text-xs text-slate-400">Decline</span>
+            </div>
+
+            {/* Accept */}
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={handleAccept}
+                className="w-14 h-14 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white flex items-center justify-center transition-all shadow-lg shadow-emerald-700/40"
+                title="Accept"
+              >
+                <Video className="h-6 w-6" />
+              </button>
+              <span className="text-xs text-slate-400">Accept</span>
+            </div>
           </div>
         </div>
-
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">Incoming Video Call</h2>
-        <p className="text-lg text-gray-700 font-semibold mb-1">{call.teacherName}</p>
-
-        {call.scheduleTitle && (
-          <p className="text-sm text-gray-500 mb-6">{call.scheduleTitle}</p>
-        )}
-        {!call.scheduleTitle && <div className="mb-6" />}
-
-        <div className="flex gap-4 justify-center">
-          <button
-            onClick={handleDecline}
-            disabled={declining}
-            className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 text-white text-2xl flex items-center justify-center transition-all shadow-lg disabled:opacity-50"
-            title="Decline"
-          >
-            📵
-          </button>
-          <button
-            onClick={handleAccept}
-            className="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600 text-white text-2xl flex items-center justify-center transition-all shadow-lg"
-            title="Accept"
-          >
-            📹
-          </button>
-        </div>
-
-        <p className="text-xs text-gray-400 mt-4">
-          Tap <span className="text-green-600 font-semibold">Accept</span> to join the video call
-        </p>
       </div>
     </div>
   );
 }
+
