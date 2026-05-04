@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Plus, FileText, CheckCircle, Clock } from 'lucide-react';
+import React, { useMemo, useRef, useState } from 'react';
+import { Plus, FileText, CheckCircle, Clock, Paperclip, Download, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { AssignmentItem, SubmissionItem } from '@/app/types/models';
@@ -9,9 +9,10 @@ interface AssignmentsProps {
   submissions: SubmissionItem[];
   role: 'admin' | 'teacher' | 'student';
   userId: string;
-  onCreateAssignment: (input: { title: string; description: string; dueDate: string }) => Promise<void>;
+  onCreateAssignment: (input: { title: string; description: string; dueDate: string; attachmentFile?: File | null }) => Promise<void>;
   onSubmitAssignment: (assignmentId: string, input: { file?: File | null; contentText?: string }) => Promise<void>;
   onGradeSubmission: (submissionId: string, grade: string, feedback: string) => Promise<void>;
+  onToggleClose?: (assignmentId: string, isClosed: boolean) => Promise<void>;
   backendBaseUrl?: string;
 }
 
@@ -23,6 +24,7 @@ export function Assignments({
   onCreateAssignment,
   onSubmitAssignment,
   onGradeSubmission,
+  onToggleClose,
   backendBaseUrl = 'http://localhost:4000',
 }: AssignmentsProps) {
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
@@ -31,6 +33,11 @@ export function Assignments({
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
 
   const [submissionText, setSubmissionText] = useState('');
+  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
+  const ALLOWED_ACCEPT = ALLOWED_EXTENSIONS.join(',');
 
   const [gradeInput, setGradeInput] = useState('');
   const [feedbackInput, setFeedbackInput] = useState('');
@@ -41,6 +48,8 @@ export function Assignments({
     description: '',
     dueDate: '',
   });
+  const [newAssignmentFile, setNewAssignmentFile] = useState<File | null>(null);
+  const assignmentFileRef = useRef<HTMLInputElement>(null);
 
   const selectedAssignment = useMemo(
     () => assignments.find((a) => a.id === selectedAssignmentId) || null,
@@ -72,9 +81,11 @@ export function Assignments({
 
     try {
       setSaving(true);
-      await onCreateAssignment(newAssignment);
+      await onCreateAssignment({ ...newAssignment, attachmentFile: newAssignmentFile });
       setIsCreateModalOpen(false);
       setNewAssignment({ title: '', description: '', dueDate: '' });
+      setNewAssignmentFile(null);
+      if (assignmentFileRef.current) assignmentFileRef.current.value = '';
       toast.success('Assignment posted successfully.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to create assignment.');
@@ -88,17 +99,19 @@ export function Assignments({
       return;
     }
 
-    if (!submissionText.trim()) {
-      toast.error('Please write your submission text.');
+    if (!submissionText.trim() && !submissionFile) {
+      toast.error('Please write your answer or attach a document file.');
       return;
     }
 
     try {
       setSaving(true);
       await onSubmitAssignment(selectedAssignmentId, {
-        contentText: submissionText.trim(),
+        file: submissionFile,
+        contentText: submissionText.trim() || undefined,
       });
       setSubmissionText('');
+      setSubmissionFile(null);
       toast.success('Submission saved successfully.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to submit assignment.');
@@ -167,9 +180,14 @@ export function Assignments({
                       <Clock className="h-3 w-3" />
                       Due: {assignment.dueDate}
                     </span>
-                    {(role === 'teacher' || role === 'admin') && (
-                      <span className="bg-gray-100 px-2 py-1 rounded text-gray-500">{count} subs</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {assignment.isClosed && (
+                        <span className="bg-red-100 text-red-500 px-2 py-0.5 rounded-full font-medium">Closed</span>
+                      )}
+                      {(role === 'teacher' || role === 'admin') && (
+                        <span className="bg-gray-100 px-2 py-1 rounded text-gray-500">{count} subs</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -189,9 +207,42 @@ export function Assignments({
           {selectedAssignment && (
             <div className="h-full flex flex-col gap-5">
               <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedAssignment.title}</h3>
-                <p className="text-gray-600 leading-relaxed">{selectedAssignment.description}</p>
-                <div className="mt-4 text-sm text-indigo-600 font-medium">Due date: {selectedAssignment.dueDate}</div>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">{selectedAssignment.title}</h3>
+                    <p className="text-gray-600 leading-relaxed">{selectedAssignment.description}</p>
+                  </div>
+                  {(role === 'teacher' || role === 'admin') && onToggleClose && (
+                    <button
+                      onClick={() => onToggleClose(selectedAssignment.id, !selectedAssignment.isClosed)}
+                      className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                        selectedAssignment.isClosed
+                          ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                          : 'bg-red-100 text-red-700 hover:bg-red-200'
+                      }`}
+                    >
+                      {selectedAssignment.isClosed ? '🔓 Re-open' : '🔒 Close Submissions'}
+                    </button>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3 text-sm items-center">
+                  <span className="text-indigo-600 font-medium">Due: {selectedAssignment.dueDate}</span>
+                  {selectedAssignment.isClosed && (
+                    <span className="bg-red-100 text-red-600 text-xs font-semibold px-2 py-0.5 rounded-full">Closed</span>
+                  )}
+                  {selectedAssignment.attachmentFileName && selectedAssignment.attachmentUrl && (
+                    <a
+                      href={`${backendBaseUrl}${selectedAssignment.attachmentUrl}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={selectedAssignment.attachmentFileName}
+                      className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      {selectedAssignment.attachmentFileName}
+                    </a>
+                  )}
+                </div>
               </div>
 
               {role === 'student' && (
@@ -201,13 +252,29 @@ export function Assignments({
                     Your Submission
                   </h4>
 
-                  {mySubmission ? (
+                  {selectedAssignment.isClosed && !mySubmission ? (
+                    <div className="bg-red-50 border border-red-100 rounded-lg p-6 text-center">
+                      <p className="text-red-700 font-semibold text-lg">🔒 Submissions Closed</p>
+                      <p className="text-red-500 text-sm mt-1">The teacher has closed this assignment.</p>
+                    </div>
+                  ) : mySubmission ? (
                     <div className="bg-green-50 border border-green-100 rounded-lg p-6 text-center">
                       <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
                       <h5 className="font-bold text-green-800 text-lg">Submitted</h5>
                       <p className="text-green-700 mt-1">Your work has been received.</p>
                       {mySubmission.contentText && (
                         <p className="mt-3 text-sm text-gray-600 bg-white border border-green-200 rounded-lg p-3 text-left">{mySubmission.contentText}</p>
+                      )}
+                      {mySubmission.fileName && mySubmission.fileUrl && (
+                        <a
+                          href={`${backendBaseUrl}${mySubmission.fileUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex items-center gap-1 text-sm text-indigo-600 underline"
+                        >
+                          <Paperclip className="h-3.5 w-3.5" />
+                          {mySubmission.fileName}
+                        </a>
                       )}
                       <p className="mt-4 text-xs text-gray-500">
                         View your grade and feedback in <span className="font-semibold text-indigo-600">Grades &amp; Feedback</span>.
@@ -218,11 +285,48 @@ export function Assignments({
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Your Answer / Response</label>
                         <textarea
-                          className="w-full h-36 border border-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
+                          className="w-full h-28 border border-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
                           placeholder="Type your answer, response, or notes here..."
                           value={submissionText}
                           onChange={(e) => setSubmissionText(e.target.value)}
                         />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Attach Document (optional)</label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept={ALLOWED_ACCEPT}
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0] || null;
+                              if (f) {
+                                const ext = '.' + f.name.split('.').pop()!.toLowerCase();
+                                if (!ALLOWED_EXTENSIONS.includes(ext)) {
+                                  toast.error('Only PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX files are allowed.');
+                                  e.target.value = '';
+                                  return;
+                                }
+                              }
+                              setSubmissionFile(f);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
+                          >
+                            <Paperclip className="h-4 w-4" />
+                            {submissionFile ? submissionFile.name : 'Choose File'}
+                          </button>
+                          {submissionFile && (
+                            <button type="button" onClick={() => { setSubmissionFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} className="text-gray-400 hover:text-red-500">
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">Accepted: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX</p>
                       </div>
                       <button
                         disabled={saving}
@@ -249,7 +353,19 @@ export function Assignments({
                         <div className="flex items-start justify-between gap-4">
                           <div>
                             <div className="font-medium text-gray-800">{submission.studentName}</div>
-                            {submission.contentText && <div className="text-sm text-gray-500 mt-1">{submission.contentText}</div>}
+                            {submission.contentText && <div className="text-sm text-gray-500 mt-1 line-clamp-2">{submission.contentText}</div>}
+                            {submission.fileName && submission.fileUrl && (
+                              <a
+                                href={`${backendBaseUrl}${submission.fileUrl}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download={submission.fileName}
+                                className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"
+                              >
+                                <Download className="h-3 w-3" />
+                                {submission.fileName}
+                              </a>
+                            )}
                           </div>
                           <div className="text-right">
                             {submission.grade ? (
@@ -306,6 +422,43 @@ export function Assignments({
                   value={newAssignment.description}
                   onChange={(e) => setNewAssignment({ ...newAssignment, description: e.target.value })}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Attach File for Students (optional)</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={assignmentFileRef}
+                    type="file"
+                    accept={ALLOWED_ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      if (f) {
+                        const ext = '.' + f.name.split('.').pop()!.toLowerCase();
+                        if (!ALLOWED_EXTENSIONS.includes(ext)) {
+                          toast.error('Only PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX files are allowed.');
+                          e.target.value = '';
+                          return;
+                        }
+                      }
+                      setNewAssignmentFile(f);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => assignmentFileRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                    {newAssignmentFile ? newAssignmentFile.name : 'Choose File'}
+                  </button>
+                  {newAssignmentFile && (
+                    <button type="button" onClick={() => { setNewAssignmentFile(null); if (assignmentFileRef.current) assignmentFileRef.current.value = ''; }} className="text-gray-400 hover:text-red-500">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Students will see a download link.</p>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
