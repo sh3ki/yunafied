@@ -14,6 +14,7 @@ export interface MeetingRoom {
   teacherName: string;
   studentName: string | null;
   scheduleTitle: string | null;
+  scheduleDescription: string | null;
   status: MeetingRoomStatus;
   offer: Record<string, unknown> | null;
   answer: Record<string, unknown> | null;
@@ -132,6 +133,7 @@ export interface ChatSummaryItem {
   lastMessageAt: string | null;
   participantCount: number;
   participants: MessageUserItem[];
+  unreadCount: number;
   createdAt: string;
   updatedAt: string;
 }
