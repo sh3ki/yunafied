@@ -9,6 +9,19 @@ import { apiClient } from '@/app/services/apiClient';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+const ENGLISH_LEVELS = [
+  'Beginner (Basic English)',
+  'Pre-Intermediate',
+  'Intermediate',
+  'Upper Intermediate',
+  'Advanced',
+  'Business English',
+  'Conversational English',
+  'Kids English',
+];
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 interface ScheduleProps {
   schedules: ScheduleItem[];
   users: AuthUser[];
@@ -140,13 +153,15 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   const [adminEditForm, setAdminEditForm] = useState({ title: '', description: '', date: '', startTime: '', endTime: '', status: 'pending' as 'pending' | 'accepted' | 'declined' | 'cancelled', responseNote: '' });
 
   const [requestForm, setRequestForm] = useState({
-    title: '',
-    description: '',
+    title: 'English',
+    description: ENGLISH_LEVELS[0],
     date: todayIso(),
     startTime: '09:00',
     endTime: '10:00',
     requestNote: '',
   });
+
+  const [listTab, setListTab] = useState<'pending' | 'accepted' | 'declined'>('pending');
 
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -252,8 +267,8 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
       return;
     }
 
-    if (!requestForm.title.trim() || !requestForm.description.trim()) {
-      toast.error('Title and description are required.');
+    if (!requestForm.description.trim()) {
+      toast.error('Please select a level/module.');
       return;
     }
 
@@ -271,8 +286,8 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
       toast.success('Schedule request sent.');
       setRequestOpen(false);
       setRequestForm({
-        title: '',
-        description: '',
+        title: 'English',
+        description: ENGLISH_LEVELS[0],
         date: selectedDateIso,
         startTime: '09:00',
         endTime: '10:00',
@@ -620,76 +635,112 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
           </div>
 
           <div className="space-y-3">
-            <h3 className="font-semibold text-gray-800">Schedules on {selectedDateIso}</h3>
-            {selectedDaySchedules.length === 0 ? (
-              <p className="text-sm text-gray-500 border rounded-lg p-4 bg-gray-50">No schedules on this date.</p>
-            ) : null}
+            {/* Tab bar */}
+            <div className="flex gap-2 flex-wrap items-center justify-between">
+              <div className="flex gap-2">
+                {(['pending', 'accepted', 'declined'] as const).map((tab) => {
+                  const count = teacherSchedules.filter((s) => s.status === tab).length;
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setListTab(tab)}
+                      className={`px-4 py-1.5 rounded-full text-sm font-medium transition capitalize ${
+                        listTab === tab
+                          ? tab === 'pending'
+                            ? 'bg-amber-500 text-white shadow-sm'
+                            : tab === 'accepted'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'bg-red-600 text-white shadow-sm'
+                          : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {tab.charAt(0).toUpperCase() + tab.slice(1)} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="text-xs text-gray-400">Showing all {listTab} schedules</span>
+            </div>
 
-            {selectedDaySchedules.map((item) => {
-              const isTeacherOwner = role === 'teacher' && item.teacherId === userId;
-              const canRespond = isTeacherOwner && item.status === 'pending';
-              const canMoveOrCancel = (isTeacherOwner || role === 'admin') && item.status !== 'cancelled';
+            {(() => {
+              const tabSchedules = teacherSchedules
+                .filter((item) => item.status === listTab)
+                .sort((a, b) => `${a.date}-${a.startTime}`.localeCompare(`${b.date}-${b.startTime}`));
 
-              return (
-                <div key={item.id} className="border rounded-xl p-4 bg-white shadow-sm">
-                  <div className="flex flex-wrap gap-2 justify-between items-start">
-                    <div>
-                      <p className="font-semibold text-gray-900">{item.title}</p>
-                      <p className="text-sm text-gray-600">{item.description}</p>
+              if (tabSchedules.length === 0) {
+                return (
+                  <p className="text-sm text-gray-500 border rounded-lg p-4 bg-gray-50">
+                    No {listTab} schedules.
+                  </p>
+                );
+              }
+
+              return tabSchedules.map((item) => {
+                const isTeacherOwner = role === 'teacher' && item.teacherId === userId;
+                const canRespond = isTeacherOwner && item.status === 'pending';
+                const canMoveOrCancel = (isTeacherOwner || role === 'admin') && item.status !== 'cancelled' && item.status !== 'declined';
+
+                return (
+                  <div key={item.id} className="border rounded-xl p-4 bg-white shadow-sm">
+                    <div className="flex flex-wrap gap-2 justify-between items-start">
+                      <div>
+                        <p className="font-semibold text-gray-900">{item.title}</p>
+                        <p className="text-sm text-gray-600">{item.description}</p>
+                      </div>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClass(item.status)}`}>{item.status}</span>
                     </div>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusClass(item.status)}`}>{item.status}</span>
+
+                    <div className="text-sm text-gray-600 mt-2 space-y-1">
+                      <p>{item.date} · {item.startTime} – {item.endTime}</p>
+                      <p>Teacher: {item.teacherName}</p>
+                      <p>Student: {item.studentName || 'Unassigned'}</p>
+                      {item.requestNote ? <p>Request Note: {item.requestNote}</p> : null}
+                      {item.responseNote ? <p className="text-indigo-700">Note: {item.responseNote}</p> : null}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {canRespond ? (
+                        <>
+                          <button onClick={() => acceptRequest(item)} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-md">
+                            Accept + Edit
+                          </button>
+                          <button onClick={() => declineRequest(item)} className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md">
+                            Decline
+                          </button>
+                        </>
+                      ) : null}
+
+                      {canMoveOrCancel ? (
+                        <>
+                          <button onClick={() => moveSchedule(item)} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md">
+                            Move
+                          </button>
+                          <button onClick={() => cancelSchedule(item)} className="px-3 py-1.5 text-sm bg-orange-600 text-white rounded-md">
+                            Cancel
+                          </button>
+                        </>
+                      ) : null}
+
+                      {role === 'teacher' && item.status === 'accepted' && item.teacherId === userId ? (
+                        <button
+                          onClick={() => startMeeting(item)}
+                          disabled={startingMeeting === item.id}
+                          className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-md flex items-center gap-1 font-semibold"
+                        >
+                          📹 {startingMeeting === item.id ? 'Starting…' : 'Start Video Call'}
+                        </button>
+                      ) : null}
+
+                      {role === 'admin' ? (
+                        <button onClick={() => editByAdmin(item)} className="px-3 py-1.5 text-sm bg-slate-700 text-white rounded-md">
+                          Admin Edit
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
-
-                  <div className="text-sm text-gray-600 mt-2 space-y-1">
-                    <p>{item.startTime} - {item.endTime}</p>
-                    <p>Teacher: {item.teacherName}</p>
-                    <p>Student: {item.studentName || 'Unassigned'}</p>
-                    {item.requestNote ? <p>Request Note: {item.requestNote}</p> : null}
-                    {item.responseNote ? <p>Teacher/Admin Note: {item.responseNote}</p> : null}
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {canRespond ? (
-                      <>
-                        <button onClick={() => acceptRequest(item)} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-md">
-                          Accept + Edit
-                        </button>
-                        <button onClick={() => declineRequest(item)} className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md">
-                          Decline
-                        </button>
-                      </>
-                    ) : null}
-
-                    {canMoveOrCancel ? (
-                      <>
-                        <button onClick={() => moveSchedule(item)} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md">
-                          Move
-                        </button>
-                        <button onClick={() => cancelSchedule(item)} className="px-3 py-1.5 text-sm bg-orange-600 text-white rounded-md">
-                          Cancel
-                        </button>
-                      </>
-                    ) : null}
-
-                    {role === 'teacher' && item.status === 'accepted' && item.teacherId === userId ? (
-                      <button
-                        onClick={() => startMeeting(item)}
-                        disabled={startingMeeting === item.id}
-                        className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-md flex items-center gap-1 font-semibold"
-                      >
-                        📹 {startingMeeting === item.id ? 'Starting…' : 'Start Video Call'}
-                      </button>
-                    ) : null}
-
-                    {role === 'admin' ? (
-                      <button onClick={() => editByAdmin(item)} className="px-3 py-1.5 text-sm bg-slate-700 text-white rounded-md">
-                        Admin Edit
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         </div>
       )}
@@ -703,20 +754,22 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
 
           <div className="space-y-3">
             <div>
-              <label className="text-sm font-medium">Title</label>
-              <Input
-                value={requestForm.title}
-                onChange={(e) => setRequestForm((prev) => ({ ...prev, title: e.target.value }))}
-                placeholder="Subject or lesson"
-              />
+              <label className="text-sm font-medium text-gray-700">Subject</label>
+              <div className="mt-1 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-sm font-semibold text-indigo-700">
+                English
+              </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Description</label>
-              <Textarea
+              <label className="text-sm font-medium text-gray-700">Level / Module</label>
+              <select
+                className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                 value={requestForm.description}
                 onChange={(e) => setRequestForm((prev) => ({ ...prev, description: e.target.value }))}
-                placeholder="What do you need help with?"
-              />
+              >
+                {ENGLISH_LEVELS.map((level) => (
+                  <option key={level} value={level}>{level}</option>
+                ))}
+              </select>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
