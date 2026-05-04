@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BadgePlus, MessageCircle, Send, Users, UserRoundPlus, RefreshCw, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/app/services/apiClient';
@@ -25,6 +25,11 @@ export function Chats({ role, currentUserId }: ChatsProps) {
   const [messageBody, setMessageBody] = useState('');
   const [composerMode, setComposerMode] = useState<ComposerMode>('direct');
 
+  const chatsPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const messagesPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectedChatIdRef = useRef(selectedChatId);
+  useEffect(() => { selectedChatIdRef.current = selectedChatId; }, [selectedChatId]);
+
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId) || null,
     [chats, selectedChatId],
@@ -42,44 +47,68 @@ export function Chats({ role, currentUserId }: ChatsProps) {
     }
   };
 
-  const loadChats = async () => {
+  const loadChats = useCallback(async (silent = false) => {
     try {
-      setLoadingChats(true);
+      if (!silent) setLoadingChats(true);
       const rows = await apiClient.listChats();
       setChats(rows);
       setSelectedChatId((prev) => prev || rows[0]?.id || '');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to load chats.');
+      if (!silent) toast.error(error.message || 'Failed to load chats.');
     } finally {
-      setLoadingChats(false);
+      if (!silent) setLoadingChats(false);
     }
-  };
+  }, []);
 
-  const loadMessages = async (chatId: string) => {
+  const loadMessages = useCallback(async (chatId: string, silent = false) => {
     if (!chatId) {
       setMessages([]);
       return;
     }
-
     try {
-      setLoadingMessages(true);
+      if (!silent) setLoadingMessages(true);
       const rows = await apiClient.listChatMessages(chatId);
       setMessages(rows);
     } catch (error: any) {
-      toast.error(error.message || 'Failed to load chat messages.');
+      if (!silent) toast.error(error.message || 'Failed to load chat messages.');
     } finally {
-      setLoadingMessages(false);
+      if (!silent) setLoadingMessages(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadUsers();
     loadChats();
-  }, []);
+
+    // Poll chat list every 5 s (for new chats / unread counts)
+    chatsPollingRef.current = setInterval(() => loadChats(true), 5000);
+
+    return () => {
+      if (chatsPollingRef.current) clearInterval(chatsPollingRef.current);
+      if (messagesPollingRef.current) clearInterval(messagesPollingRef.current);
+    };
+  }, [loadChats]);
 
   useEffect(() => {
-    loadMessages(selectedChatId);
-  }, [selectedChatId]);
+    // Clear message polling for previous chat
+    if (messagesPollingRef.current) clearInterval(messagesPollingRef.current);
+
+    if (selectedChatId) {
+      loadMessages(selectedChatId);
+      // Mark as read when opening a chat
+      apiClient.markChatRead(selectedChatId).catch(() => {});
+      // Refresh messages every 3 s
+      messagesPollingRef.current = setInterval(() => {
+        if (selectedChatIdRef.current) loadMessages(selectedChatIdRef.current, true);
+      }, 3000);
+    } else {
+      setMessages([]);
+    }
+
+    return () => {
+      if (messagesPollingRef.current) clearInterval(messagesPollingRef.current);
+    };
+  }, [selectedChatId, loadMessages]);
 
   const openDirectChat = async () => {
     if (!directUserId) {
@@ -286,13 +315,20 @@ export function Chats({ role, currentUserId }: ChatsProps) {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="font-semibold text-gray-800 line-clamp-1">{getChatTitle(chat)}</p>
                       <p className="text-xs text-gray-500 mt-1">{getChatSubtitle(chat)}</p>
                     </div>
-                    <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                      {chat.chatType}
-                    </span>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                        {chat.chatType}
+                      </span>
+                      {chat.unreadCount > 0 && !active && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                          {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-gray-600 mt-2 line-clamp-1">
                     {chat.lastMessageBody || 'No messages yet'}
