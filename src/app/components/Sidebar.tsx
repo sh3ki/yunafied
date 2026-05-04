@@ -37,7 +37,7 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student'] },
-    { id: 'schedule', label: 'Scheduling', icon: Calendar, roles: ['admin', 'teacher', 'student'] },
+    { id: 'schedule', label: 'Scheduling', icon: Calendar, roles: ['teacher', 'student'] },
     { id: 'meetings', label: 'Video Meetings', icon: Video, roles: ['teacher'] },
     { id: 'announcements', label: 'Announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student'] },
     { id: 'chats', label: 'Chats', icon: MessageCircle, roles: ['admin', 'teacher', 'student'] },
