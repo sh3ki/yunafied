@@ -131,17 +131,44 @@ class MobileApiClient {
     return response.json() as Promise<T>;
   }
 
-  login(email: string, password: string) {
-    return this.request<LoginResponse>('/api/auth/login', {
+  login(email: string, password: string): Promise<LoginResponse> {
+    return fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
+    }).then(async (response) => {
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (json.needsVerification) {
+          const err = new Error(json.message || 'Email verification required') as Error & { needsVerification: true; email: string };
+          err.needsVerification = true;
+          err.email = json.email || email;
+          throw err;
+        }
+        throw new Error(json.message || `Request failed (${response.status})`);
+      }
+      return json as LoginResponse;
     });
   }
 
-  register(input: { fullName: string; email: string; password: string }) {
-    return this.request<LoginResponse>('/api/auth/register', {
+  register(input: { fullName: string; email: string; password: string }): Promise<{ needsVerification: boolean; email: string }> {
+    return this.request<{ needsVerification: boolean; email: string }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),
+    });
+  }
+
+  verifyOtp(email: string, otp: string): Promise<LoginResponse> {
+    return this.request<LoginResponse>('/api/auth/verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp }),
+    });
+  }
+
+  resendOtp(email: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/api/auth/resend-otp', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
     });
   }
 
