@@ -24,6 +24,7 @@ interface SidebarProps {
   onNavigate: (view: string) => void;
   onLogout: () => void;
   userEmail: string;
+  chatUnreadTotal?: number;
   user: {
     fullName: string;
     email: string;
@@ -31,7 +32,7 @@ interface SidebarProps {
   };
 }
 
-export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, user }: SidebarProps) {
+export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, user, chatUnreadTotal = 0 }: SidebarProps) {
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
   const menuItems = [
@@ -101,6 +102,11 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
             >
               <Icon className="h-5 w-5" />
               {item.label}
+              {item.id === 'chats' && chatUnreadTotal > 0 && currentView !== 'chats' && (
+                <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                  {chatUnreadTotal > 99 ? '99+' : chatUnreadTotal}
+                </span>
+              )}
             </button>
           );
         })}
