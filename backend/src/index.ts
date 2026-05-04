@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, promises as fs } from "node:fs";
 import bcrypt from "bcryptjs";
+import nodemailer from "nodemailer";
 import { v2 as cloudinary } from "cloudinary";
 import compression from "compression";
 import cors from "cors";
@@ -77,6 +78,44 @@ function setBootstrapCache(key: string, data: unknown): void {
 
 function clearBootstrapCache(): void {
   bootstrapCache.clear();
+}
+
+// ---------------------------------------------------------------------------
+// SMTP / Email (Nodemailer)
+// ---------------------------------------------------------------------------
+const smtpTransporter = nodemailer.createTransport({
+  host:   process.env.SMTP_HOST   || "smtp.gmail.com",
+  port:   Number(process.env.SMTP_PORT || 587),
+  secure: process.env.SMTP_SECURE === "true", // true for port 465
+  auth: {
+    user: process.env.SMTP_USER || "",
+    pass: process.env.SMTP_PASS || "",
+  },
+});
+
+function generateOtp(): string {
+  // Cryptographically random 6-digit code
+  const num = randomBytes(3).readUIntBE(0, 3) % 1_000_000;
+  return String(num).padStart(6, "0");
+}
+
+async function sendOtpEmail(toEmail: string, otpCode: string, fullName: string): Promise<void> {
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@yunafied.edu";
+  await smtpTransporter.sendMail({
+    from: `"YUNAFied" <${from}>`,
+    to: toEmail,
+    subject: "Your YUNAFied Verification Code",
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#f8f9ff;padding:32px;border-radius:12px">
+        <h2 style="color:#4f46e5;margin:0 0 8px">Welcome to YUNAFied, ${fullName}!</h2>
+        <p style="color:#374151;margin:0 0 24px">Use the verification code below to activate your account. It expires in <strong>10 minutes</strong>.</p>
+        <div style="background:#fff;border:2px solid #e0e7ff;border-radius:8px;padding:24px;text-align:center;margin-bottom:24px">
+          <span style="font-size:36px;font-weight:900;letter-spacing:10px;color:#4f46e5">${otpCode}</span>
+        </div>
+        <p style="color:#6b7280;font-size:13px;margin:0">If you did not create a YUNAFied account, you can safely ignore this email.</p>
+      </div>
+    `,
+  });
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -668,6 +707,7 @@ app.post("/api/auth/register", async (req: Request, res: Response, next: NextFun
     }
 
     const passwordHash = await bcrypt.hash(payload.password, 10);
+    // Create user as unverified — OTP must be confirmed before they can log in
     const user = await service.createUser({
       email: payload.email,
       fullName: payload.fullName,
@@ -676,10 +716,77 @@ app.post("/api/auth/register", async (req: Request, res: Response, next: NextFun
       profileImageUrl: null,
       profileImagePublicId: null,
       passwordHash,
+      isVerified: false,
     });
 
-    const token = signAccessToken({ sub: user.id, email: user.email, role: user.role });
-    res.status(201).json({ token, user });
+    // Generate OTP and save it (10-minute expiry)
+    const otpCode = generateOtp();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await service.saveOtp(user.id, otpCode, expiresAt);
+
+    // Send verification email (non-blocking — don't fail registration if SMTP is misconfigured)
+    try {
+      await sendOtpEmail(user.email, otpCode, user.fullName);
+    } catch (emailErr) {
+      console.error("[SMTP] Failed to send OTP email:", emailErr);
+    }
+
+    res.status(201).json({ needsVerification: true, email: user.email });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/verify-otp", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, otp } = z.object({ email: z.string().email(), otp: z.string().length(6) }).parse(req.body);
+
+    const row = await service.verifyOtp(email, otp);
+    if (!row) {
+      res.status(400).json({ message: "Invalid or expired verification code. Please request a new one." });
+      return;
+    }
+
+    if (row.status === "inactive") {
+      res.status(403).json({ message: "Your account is inactive. Please contact the administrator." });
+      return;
+    }
+
+    const sanitized = service.toAuthUser(row);
+    const token = signAccessToken({ sub: sanitized.id, email: sanitized.email, role: sanitized.role });
+    res.json({ token, user: sanitized });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/resend-otp", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+
+    const row = await service.findUserWithPasswordByEmail(email);
+    if (!row) {
+      // Return success anyway to avoid user enumeration
+      res.json({ message: "If that email exists, a new code has been sent." });
+      return;
+    }
+
+    if (row.is_verified) {
+      res.status(400).json({ message: "This account is already verified." });
+      return;
+    }
+
+    const otpCode = generateOtp();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    await service.saveOtp(row.id, otpCode, expiresAt);
+
+    try {
+      await sendOtpEmail(row.email, otpCode, row.full_name);
+    } catch (emailErr) {
+      console.error("[SMTP] Failed to resend OTP email:", emailErr);
+    }
+
+    res.json({ message: "A new verification code has been sent to your email." });
   } catch (error) {
     next(error);
   }
@@ -703,6 +810,21 @@ app.post("/api/auth/login", async (req: Request, res: Response, next: NextFuncti
 
     if (user.status === "inactive") {
       res.status(403).json({ message: "Your account is inactive. Please contact the administrator." });
+      return;
+    }
+
+    // Block unverified self-registered users and prompt them to verify
+    if (!user.is_verified) {
+      // Issue a fresh OTP so they can verify right away
+      const otpCode = generateOtp();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      await service.saveOtp(user.id, otpCode, expiresAt);
+      try {
+        await sendOtpEmail(user.email, otpCode, user.full_name);
+      } catch (emailErr) {
+        console.error("[SMTP] Failed to send OTP on login attempt:", emailErr);
+      }
+      res.status(403).json({ needsVerification: true, email: user.email, message: "Please verify your email. A new code has been sent." });
       return;
     }
 
