@@ -15,11 +15,11 @@ export function AIGuide({ onAsk }: AIGuideProps) {
     {
       role: 'assistant',
       content:
-        "Hello! I'm your AI Study Companion. I can help you break down topics, review your understanding, and guide you step-by-step.",
+        "Hello! I'm your English AI Study Guide. I can help you practise grammar, vocabulary, pronunciation tips, reading comprehension, writing, and more. What would you like to work on today?",
     },
   ]);
   const [input, setInput] = useState('');
-  const [subject, setSubject] = useState('General');
+  const [subject, setSubject] = useState('English');
   const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -60,8 +60,8 @@ export function AIGuide({ onAsk }: AIGuideProps) {
           <Bot className="h-8 w-8 text-violet-600" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-gray-800">AI Study Guide</h2>
-          <p className="text-sm text-gray-500">Ask anything and get guided, step-by-step support.</p>
+          <h2 className="text-xl font-bold text-gray-800">AI English Guide</h2>
+          <p className="text-sm text-gray-500">Get guided, step-by-step English learning support.</p>
         </div>
         <div className="ml-auto">
           <select
@@ -69,11 +69,13 @@ export function AIGuide({ onAsk }: AIGuideProps) {
             onChange={(e) => setSubject(e.target.value)}
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white"
           >
-            <option>General</option>
             <option>English</option>
-            <option>Math</option>
-            <option>Science</option>
-            <option>History</option>
+            <option>English Grammar</option>
+            <option>English Vocabulary</option>
+            <option>English Writing</option>
+            <option>English Speaking</option>
+            <option>Business English</option>
+            <option>English Pronunciation</option>
           </select>
         </div>
       </div>
@@ -121,7 +123,7 @@ export function AIGuide({ onAsk }: AIGuideProps) {
         <div className="relative">
           <input 
             type="text" 
-            placeholder="Ask a question about your studies..."
+            placeholder="Ask about English grammar, vocabulary, writing..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
