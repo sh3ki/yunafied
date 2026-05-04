@@ -461,9 +461,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = [".pdf", ".doc", ".docx", ".txt"];
+    const allowed = [".pdf", ".doc", ".docx", ".txt", ".xls", ".xlsx", ".ppt", ".pptx"];
     if (!allowed.includes(ext)) {
-      cb(new Error("Only PDF, DOC, DOCX, and TXT files are allowed."));
+      cb(new Error("Only PDF, DOC, DOCX, TXT, XLS, XLSX, PPT, and PPTX files are allowed."));
       return;
     }
     cb(null, true);
@@ -1697,9 +1697,10 @@ const createAssignmentSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-app.post("/api/assignments", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+app.post("/api/assignments", requireAuth, requireRole("admin", "teacher"), learningMaterialUpload.single("attachmentFile"), async (req: AuthenticatedRequest, res, next) => {
   try {
-    const payload = createAssignmentSchema.parse(req.body);
+    const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
+    const payload = createAssignmentSchema.parse(body);
     const teacherId = req.auth?.sub;
 
     if (!teacherId) {
@@ -1707,8 +1708,24 @@ app.post("/api/assignments", requireAuth, requireRole("admin", "teacher"), async
       return;
     }
 
-    const assignment = await service.createAssignment({ ...payload, teacherId });
+    const attachmentFileName = req.file ? req.file.originalname : null;
+    const attachmentUrl = req.file ? `/uploads/${req.file.filename}` : null;
+
+    const assignment = await service.createAssignment({ ...payload, teacherId, attachmentFileName, attachmentUrl });
     res.status(201).json(assignment);
+    clearBootstrapCache();
+  } catch (error) {
+    next(error);
+  }
+});
+
+const toggleCloseSchema = z.object({ isClosed: z.boolean() });
+
+app.patch("/api/assignments/:id/toggle-close", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const { isClosed } = toggleCloseSchema.parse(req.body);
+    const assignment = await service.toggleAssignmentClosed(req.params.id, isClosed);
+    res.json(assignment);
     clearBootstrapCache();
   } catch (error) {
     next(error);
