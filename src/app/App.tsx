@@ -720,8 +720,22 @@ export default function App() {
     navigate('/app/dashboard', { replace: true });
   };
 
-  const handleSignup = async (fullName: string, email: string, pass: string) => {
-    await apiClient.register({ fullName, email, password: pass });
+  const handleSignup = async (fullName: string, email: string, pass: string): Promise<string> => {
+    const result = await apiClient.register({ fullName, email, password: pass });
+    return result.email;
+  };
+
+  const handleVerifyOtp = async (email: string, otp: string) => {
+    const response = await apiClient.verifyOtp(email, otp);
+    apiClient.setToken(response.token);
+    localStorage.setItem('yunafied_token', response.token);
+    setSession({ token: response.token, user: response.user });
+    await loadData();
+    navigate('/app/dashboard', { replace: true });
+  };
+
+  const handleResendOtp = async (email: string) => {
+    await apiClient.resendOtp(email);
   };
 
   const handleLogout = () => {
@@ -991,7 +1005,7 @@ export default function App() {
             session ? (
               <Navigate to="/app/dashboard" replace />
             ) : (
-              <Login onLogin={handleLogin} onSignup={handleSignup} />
+              <Login onLogin={handleLogin} onSignup={handleSignup} onVerifyOtp={handleVerifyOtp} onResendOtp={handleResendOtp} />
             )
           }
         />
