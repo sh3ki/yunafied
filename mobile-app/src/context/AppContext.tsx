@@ -21,7 +21,9 @@ interface AppContextValue {
   data: BootstrapResponse;
   dashboardStats: { upcoming: number; assignments: number; users: number; pending: number };
   login: (email: string, password: string) => Promise<void>;
-  signup: (fullName: string, email: string, password: string) => Promise<void>;
+  signup: (fullName: string, email: string, password: string) => Promise<{ needsVerification: boolean; email: string }>;
+  verifyOtp: (email: string, otp: string) => Promise<void>;
+  resendOtp: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   updateProfile: (input: {
@@ -163,8 +165,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setData(bootstrap);
   };
 
-  const signup = async (fullName: string, email: string, password: string) => {
-    await mobileApiClient.register({ fullName, email, password });
+  const signup = async (fullName: string, email: string, password: string): Promise<{ needsVerification: boolean; email: string }> => {
+    return mobileApiClient.register({ fullName, email, password });
+  };
+
+  const verifyOtp = async (email: string, otp: string) => {
+    const response = await mobileApiClient.verifyOtp(email, otp);
+    mobileApiClient.setToken(response.token);
+    await AsyncStorage.setItem('yunafied_mobile_token', response.token);
+    setSession({ token: response.token, user: response.user });
+    const bootstrap = await mobileApiClient.bootstrap();
+    setData(bootstrap);
+  };
+
+  const resendOtp = async (email: string) => {
+    await mobileApiClient.resendOtp(email);
   };
 
   const logout = async () => {
@@ -375,6 +390,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dashboardStats,
     login,
     signup,
+    verifyOtp,
+    resendOtp,
     logout,
     refresh,
     updateProfile,
