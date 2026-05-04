@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Flag, CheckCircle, Lock, Trophy, Star, Zap, Target, BookOpen, Award, Brain } from 'lucide-react';
 import { motion } from 'motion/react';
-import { toast } from 'sonner';
 import { apiClient } from '@/app/services/apiClient';
 import { AssignmentItem, GamifiedLeaderboardItem, SubmissionItem } from '@/app/types/models';
 
@@ -132,15 +131,19 @@ export function MilestonesView({ assignments, submissions, userId }: MilestonesV
       try {
         const categories = await apiClient.listGamifiedCategories();
         const allLeaderboard: GamifiedLeaderboardItem[] = [];
-        await Promise.all(
+        await Promise.allSettled(
           categories.map(async (cat) => {
-            const rows = await apiClient.listGamifiedLeaderboard({ categoryId: cat.id, limit: 100 });
-            allLeaderboard.push(...rows);
+            try {
+              const rows = await apiClient.listGamifiedLeaderboard({ categoryId: cat.id, limit: 50 });
+              allLeaderboard.push(...rows);
+            } catch {
+              // skip categories that fail
+            }
           }),
         );
         setLeaderboard(allLeaderboard);
-      } catch (error: any) {
-        toast.error('Could not load gamified data.');
+      } catch {
+        // silently continue - badges derived from assignments still work
       } finally {
         setLoading(false);
       }
