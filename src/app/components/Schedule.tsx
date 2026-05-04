@@ -20,8 +20,6 @@ const ENGLISH_LEVELS = [
   'Kids English',
 ];
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 interface ScheduleProps {
   schedules: ScheduleItem[];
   users: AuthUser[];
@@ -161,7 +159,7 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
     requestNote: '',
   });
 
-  const [listTab, setListTab] = useState<'pending' | 'accepted' | 'declined'>('pending');
+  const [listTab, setListTab] = useState<'today' | 'pending' | 'accepted' | 'declined'>('today');
 
   const [createForm, setCreateForm] = useState({
     title: '',
@@ -637,16 +635,21 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
           <div className="space-y-3">
             {/* Tab bar */}
             <div className="flex gap-2 flex-wrap items-center justify-between">
-              <div className="flex gap-2">
-                {(['pending', 'accepted', 'declined'] as const).map((tab) => {
-                  const count = teacherSchedules.filter((s) => s.status === tab).length;
+              <div className="flex gap-2 flex-wrap">
+                {(['today', 'pending', 'accepted', 'declined'] as const).map((tab) => {
+                  const todayIsoStr = isoFromDate(new Date());
+                  const count = tab === 'today'
+                    ? teacherSchedules.filter((s) => s.date === todayIsoStr).length
+                    : teacherSchedules.filter((s) => s.status === tab).length;
                   return (
                     <button
                       key={tab}
                       onClick={() => setListTab(tab)}
                       className={`px-4 py-1.5 rounded-full text-sm font-medium transition capitalize ${
                         listTab === tab
-                          ? tab === 'pending'
+                          ? tab === 'today'
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : tab === 'pending'
                             ? 'bg-amber-500 text-white shadow-sm'
                             : tab === 'accepted'
                             ? 'bg-emerald-600 text-white shadow-sm'
@@ -654,23 +657,24 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
                           : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
                       }`}
                     >
-                      {tab.charAt(0).toUpperCase() + tab.slice(1)} ({count})
+                      {tab === 'today' ? 'Today' : tab.charAt(0).toUpperCase() + tab.slice(1)} ({count})
                     </button>
                   );
                 })}
               </div>
-              <span className="text-xs text-gray-400">Showing all {listTab} schedules</span>
+              <span className="text-xs text-gray-400">Showing {listTab} schedules</span>
             </div>
 
             {(() => {
+              const todayIsoStr = isoFromDate(new Date());
               const tabSchedules = teacherSchedules
-                .filter((item) => item.status === listTab)
+                .filter((item) => listTab === 'today' ? item.date === todayIsoStr : item.status === listTab)
                 .sort((a, b) => `${a.date}-${a.startTime}`.localeCompare(`${b.date}-${b.startTime}`));
 
               if (tabSchedules.length === 0) {
                 return (
                   <p className="text-sm text-gray-500 border rounded-lg p-4 bg-gray-50">
-                    No {listTab} schedules.
+                    No {listTab === 'today' ? "schedules for today" : `${listTab} schedules`}.
                   </p>
                 );
               }
