@@ -148,6 +148,7 @@ interface AuthenticatedShellProps {
     newPassword?: string;
   }) => Promise<AuthUser>;
   onStartMeeting: (roomToken: string) => void;
+  chatUnreadTotal?: number;
 }
 
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
@@ -196,6 +197,7 @@ function AuthenticatedShell({
   onUploadProfileImage,
   onUpdateMyProfile,
   onStartMeeting,
+  chatUnreadTotal = 0,
 }: AuthenticatedShellProps) {
   const navigate = useNavigate();
   const params = useParams<{ view: string }>();
@@ -216,13 +218,14 @@ function AuthenticatedShell({
         onNavigate={onNavigateView}
         onLogout={onLogout}
         userEmail={session.user.email}
+        chatUnreadTotal={chatUnreadTotal}
         user={{
           fullName: session.user.fullName,
           email: session.user.email,
           profileImageUrl: session.user.profileImageUrl,
         }}
       />
-      <BottomNav role={userRole} currentView={currentView} onNavigate={onNavigateView} />
+      <BottomNav role={userRole} currentView={currentView} onNavigate={onNavigateView} chatUnreadTotal={chatUnreadTotal} />
       <AIChatbot role={userRole} currentView={currentView} />
 
       <main className="flex-1 md:ml-64 overflow-y-auto">
@@ -648,18 +651,23 @@ export default function App() {
   };
 
   const navigateView = (view: string) => {
+    if (view === 'chats') setChatUnreadTotal(0);
     navigate(`/app/${view}`);
   };
 
   // ── Incoming call polling (students only) ──────────────────────────────────
   const [incomingCall, setIncomingCall] = useState<MeetingRoom | null>(null);
+  const [chatUnreadTotal, setChatUnreadTotal] = useState(0);
+  // Track tokens the student has already accepted/declined so the overlay
+  // doesn't flash back during the next poll cycle before the DB updates.
+  const dismissedCallsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!session || session.user.role !== 'student') return;
     const poll = setInterval(async () => {
       try {
         const call = await apiClient.getIncomingCall();
-        if (call && call.status === 'calling') {
+        if (call && call.status === 'calling' && !dismissedCallsRef.current.has(call.roomToken)) {
           setIncomingCall((prev) => (prev?.roomToken === call.roomToken ? prev : call));
         } else {
           setIncomingCall(null);
@@ -671,17 +679,39 @@ export default function App() {
     return () => clearInterval(poll);
   }, [session]);
 
+  // ── Chat unread total polling ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!session) return;
+    const fetchUnread = async () => {
+      try {
+        const chats = await apiClient.listChats();
+        const total = chats.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
+        setChatUnreadTotal(total);
+      } catch (_e) {
+        // ignore
+      }
+    };
+    fetchUnread();
+    const poll = setInterval(fetchUnread, 8000);
+    return () => clearInterval(poll);
+  }, [session]);
+
   const handleAcceptCall = (roomToken: string) => {
+    dismissedCallsRef.current.add(roomToken);
     setIncomingCall(null);
-    navigate(`/app/video-call/${roomToken}`);
+    // Update DB status to active immediately so the backend won't return
+    // this room as 'calling' on the next poll cycle.
+    apiClient.updateMeetingStatus(roomToken, 'active').catch(() => undefined);
+    window.open(`/app/video-call/${roomToken}`, '_blank', 'noopener,noreferrer');
   };
 
-  const handleDeclineCall = () => {
+  const handleDeclineCall = (roomToken: string) => {
+    dismissedCallsRef.current.add(roomToken);
     setIncomingCall(null);
   };
 
   const handleStartMeeting = (roomToken: string) => {
-    navigate(`/app/video-call/${roomToken}`);
+    window.open(`/app/video-call/${roomToken}`, '_blank', 'noopener,noreferrer');
   };
 
   if (loading) {
@@ -747,6 +777,7 @@ export default function App() {
                 onUploadProfileImage={uploadProfileImage}
                 onUpdateMyProfile={updateMyProfile}
                 onStartMeeting={handleStartMeeting}
+                chatUnreadTotal={chatUnreadTotal}
               />
             ) : (
               <Navigate to="/login" replace />
