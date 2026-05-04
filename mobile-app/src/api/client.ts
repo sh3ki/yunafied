@@ -4,16 +4,25 @@ import {
   AssignmentItem,
   AuthUser,
   BootstrapResponse,
+  ChatMessageItem,
+  ChatSummaryItem,
+  EnrollmentRecordItem,
   GamifiedAttemptResultItem,
   GamifiedCategoryItem,
   GamifiedLeaderboardItem,
   GamifiedQuizDetailItem,
   GamifiedQuizItem,
+  LearningMaterialItem,
+  MeetingRoom,
+  MeetingRoomStatus,
+  MessageUserItem,
+  NotificationItem,
   ScheduleItem,
   SubmissionItem,
   TranslationHistoryItem,
   UserRole,
   UserStatus,
+  VideoSummaryResponse,
 } from '../types/models';
 
 interface LoginResponse {
@@ -453,6 +462,69 @@ class MobileApiClient {
       pageSize: number;
       totalPages: number;
     }>(`/api/translations/history?${query}`);
+  }
+
+  toggleAssignmentClosed(assignmentId: string, isClosed: boolean) {
+    return this.request<AssignmentItem>(`/api/assignments/${assignmentId}/toggle-close`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isClosed }),
+    });
+  }
+
+  summarizeVideo(input: { videoUrl: string; context?: string }) {
+    return this.request<VideoSummaryResponse>('/api/ai/video-summary', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  listNotifications(limit = 20) {
+    return this.request<NotificationItem[]>(`/api/notifications?limit=${encodeURIComponent(String(limit))}`);
+  }
+
+  listLearningMaterials() {
+    return this.request<LearningMaterialItem[]>('/api/materials');
+  }
+
+  listEnrollments() {
+    return this.request<EnrollmentRecordItem[]>('/api/enrollments');
+  }
+
+  listChats() {
+    return this.request<ChatSummaryItem[]>('/api/chats');
+  }
+
+  listChatUsers() {
+    return this.request<MessageUserItem[]>('/api/chats/users');
+  }
+
+  openDirectChat(otherUserId: string) {
+    return this.request<ChatSummaryItem>('/api/chats/direct', {
+      method: 'POST',
+      body: JSON.stringify({ otherUserId }),
+    });
+  }
+
+  listChatMessages(chatId: string) {
+    return this.request<ChatMessageItem[]>(`/api/chats/${chatId}/messages`);
+  }
+
+  sendChatMessage(chatId: string, body: string) {
+    return this.request<ChatMessageItem>(`/api/chats/${chatId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  getIncomingCall() {
+    return this.request<MeetingRoom | null>('/api/meetings/incoming');
+  }
+
+  updateMeetingStatus(roomToken: string, status: MeetingRoomStatus) {
+    return this.request<MeetingRoom>(`/api/meetings/${roomToken}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
   }
 }
 
