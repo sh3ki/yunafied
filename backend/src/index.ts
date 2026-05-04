@@ -1977,6 +1977,20 @@ app.post("/api/chats/:chatId/messages", requireAuth, async (req: AuthenticatedRe
   }
 });
 
+app.patch("/api/chats/:chatId/read", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    if (!requesterId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    await service.markChatRead(req.params.chatId, requesterId);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/enrollments", requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const requesterId = req.auth?.sub;
@@ -2260,6 +2274,7 @@ const createMeetingSchema = z.object({
   studentId: z.string().uuid().nullable().optional(),
   studentName: z.string().max(200).nullable().optional(),
   scheduleTitle: z.string().max(200).nullable().optional(),
+  scheduleDescription: z.string().max(2000).nullable().optional(),
 });
 
 const meetingSignalSchema = z.object({
@@ -2304,6 +2319,7 @@ app.post("/api/meetings", requireAuth, requireRole("teacher"), async (req: Authe
       teacherName: teacher.full_name,
       studentName: payload.studentName || null,
       scheduleTitle: payload.scheduleTitle || null,
+      scheduleDescription: payload.scheduleDescription || null,
     });
 
     res.status(201).json(room);
