@@ -198,6 +198,7 @@ export function Meetings({ schedules, userId, onStartMeeting }: MeetingsProps) {
         studentId: item.studentId,
         studentName: item.studentName,
         scheduleTitle: item.title,
+        scheduleDescription: item.description || null,
       });
       onStartMeeting(meeting.roomToken);
     } catch (err: any) {
