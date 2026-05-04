@@ -1,12 +1,15 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  Vibration,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -26,11 +29,17 @@ import { mobileApiClient } from '../api/client';
 import { useAppContext } from '../context/AppContext';
 import {
   AssignmentItem,
+  ChatMessageItem,
+  ChatSummaryItem,
+  EnrollmentRecordItem,
   GamifiedAttemptResultItem,
   GamifiedCategoryItem,
   GamifiedLeaderboardItem,
   GamifiedQuizDetailItem,
   GamifiedQuizItem,
+  LearningMaterialItem,
+  MeetingRoom,
+  NotificationItem,
   SubmissionItem,
   TranslationHistoryItem,
   UserRole,
@@ -1293,7 +1302,7 @@ function AnnouncementsScreen() {
 }
 
 function AssignmentsScreen() {
-  const { data, session, createAssignment, submitAssignment, gradeSubmission } = useAppContext();
+  const { data, session, createAssignment, submitAssignment, gradeSubmission, toggleAssignmentClosed } = useAppContext();
   const role = session!.user.role;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -1338,6 +1347,14 @@ function AssignmentsScreen() {
     }
   };
 
+  const onToggleClose = async (assignment: AssignmentItem) => {
+    try {
+      await toggleAssignmentClosed(assignment.id, !assignment.isClosed);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to toggle assignment status.');
+    }
+  };
+
   const submissionsByAssignment = useMemo(() => {
     const map = new Map<string, SubmissionItem[]>();
     data.submissions.forEach((s) => {
@@ -1367,63 +1384,113 @@ function AssignmentsScreen() {
         </Card>
       ) : null}
 
-      {data.assignments.map((assignment: AssignmentItem) => (
-        <Card key={assignment.id}>
-          <Text style={styles.listTitle}>{assignment.title}</Text>
-          <Text style={styles.muted}>{assignment.description}</Text>
-          <Text style={styles.muted}>Due: {assignment.dueDate}</Text>
-          <Text style={styles.muted}>Teacher: {assignment.teacherName}</Text>
+      {data.assignments.map((assignment: AssignmentItem) => {
+        const mySubmission = isStudent
+          ? data.submissions.find((s) => s.assignmentId === assignment.id && s.studentId === session!.user.id)
+          : undefined;
 
-          {isStudent ? (
-            <>
-              <TextInput
-                value={submissionText[assignment.id] || ''}
-                onChangeText={(value) => setSubmissionText((prev) => ({ ...prev, [assignment.id]: value }))}
-                style={[styles.input, styles.textarea]}
-                placeholder="Write your submission"
-                multiline
-              />
-              <PillButton label="Submit" onPress={() => onSubmit(assignment.id)} />
-            </>
-          ) : null}
+        return (
+          <Card key={assignment.id}>
+            <View style={styles.rowBetween}>
+              <Text style={[styles.listTitle, { flex: 1 }]}>{assignment.title}</Text>
+              {assignment.isClosed ? (
+                <View style={styles.closedBadge}>
+                  <Text style={styles.closedBadgeText}>CLOSED</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.muted}>{assignment.description}</Text>
+            <Text style={styles.muted}>Due: {assignment.dueDate}</Text>
+            <Text style={styles.muted}>Teacher: {assignment.teacherName}</Text>
 
-          {!isStudent ? (
-            <View style={{ marginTop: 10 }}>
-              <Text style={styles.sectionTitle}>Submissions</Text>
-              {(submissionsByAssignment.get(assignment.id) || []).map((submission) => (
-                <View key={submission.id} style={styles.listItem}>
-                  <Text style={styles.listTitle}>{submission.studentName}</Text>
-                  <Text style={styles.muted}>{submission.contentText || 'No text submission'}</Text>
+            {assignment.attachmentUrl ? (
+              <Pressable onPress={() => Linking.openURL(assignment.attachmentUrl!)}>
+                <Text style={styles.linkInline}>📎 {assignment.attachmentFileName || 'Download Attachment'}</Text>
+              </Pressable>
+            ) : null}
+
+            {canCreate ? (
+              <Pressable onPress={() => onToggleClose(assignment)} style={styles.toggleBtn}>
+                <Text style={styles.toggleBtnText}>
+                  {assignment.isClosed ? '🔓 Re-open Submissions' : '🔒 Close Submissions'}
+                </Text>
+              </Pressable>
+            ) : null}
+
+            {isStudent && !mySubmission ? (
+              assignment.isClosed ? (
+                <View style={styles.closedNotice}>
+                  <Text style={styles.closedNoticeText}>🔒 Submissions are closed for this assignment.</Text>
+                </View>
+              ) : (
+                <>
                   <TextInput
-                    value={gradeMap[submission.id]?.grade || ''}
-                    onChangeText={(value) =>
-                      setGradeMap((prev) => ({
-                        ...prev,
-                        [submission.id]: { grade: value, feedback: prev[submission.id]?.feedback || '' },
-                      }))
-                    }
-                    style={styles.input}
-                    placeholder="Grade"
-                  />
-                  <TextInput
-                    value={gradeMap[submission.id]?.feedback || ''}
-                    onChangeText={(value) =>
-                      setGradeMap((prev) => ({
-                        ...prev,
-                        [submission.id]: { grade: prev[submission.id]?.grade || '', feedback: value },
-                      }))
-                    }
+                    value={submissionText[assignment.id] || ''}
+                    onChangeText={(value) => setSubmissionText((prev) => ({ ...prev, [assignment.id]: value }))}
                     style={[styles.input, styles.textarea]}
-                    placeholder="Feedback"
+                    placeholder="Write your submission"
                     multiline
                   />
-                  <PillButton label="Save Grade" onPress={() => onGrade(submission.id)} />
-                </View>
-              ))}
-            </View>
-          ) : null}
-        </Card>
-      ))}
+                  <PillButton label="Submit" onPress={() => onSubmit(assignment.id)} />
+                </>
+              )
+            ) : null}
+
+            {isStudent && mySubmission ? (
+              <View style={styles.submittedBadge}>
+                <Text style={styles.submittedText}>
+                  ✅ Submitted{mySubmission.grade ? ` — Grade: ${mySubmission.grade}` : ''}
+                </Text>
+                {mySubmission.feedback ? <Text style={styles.muted}>Feedback: {mySubmission.feedback}</Text> : null}
+              </View>
+            ) : null}
+
+            {!isStudent ? (
+              <View style={{ marginTop: 10 }}>
+                <Text style={styles.sectionTitle}>Submissions</Text>
+                {(submissionsByAssignment.get(assignment.id) || []).map((submission) => (
+                  <View key={submission.id} style={styles.listItem}>
+                    <Text style={styles.listTitle}>{submission.studentName}</Text>
+                    {submission.fileUrl ? (
+                      <Pressable onPress={() => Linking.openURL(submission.fileUrl!)}>
+                        <Text style={styles.linkInline}>📄 {submission.fileName || 'View File'}</Text>
+                      </Pressable>
+                    ) : null}
+                    <Text style={styles.muted}>{submission.contentText || 'No text submission'}</Text>
+                    <TextInput
+                      value={gradeMap[submission.id]?.grade || ''}
+                      onChangeText={(value) =>
+                        setGradeMap((prev) => ({
+                          ...prev,
+                          [submission.id]: { grade: value, feedback: prev[submission.id]?.feedback || '' },
+                        }))
+                      }
+                      style={styles.input}
+                      placeholder="Grade"
+                    />
+                    <TextInput
+                      value={gradeMap[submission.id]?.feedback || ''}
+                      onChangeText={(value) =>
+                        setGradeMap((prev) => ({
+                          ...prev,
+                          [submission.id]: { grade: prev[submission.id]?.grade || '', feedback: value },
+                        }))
+                      }
+                      style={[styles.input, styles.textarea]}
+                      placeholder="Feedback"
+                      multiline
+                    />
+                    <PillButton label="Save Grade" onPress={() => onGrade(submission.id)} />
+                  </View>
+                ))}
+                {!(submissionsByAssignment.get(assignment.id) || []).length ? (
+                  <Text style={styles.muted}>No submissions yet.</Text>
+                ) : null}
+              </View>
+            ) : null}
+          </Card>
+        );
+      })}
     </Shell>
   );
 }
@@ -1447,6 +1514,481 @@ function GradesScreen() {
         </Card>
       ) : null}
     </Shell>
+  );
+}
+
+function LearningMaterialsScreen() {
+  const [materials, setMaterials] = useState<LearningMaterialItem[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setBusy(true);
+        const items = await mobileApiClient.listLearningMaterials();
+        setMaterials(items);
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'Failed to load materials.');
+      } finally {
+        setBusy(false);
+      }
+    };
+    load();
+  }, []);
+
+  const bySubject = useMemo(() => {
+    const map = new Map<string, LearningMaterialItem[]>();
+    materials.forEach((m) => {
+      if (!map.has(m.subject)) map.set(m.subject, []);
+      map.get(m.subject)!.push(m);
+    });
+    return map;
+  }, [materials]);
+
+  return (
+    <Shell title="Learning Materials" subtitle="Access study resources by subject">
+      {busy ? (
+        <Card>
+          <ActivityIndicator color="#6d28d9" />
+        </Card>
+      ) : null}
+      {!busy && materials.length === 0 ? (
+        <Card>
+          <Text style={styles.muted}>No learning materials available yet.</Text>
+        </Card>
+      ) : null}
+      {Array.from(bySubject.entries()).map(([subject, items]) => (
+        <Card key={subject}>
+          <Text style={styles.sectionTitle}>{subject}</Text>
+          {items.map((item) => (
+            <View key={item.id} style={styles.listItem}>
+              <Text style={styles.listTitle}>{item.title}</Text>
+              {item.description ? <Text style={styles.muted}>{item.description}</Text> : null}
+              <Text style={styles.muted}>By {item.createdByName}</Text>
+              <Pressable onPress={() => Linking.openURL(item.resourceUrl)}>
+                <Text style={styles.linkInline}>
+                  {item.materialType === 'file' ? '📄 Download File' : '🔗 Open Link'}
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+        </Card>
+      ))}
+    </Shell>
+  );
+}
+
+function EnrollmentsScreen() {
+  const { session } = useAppContext();
+  const [enrollments, setEnrollments] = useState<EnrollmentRecordItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const role = session!.user.role;
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        setBusy(true);
+        const items = await mobileApiClient.listEnrollments();
+        setEnrollments(items);
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'Failed to load enrollments.');
+      } finally {
+        setBusy(false);
+      }
+    };
+    load();
+  }, []);
+
+  const myEnrollments = useMemo(() => {
+    if (role === 'student') {
+      return enrollments.filter((e) => e.studentId === session!.user.id);
+    }
+    if (role === 'teacher') {
+      return enrollments.filter((e) => e.teacherId === session!.user.id);
+    }
+    return enrollments;
+  }, [enrollments, role, session]);
+
+  const statusColor = (status: string) => {
+    if (status === 'active') return '#16a34a';
+    if (status === 'completed') return '#2563eb';
+    return '#dc2626';
+  };
+
+  return (
+    <Shell title="Enrollments" subtitle="Your enrolled subjects and classes">
+      {busy ? (
+        <Card>
+          <ActivityIndicator color="#6d28d9" />
+        </Card>
+      ) : null}
+      {!busy && myEnrollments.length === 0 ? (
+        <Card>
+          <Text style={styles.muted}>No enrollment records found.</Text>
+        </Card>
+      ) : null}
+      {myEnrollments.map((item) => (
+        <Card key={item.id}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.listTitle}>{item.subject}</Text>
+            <Text style={[styles.smallTitle, { color: statusColor(item.status) }]}>{item.status.toUpperCase()}</Text>
+          </View>
+          {item.tutorialGroup ? <Text style={styles.muted}>Group: {item.tutorialGroup}</Text> : null}
+          <Text style={styles.muted}>Teacher: {item.teacherName}</Text>
+          <Text style={styles.muted}>Student: {item.studentName}</Text>
+          {item.note ? <Text style={styles.muted}>Note: {item.note}</Text> : null}
+        </Card>
+      ))}
+    </Shell>
+  );
+}
+
+function NotificationsScreen() {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      setBusy(true);
+      const items = await mobileApiClient.listNotifications(30);
+      setNotifications(items);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load notifications.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const priorityColor = (priority: string) => {
+    if (priority === 'high') return '#dc2626';
+    if (priority === 'medium') return '#d97706';
+    return '#6b7280';
+  };
+
+  return (
+    <Shell title="Notifications" subtitle="Your recent activity">
+      <PillButton label={busy ? 'Refreshing...' : 'Refresh'} onPress={load} disabled={busy} />
+      {!busy && notifications.length === 0 ? (
+        <Card>
+          <Text style={styles.muted}>No notifications yet.</Text>
+        </Card>
+      ) : null}
+      {notifications.map((item) => (
+        <Card key={item.id}>
+          <View style={styles.rowBetween}>
+            <Text style={[styles.listTitle, { flex: 1 }]}>{item.title}</Text>
+            <Text style={[styles.smallTitle, { color: priorityColor(item.priority) }]}>{item.priority.toUpperCase()}</Text>
+          </View>
+          <Text style={styles.muted}>{item.message}</Text>
+          <Text style={styles.muted}>{new Date(item.createdAt).toLocaleDateString()}</Text>
+        </Card>
+      ))}
+    </Shell>
+  );
+}
+
+function ChatsScreen({ navigation }: any) {
+  const { session } = useAppContext();
+  const [chats, setChats] = useState<ChatSummaryItem[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      setBusy(true);
+      const items = await mobileApiClient.listChats();
+      setChats(items);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load chats.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const formatTime = (ts: string | null) => {
+    if (!ts) return '';
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  return (
+    <Shell title="Chats" subtitle="Direct and group messages">
+      <PillButton label={busy ? 'Loading...' : 'Refresh'} onPress={load} disabled={busy} />
+      {!busy && chats.length === 0 ? (
+        <Card>
+          <Text style={styles.muted}>No conversations yet. Start a chat from a user's profile.</Text>
+        </Card>
+      ) : null}
+      {chats.map((chat) => {
+        const other = chat.participants.find((p) => p.id !== session!.user.id);
+        const displayName = chat.name || other?.fullName || 'Group Chat';
+        return (
+          <Pressable key={chat.id} onPress={() => navigation.navigate('ChatDetail', { chatId: chat.id, chatName: displayName })}>
+            <Card>
+              <View style={styles.rowBetween}>
+                <Text style={[styles.listTitle, { flex: 1 }]}>{displayName}</Text>
+                {chat.unreadCount > 0 ? (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadText}>{chat.unreadCount}</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.muted}>{formatTime(chat.lastMessageAt)}</Text>
+              </View>
+              {chat.lastMessageBody ? (
+                <Text style={styles.muted} numberOfLines={1}>{chat.lastMessageBody}</Text>
+              ) : null}
+            </Card>
+          </Pressable>
+        );
+      })}
+    </Shell>
+  );
+}
+
+function ChatDetailScreen({ route }: any) {
+  const { session } = useAppContext();
+  const { chatId, chatName } = route.params as { chatId: string; chatName: string };
+  const [messages, setMessages] = useState<ChatMessageItem[]>([]);
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      const items = await mobileApiClient.listChatMessages(chatId);
+      setMessages(items);
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 5000);
+    return () => clearInterval(interval);
+  }, [chatId]);
+
+  const send = async () => {
+    const text = body.trim();
+    if (!text) return;
+    try {
+      setBusy(true);
+      setBody('');
+      await mobileApiClient.sendChatMessage(chatId, text);
+      await load();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send message.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Shell title={chatName} subtitle="Conversation">
+      <Card>
+        {messages.map((msg) => {
+          const isMine = msg.senderId === session!.user.id;
+          return (
+            <View
+              key={msg.id}
+              style={[styles.chatBubble, isMine ? styles.userBubble : styles.aiBubble, { marginBottom: 6 }]}
+            >
+              {!isMine ? <Text style={[styles.muted, { fontSize: 11, marginBottom: 2 }]}>{msg.senderName}</Text> : null}
+              <Text style={isMine ? styles.userText : styles.aiText}>{msg.body}</Text>
+            </View>
+          );
+        })}
+        {messages.length === 0 ? <Text style={styles.muted}>No messages yet.</Text> : null}
+      </Card>
+      <Card>
+        <TextInput
+          value={body}
+          onChangeText={setBody}
+          style={[styles.input, styles.textarea]}
+          placeholder="Type a message..."
+          multiline
+        />
+        <PillButton label={busy ? 'Sending...' : 'Send'} onPress={send} disabled={busy || !body.trim()} />
+      </Card>
+    </Shell>
+  );
+}
+
+function MilestonesScreen() {
+  const { data, session } = useAppContext();
+  const isStudent = session!.user.role === 'student';
+  const userId = session!.user.id;
+
+  const mySubmissions = useMemo(() => {
+    if (!isStudent) return [];
+    return data.submissions.filter((s) => s.studentId === userId);
+  }, [data.submissions, isStudent, userId]);
+
+  const stats = useMemo(() => {
+    const total = data.assignments.length;
+    const submitted = mySubmissions.length;
+    const graded = mySubmissions.filter((s) => s.grade).length;
+    const grades = mySubmissions.filter((s) => s.grade).map((s) => parseFloat(s.grade || '0')).filter((n) => !isNaN(n));
+    const avgGrade = grades.length ? (grades.reduce((a, b) => a + b, 0) / grades.length).toFixed(1) : null;
+    return { total, submitted, graded, avgGrade };
+  }, [data.assignments, mySubmissions]);
+
+  const milestones = [
+    { label: 'First Submission', earned: mySubmissions.length >= 1, icon: '🎯' },
+    { label: '5 Assignments Submitted', earned: mySubmissions.length >= 5, icon: '📚' },
+    { label: '10 Assignments Submitted', earned: mySubmissions.length >= 10, icon: '🏆' },
+    { label: 'First Graded Work', earned: mySubmissions.some((s) => !!s.grade), icon: '⭐' },
+    { label: 'Passed 5 Assignments', earned: mySubmissions.filter((s) => parseFloat(s.grade || '0') >= 60).length >= 5, icon: '🎓' },
+  ];
+
+  return (
+    <Shell title="Milestones" subtitle="Track your learning journey">
+      {isStudent ? (
+        <>
+          <View style={styles.rowWrap}>
+            <Card>
+              <Text style={styles.smallTitle}>Submitted</Text>
+              <Text style={styles.bigValue}>{stats.submitted}/{stats.total}</Text>
+            </Card>
+            <Card>
+              <Text style={styles.smallTitle}>Graded</Text>
+              <Text style={styles.bigValue}>{stats.graded}</Text>
+            </Card>
+          </View>
+          {stats.avgGrade ? (
+            <Card>
+              <Text style={styles.smallTitle}>Average Grade</Text>
+              <Text style={styles.bigValue}>{stats.avgGrade}</Text>
+            </Card>
+          ) : null}
+          <Card>
+            <Text style={styles.sectionTitle}>Badges</Text>
+            {milestones.map((m) => (
+              <View key={m.label} style={[styles.listItem, { flexDirection: 'row', alignItems: 'center', gap: 10 }]}>
+                <Text style={{ fontSize: 24, opacity: m.earned ? 1 : 0.3 }}>{m.icon}</Text>
+                <View>
+                  <Text style={[styles.listTitle, { opacity: m.earned ? 1 : 0.5 }]}>{m.label}</Text>
+                  <Text style={styles.muted}>{m.earned ? 'Earned' : 'Not yet earned'}</Text>
+                </View>
+              </View>
+            ))}
+          </Card>
+        </>
+      ) : (
+        <Card>
+          <Text style={styles.muted}>Milestone tracking is available for students only.</Text>
+        </Card>
+      )}
+    </Shell>
+  );
+}
+
+function VideoSummarizerScreen() {
+  const [videoUrl, setVideoUrl] = useState('');
+  const [context, setContext] = useState('');
+  const [result, setResult] = useState<{ title: string; summary: string[]; takeaways: string[] } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const summarize = async () => {
+    if (!videoUrl.trim()) {
+      Alert.alert('Validation', 'Please enter a video URL or YouTube link.');
+      return;
+    }
+    try {
+      setBusy(true);
+      setResult(null);
+      const response = await mobileApiClient.summarizeVideo({ videoUrl: videoUrl.trim(), context: context.trim() || undefined });
+      setResult(response);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to summarize video.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Shell title="Video Summarizer" subtitle="AI-powered lecture video summaries">
+      <Card>
+        <Text style={styles.label}>YouTube / Video URL</Text>
+        <TextInput
+          value={videoUrl}
+          onChangeText={setVideoUrl}
+          style={styles.input}
+          placeholder="https://youtube.com/watch?v=..."
+          autoCapitalize="none"
+        />
+        <Text style={styles.label}>Context (optional)</Text>
+        <TextInput
+          value={context}
+          onChangeText={setContext}
+          style={[styles.input, styles.textarea]}
+          placeholder="e.g. Calculus lecture for beginners"
+          multiline
+        />
+        <PillButton label={busy ? 'Summarizing...' : 'Transcribe & Summarize'} onPress={summarize} disabled={busy} />
+      </Card>
+
+      {result ? (
+        <Card>
+          <Text style={styles.sectionTitle}>{result.title}</Text>
+          <Text style={styles.label}>Summary</Text>
+          {result.summary.map((point, i) => (
+            <Text key={i} style={styles.muted}>• {point}</Text>
+          ))}
+          <Text style={[styles.label, { marginTop: 10 }]}>Key Takeaways</Text>
+          {result.takeaways.map((t, i) => (
+            <Text key={i} style={styles.muted}>✓ {t}</Text>
+          ))}
+        </Card>
+      ) : null}
+    </Shell>
+  );
+}
+
+function IncomingCallModal({ call, onAccept, onDecline }: { call: MeetingRoom; onAccept: () => void; onDecline: () => void }) {
+  const vibrateRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    // Vibration ring pattern: 400ms vibrate, 200ms pause, repeat
+    const ringPattern = [0, 400, 200, 400, 200, 400, 800];
+    Vibration.vibrate(ringPattern, true);
+
+    vibrateRef.current = setInterval(() => {
+      Vibration.vibrate(ringPattern, false);
+    }, 2500);
+
+    return () => {
+      Vibration.cancel();
+      if (vibrateRef.current) clearInterval(vibrateRef.current);
+    };
+  }, []);
+
+  return (
+    <Modal visible transparent animationType="fade">
+      <View style={styles.callOverlay}>
+        <View style={styles.callCard}>
+          <View style={styles.callAvatarWrap}>
+            <Text style={styles.callAvatarText}>📹</Text>
+          </View>
+          <Text style={styles.callLabel}>Incoming Video Call</Text>
+          <Text style={styles.callName}>{call.teacherName}</Text>
+          {call.scheduleTitle ? <Text style={styles.callSubtitle}>{call.scheduleTitle}</Text> : null}
+          <View style={styles.callActions}>
+            <Pressable onPress={onDecline} style={styles.declineBtn}>
+              <Text style={styles.declineBtnText}>✕ Decline</Text>
+            </Pressable>
+            <Pressable onPress={onAccept} style={styles.acceptBtn}>
+              <Text style={styles.acceptBtnText}>✓ Accept</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -1782,6 +2324,9 @@ function CustomDrawerContent(props: any) {
 function DrawerArea() {
   const { session } = useAppContext();
   const role = session!.user.role;
+  const isStudent = role === 'student';
+  const isTeacherOrAdmin = role === 'teacher' || role === 'admin';
+  const isAdmin = role === 'admin';
 
   return (
     <Drawer.Navigator
@@ -1794,55 +2339,44 @@ function DrawerArea() {
     >
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
       <Drawer.Screen name="Schedule" component={ScheduleScreen} />
+
+      {isStudent ? <Drawer.Screen name="Learning Materials" component={LearningMaterialsScreen} /> : null}
+
+      <Drawer.Screen name="Assignments" component={AssignmentsScreen} />
+
+      {isStudent ? <Drawer.Screen name="Grades" component={GradesScreen} /> : null}
+
+      {isStudent ? <Drawer.Screen name="Enrollments" component={EnrollmentsScreen} /> : null}
+
+      {isStudent ? <Drawer.Screen name="AI Guide" component={AIGuideScreen} /> : null}
+
+      <Drawer.Screen name="Gamified Learning" component={GamifiedLearningScreen} />
+
+      {isStudent ? <Drawer.Screen name="Milestones" component={MilestonesScreen} /> : null}
+
+      {isStudent ? <Drawer.Screen name="Video Summarizer" component={VideoSummarizerScreen} /> : null}
+
+      {isStudent ? <Drawer.Screen name="Word Translator" component={WordTranslatorScreen} /> : null}
+
+      {isStudent ? <Drawer.Screen name="Chats" component={ChatsScreen} /> : null}
+
       <Drawer.Screen name="Announcements" component={AnnouncementsScreen} />
 
-      {(role === 'teacher' || role === 'student' || role === 'admin') ? (
-        <Drawer.Screen name="Assignments" component={AssignmentsScreen} />
-      ) : null}
+      {isStudent ? <Drawer.Screen name="Notifications" component={NotificationsScreen} /> : null}
 
-      {role === 'student' ? <Drawer.Screen name="Grades" component={GradesScreen} /> : null}
-      {(role === 'teacher' || role === 'student' || role === 'admin') ? (
-        <Drawer.Screen name="Gamified Learning" component={GamifiedLearningScreen} />
-      ) : null}
+      {isTeacherOrAdmin ? <Drawer.Screen name="Word Translator" component={WordTranslatorScreen} /> : null}
+      {isTeacherOrAdmin ? <Drawer.Screen name="AI Guide" component={AIGuideScreen} /> : null}
+      {isTeacherOrAdmin ? <Drawer.Screen name="Performance" component={PerformanceScreen} /> : null}
 
-      {role === 'student' ? (
-        <Drawer.Screen
-          name="Video Summarizer"
-          children={() => (
-            <SimpleInfoScreen
-              title="Video Summarizer"
-              subtitle="Condense learning videos"
-              body="Paste lecture notes or transcript text and use YUNA tools to summarize key ideas quickly."
-            />
-          )}
-        />
-      ) : null}
+      {isAdmin ? <Drawer.Screen name="Users" component={UsersScreen} /> : null}
 
-      {role === 'student' ? <Drawer.Screen name="Word Translator" component={WordTranslatorScreen} /> : null}
-      {role === 'student' ? <Drawer.Screen name="AI Guide" component={AIGuideScreen} /> : null}
-
-      {role === 'student' ? (
-        <Drawer.Screen
-          name="Milestones"
-          children={() => (
-            <SimpleInfoScreen
-              title="Milestones"
-              subtitle="Track learning goals"
-              body="Set target outcomes and monitor your progress as you complete sessions and assignments."
-            />
-          )}
-        />
-      ) : null}
-
-      {(role === 'admin' || role === 'teacher') ? <Drawer.Screen name="Performance" component={PerformanceScreen} /> : null}
-      {role === 'admin' ? <Drawer.Screen name="Users" component={UsersScreen} /> : null}
       <Drawer.Screen name="Profile" component={ProfileScreen} />
     </Drawer.Navigator>
   );
 }
 
 export function AppNavigator() {
-  const { loading, session } = useAppContext();
+  const { loading, session, incomingCall, acceptCall, declineCall } = useAppContext();
 
   if (loading) {
     return (
@@ -1854,16 +2388,32 @@ export function AppNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
-      {session ? (
-        <DrawerArea />
-      ) : (
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          <RootStack.Screen name="Landing" component={LandingScreen} />
-          <RootStack.Screen name="Login" component={LoginScreen} />
-        </RootStack.Navigator>
-      )}
-    </NavigationContainer>
+    <>
+      <NavigationContainer theme={navTheme}>
+        {session ? (
+          <RootStack.Navigator screenOptions={{ headerShown: false }}>
+            <RootStack.Screen name="Main" component={DrawerArea} />
+            <RootStack.Screen
+              name="ChatDetail"
+              component={ChatDetailScreen}
+              options={{ headerShown: true, headerTitle: 'Chat', headerStyle: { backgroundColor: '#6d28d9' }, headerTintColor: '#fff' }}
+            />
+          </RootStack.Navigator>
+        ) : (
+          <RootStack.Navigator screenOptions={{ headerShown: false }}>
+            <RootStack.Screen name="Landing" component={LandingScreen} />
+            <RootStack.Screen name="Login" component={LoginScreen} />
+          </RootStack.Navigator>
+        )}
+      </NavigationContainer>
+      {incomingCall ? (
+        <IncomingCallModal
+          call={incomingCall}
+          onAccept={() => acceptCall(incomingCall.roomToken)}
+          onDecline={() => declineCall(incomingCall.roomToken)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -2159,5 +2709,146 @@ const styles = StyleSheet.create({
     color: '#6d28d9',
     fontWeight: '700',
     fontSize: 12,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  closedBadge: {
+    backgroundColor: '#fee2e2',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  closedBadgeText: {
+    color: '#dc2626',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  closedNotice: {
+    backgroundColor: '#fef2f2',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  closedNoticeText: {
+    color: '#b91c1c',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  toggleBtn: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+  },
+  toggleBtnText: {
+    color: '#374151',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  submittedBadge: {
+    backgroundColor: '#f0fdf4',
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#bbf7d0',
+  },
+  submittedText: {
+    color: '#15803d',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  unreadBadge: {
+    backgroundColor: '#6d28d9',
+    borderRadius: 999,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+  },
+  unreadText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  callOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  callCard: {
+    backgroundColor: '#1e1b4b',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    width: '85%',
+    gap: 10,
+  },
+  callAvatarWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 999,
+    backgroundColor: '#4c1d95',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  callAvatarText: {
+    fontSize: 36,
+  },
+  callLabel: {
+    color: '#a5b4fc',
+    fontWeight: '700',
+    fontSize: 12,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  callName: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 22,
+  },
+  callSubtitle: {
+    color: '#c4b5fd',
+    fontSize: 14,
+  },
+  callActions: {
+    flexDirection: 'row',
+    gap: 20,
+    marginTop: 16,
+  },
+  declineBtn: {
+    backgroundColor: '#450a0a',
+    borderWidth: 1,
+    borderColor: '#dc2626',
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  declineBtnText: {
+    color: '#fca5a5',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  acceptBtn: {
+    backgroundColor: '#14532d',
+    borderWidth: 1,
+    borderColor: '#16a34a',
+    borderRadius: 999,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+  },
+  acceptBtnText: {
+    color: '#86efac',
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
