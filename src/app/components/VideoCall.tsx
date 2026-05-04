@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, CameraOff, AlertTriangle, Phone, Settings, X } from 'lucide-react';
 import { MeetingRoom } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
 
@@ -20,7 +21,6 @@ type CallPhase = 'connecting' | 'calling' | 'active' | 'ended' | 'declined' | 'e
 
 export function VideoCall({ userId, role }: VideoCallProps) {
   const { roomToken } = useParams<{ roomToken: string }>();
-  const navigate = useNavigate();
 
   const [phase, setPhase] = useState<CallPhase>('connecting');
   const [room, setRoom] = useState<MeetingRoom | null>(null);
@@ -28,6 +28,16 @@ export function VideoCall({ userId, role }: VideoCallProps) {
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [connectionState, setConnectionState] = useState<string>('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Device lists & selected IDs
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedVideoId, setSelectedVideoId] = useState<string>('');
+  const [selectedAudioId, setSelectedAudioId] = useState<string>('');
+  // Track which device IDs the current stream uses
+  const activeVideoIdRef = useRef<string>('');
+  const activeAudioIdRef = useRef<string>('');
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -139,6 +149,21 @@ export function VideoCall({ userId, role }: VideoCallProps) {
       if (state === 'connected') {
         setPhase('active');
         if (!callStartTimeRef.current) startElapsed();
+        // Boost outgoing video bitrate for sharper quality (2.5 Mbps max)
+        pc.getSenders().forEach(async (sender) => {
+          if (sender.track?.kind !== 'video') return;
+          try {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            params.encodings[0].maxBitrate = 2_500_000;
+            params.encodings[0].maxFramerate = 30;
+            await sender.setParameters(params);
+          } catch (_e) {
+            // Non-fatal — browser may not support setParameters
+          }
+        });
       } else if (state === 'failed' || state === 'disconnected') {
         if (mountedRef.current) {
           toast.error('Connection lost.');
@@ -150,9 +175,28 @@ export function VideoCall({ userId, role }: VideoCallProps) {
     return pc;
   }, [roomToken, startElapsed, endCall]);
 
-  const getLocalStream = useCallback(async (): Promise<MediaStream> => {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+  const getLocalStream = useCallback(async (videoDeviceId?: string, audioDeviceId?: string): Promise<MediaStream> => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        deviceId: videoDeviceId ? { exact: videoDeviceId } : undefined,
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 },
+        facingMode: 'user',
+      },
+      audio: {
+        deviceId: audioDeviceId ? { exact: audioDeviceId } : undefined,
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: 48000,
+      },
+    });
     localStreamRef.current = stream;
+
+    const vTrack = stream.getVideoTracks()[0];
+    const aTrack = stream.getAudioTracks()[0];
+    if (vTrack) activeVideoIdRef.current = vTrack.getSettings().deviceId ?? '';
+    if (aTrack) activeAudioIdRef.current = aTrack.getSettings().deviceId ?? '';
 
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = stream;
@@ -162,11 +206,27 @@ export function VideoCall({ userId, role }: VideoCallProps) {
   }, []);
 
   // Teacher: create offer after getting local stream
+  const loadDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const vid = devices.filter((d) => d.kind === 'videoinput');
+      const aud = devices.filter((d) => d.kind === 'audioinput');
+      setVideoDevices(vid);
+      setAudioDevices(aud);
+      // Pre-select currently active devices
+      if (!selectedVideoId && vid.length > 0) setSelectedVideoId(activeVideoIdRef.current || vid[0].deviceId);
+      if (!selectedAudioId && aud.length > 0) setSelectedAudioId(activeAudioIdRef.current || aud[0].deviceId);
+    } catch {
+      // ignore
+    }
+  }, [selectedVideoId, selectedAudioId]);
+
   const startAsTeacher = useCallback(async () => {
     if (!roomToken) return;
 
     try {
-      const stream = await getLocalStream();
+      const stream = await getLocalStream(selectedVideoId || undefined, selectedAudioId || undefined);
+      await loadDevices();
       const pc = createPeerConnection();
       pcRef.current = pc;
 
@@ -184,14 +244,15 @@ export function VideoCall({ userId, role }: VideoCallProps) {
       toast.error('Could not access camera/microphone.');
       setPhase('error');
     }
-  }, [roomToken, getLocalStream, createPeerConnection]);
+  }, [roomToken, getLocalStream, createPeerConnection, loadDevices, selectedVideoId, selectedAudioId]);
 
   // Student: wait for offer, send answer
   const startAsStudent = useCallback(async (roomData: MeetingRoom) => {
     if (!roomToken || !roomData.offer) return;
 
     try {
-      const stream = await getLocalStream();
+      const stream = await getLocalStream(selectedVideoId || undefined, selectedAudioId || undefined);
+      await loadDevices();
       const pc = createPeerConnection();
       pcRef.current = pc;
 
@@ -221,7 +282,7 @@ export function VideoCall({ userId, role }: VideoCallProps) {
       toast.error('Could not access camera/microphone.');
       setPhase('error');
     }
-  }, [roomToken, getLocalStream, createPeerConnection, startElapsed]);
+  }, [roomToken, getLocalStream, createPeerConnection, startElapsed, loadDevices, selectedVideoId, selectedAudioId]);
 
   // Polling: both sides check for new signals
   const pollSignals = useCallback(async () => {
@@ -355,47 +416,125 @@ export function VideoCall({ userId, role }: VideoCallProps) {
     setIsCameraOn((prev) => !prev);
   };
 
+  // Switch to a different camera device
+  const switchCamera = useCallback(async (deviceId: string) => {
+    if (!pcRef.current || !localStreamRef.current) return;
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: { exact: deviceId },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+        },
+        audio: {
+          deviceId: activeAudioIdRef.current ? { exact: activeAudioIdRef.current } : undefined,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      activeVideoIdRef.current = newVideoTrack.getSettings().deviceId ?? deviceId;
+
+      // Replace track in peer connection
+      const sender = pcRef.current.getSenders().find((s) => s.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(newVideoTrack);
+
+      // Stop old video tracks
+      localStreamRef.current.getVideoTracks().forEach((t) => t.stop());
+
+      // Splice new video track into local stream
+      localStreamRef.current.getVideoTracks().forEach((t) => localStreamRef.current!.removeTrack(t));
+      localStreamRef.current.addTrack(newVideoTrack);
+
+      // Keep audio from old stream running
+      if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+
+      setSelectedVideoId(deviceId);
+    } catch {
+      toast.error('Failed to switch camera.');
+    }
+  }, []);
+
+  // Switch to a different microphone device
+  const switchMicrophone = useCallback(async (deviceId: string) => {
+    if (!pcRef.current || !localStreamRef.current) return;
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: deviceId },
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+        video: false,
+      });
+      const newAudioTrack = newStream.getAudioTracks()[0];
+      activeAudioIdRef.current = newAudioTrack.getSettings().deviceId ?? deviceId;
+
+      const sender = pcRef.current.getSenders().find((s) => s.track?.kind === 'audio');
+      if (sender) await sender.replaceTrack(newAudioTrack);
+
+      localStreamRef.current.getAudioTracks().forEach((t) => t.stop());
+      localStreamRef.current.getAudioTracks().forEach((t) => localStreamRef.current!.removeTrack(t));
+      localStreamRef.current.addTrack(newAudioTrack);
+
+      setSelectedAudioId(deviceId);
+    } catch {
+      toast.error('Failed to switch microphone.');
+    }
+  }, []);
+
   const handleEndCall = () => {
     endCall('ended');
   };
 
-  const goBack = () => navigate(-1);
+  const goBack = () => window.close();
 
   const otherName = isTeacher
     ? room?.studentName || 'Student'
     : room?.teacherName || 'Teacher';
 
   const scheduleTitle = room?.scheduleTitle;
+  const scheduleDescription = room?.scheduleDescription;
 
   if (phase === 'ended' || phase === 'declined' || phase === 'error') {
+    const icon = phase === 'declined'
+      ? <PhoneOff className="h-10 w-10 text-red-400" />
+      : phase === 'error'
+      ? <AlertTriangle className="h-10 w-10 text-yellow-400" />
+      : <Phone className="h-10 w-10 text-slate-400" />;
+
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="bg-white rounded-2xl shadow-2xl p-10 text-center max-w-md mx-4">
-          <div className="text-6xl mb-4">
-            {phase === 'declined' ? '📵' : phase === 'error' ? '⚠️' : '📞'}
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-violet-900 flex items-center justify-center">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_20%,rgba(167,139,250,0.15),transparent_35%),radial-gradient(circle_at_80%_80%,rgba(99,102,241,0.15),transparent_32%)]" />
+        <div className="relative w-full max-w-sm mx-4 bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl p-10 text-center">
+          <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-5">
+            {icon}
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            {phase === 'declined'
-              ? 'Call Declined'
-              : phase === 'error'
-                ? 'Connection Error'
-                : 'Call Ended'}
+          <h2 className="text-2xl font-bold text-white mb-2">
+            {phase === 'declined' ? 'Call Declined' : phase === 'error' ? 'Connection Error' : 'Call Ended'}
           </h2>
-          <p className="text-gray-500 mb-2">
-            {phase === 'active' || phase === 'ended'
+          <p className="text-slate-300 mb-2">
+            {phase === 'ended'
               ? `Duration: ${formatDuration(elapsedSeconds)}`
               : phase === 'declined'
                 ? 'The other party declined the call.'
                 : 'Something went wrong with the connection.'}
           </p>
           {scheduleTitle && (
-            <p className="text-sm text-gray-400 mb-6">{scheduleTitle}</p>
+            <div className="mb-6 text-center">
+              <p className="text-white font-medium text-sm">{scheduleTitle}</p>
+              {scheduleDescription && (
+                <p className="text-slate-400 text-xs mt-1">{scheduleDescription}</p>
+              )}
+            </div>
           )}
           <button
             onClick={goBack}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition"
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl transition"
           >
-            Back to Schedule
+            <X className="h-4 w-4" />
+            Close
           </button>
         </div>
       </div>
@@ -403,28 +542,31 @@ export function VideoCall({ userId, role }: VideoCallProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
+    <div className="h-screen w-screen bg-slate-950 flex flex-col overflow-hidden relative">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-gray-800">
+      <div className="flex items-center justify-between px-5 py-3 bg-slate-900/90 backdrop-blur border-b border-white/10 shrink-0">
         <div>
-          <h1 className="text-white font-bold text-lg">{otherName}</h1>
+          <h1 className="text-white font-semibold text-base">{otherName}</h1>
           {scheduleTitle && (
-            <p className="text-gray-400 text-sm">{scheduleTitle}</p>
+            <p className="text-slate-300 text-xs font-medium mt-0.5">{scheduleTitle}</p>
+          )}
+          {scheduleDescription && (
+            <p className="text-slate-500 text-xs mt-0.5 max-w-xs truncate">{scheduleDescription}</p>
           )}
         </div>
         <div className="flex items-center gap-3">
           {phase === 'active' && (
-            <span className="text-green-400 font-mono text-sm">
+            <span className="text-emerald-400 font-mono text-sm tabular-nums">
               {formatDuration(elapsedSeconds)}
             </span>
           )}
           <span
-            className={`text-xs px-2 py-1 rounded-full font-medium ${
+            className={`text-xs px-2.5 py-1 rounded-full font-medium ${
               phase === 'active'
-                ? 'bg-green-700 text-green-200'
+                ? 'bg-emerald-500/20 text-emerald-300'
                 : phase === 'calling'
-                  ? 'bg-yellow-700 text-yellow-200'
-                  : 'bg-gray-700 text-gray-300'
+                  ? 'bg-amber-500/20 text-amber-300'
+                  : 'bg-slate-700 text-slate-300'
             }`}
           >
             {phase === 'active'
@@ -439,88 +581,145 @@ export function VideoCall({ userId, role }: VideoCallProps) {
       </div>
 
       {/* Video grid */}
-      <div className="flex-1 relative flex items-center justify-center bg-gray-900 overflow-hidden">
+      <div className="flex-1 relative flex items-center justify-center bg-slate-950 overflow-hidden min-h-0">
         {/* Remote video (full screen) */}
         <video
           ref={remoteVideoRef}
           autoPlay
           playsInline
-          className={`w-full h-full object-cover transition-opacity duration-500 ${
+          className={`w-full h-full object-contain transition-opacity duration-500 ${
             phase === 'active' ? 'opacity-100' : 'opacity-0'
           }`}
         />
 
         {/* Waiting overlay */}
         {phase !== 'active' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-            <div className="w-24 h-24 rounded-full bg-gray-700 flex items-center justify-center text-5xl animate-pulse">
-              {isTeacher ? '👨‍🏫' : '👩‍🎓'}
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-950">
+            <div className="relative">
+              <span className="absolute inset-0 rounded-full bg-indigo-500/30 animate-ping" />
+              <div className="relative w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-violet-800/40">
+                <Video className="h-9 w-9 text-white" />
+              </div>
             </div>
             <p className="text-white font-semibold text-lg">
-              {isTeacher
-                ? `Calling ${otherName}…`
-                : `${otherName} is calling…`}
+              {isTeacher ? `Calling ${otherName}…` : `Connecting to ${otherName}…`}
             </p>
-            <p className="text-gray-400 text-sm">Waiting for connection</p>
-            <div className="flex gap-2 mt-2">
-              <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:0ms]" />
-              <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:150ms]" />
-              <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:300ms]" />
+            <p className="text-slate-400 text-sm">Waiting for connection</p>
+            <div className="flex gap-2 mt-1">
+              <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:0ms]" />
+              <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:150ms]" />
+              <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce [animation-delay:300ms]" />
             </div>
           </div>
         )}
 
         {/* Local video (picture-in-picture) */}
-        <div className="absolute bottom-4 right-4 w-32 h-24 md:w-48 md:h-36 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl bg-gray-800">
+        <div className="absolute bottom-4 right-4 w-32 h-24 md:w-48 md:h-36 rounded-xl overflow-hidden border border-white/20 shadow-2xl bg-slate-800">
           <video
             ref={localVideoRef}
             autoPlay
             muted
             playsInline
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
           />
           {!isCameraOn && (
-            <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-              <span className="text-gray-400 text-2xl">📷</span>
+            <div className="absolute inset-0 bg-slate-800 flex items-center justify-center">
+              <CameraOff className="h-7 w-7 text-slate-400" />
             </div>
           )}
         </div>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-4 px-6 py-6 bg-gray-800">
+      <div className="flex items-center justify-center gap-5 px-6 py-4 bg-slate-900/90 backdrop-blur border-t border-white/10 shrink-0">
+        {/* Mic */}
         <button
           onClick={toggleMic}
           title={isMicOn ? 'Mute microphone' : 'Unmute microphone'}
-          className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold transition-all ${
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
             isMicOn
-              ? 'bg-gray-600 hover:bg-gray-500 text-white'
-              : 'bg-red-600 hover:bg-red-700 text-white'
+              ? 'bg-slate-700 hover:bg-slate-600 text-white'
+              : 'bg-red-600/90 hover:bg-red-600 text-white'
           }`}
         >
-          {isMicOn ? '🎙️' : '🔇'}
+          {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
         </button>
 
+        {/* End call */}
         <button
           onClick={handleEndCall}
           title="End call"
-          className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 text-white text-2xl flex items-center justify-center transition-all shadow-lg"
+          className="w-14 h-14 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition-all shadow-lg shadow-red-900/40"
         >
-          📵
+          <PhoneOff className="h-6 w-6" />
         </button>
 
+        {/* Camera */}
         <button
           onClick={toggleCamera}
           title={isCameraOn ? 'Turn off camera' : 'Turn on camera'}
-          className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold transition-all ${
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
             isCameraOn
-              ? 'bg-gray-600 hover:bg-gray-500 text-white'
-              : 'bg-red-600 hover:bg-red-700 text-white'
+              ? 'bg-slate-700 hover:bg-slate-600 text-white'
+              : 'bg-red-600/90 hover:bg-red-600 text-white'
           }`}
         >
-          {isCameraOn ? '📹' : '🚫'}
+          {isCameraOn ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+        </button>
+
+        {/* Settings */}
+        <button
+          onClick={() => { setShowSettings((p) => !p); loadDevices(); }}
+          title="Device settings"
+          className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+            showSettings ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'
+          }`}
+        >
+          <Settings className="h-5 w-5" />
         </button>
       </div>
+
+      {/* Settings panel */}
+      {showSettings && (
+        <div className="absolute bottom-[5.5rem] right-4 w-72 bg-slate-800 border border-white/10 rounded-2xl shadow-2xl p-4 z-50">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-white font-semibold text-sm">Device Settings</p>
+            <button onClick={() => setShowSettings(false)} className="text-slate-400 hover:text-white transition">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Camera selector */}
+          <div className="mb-3">
+            <label className="text-xs text-slate-400 uppercase tracking-wide mb-1 block">Camera</label>
+            <select
+              value={selectedVideoId}
+              onChange={(e) => { setSelectedVideoId(e.target.value); switchCamera(e.target.value); }}
+              className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              {videoDevices.length === 0 && <option>No cameras found</option>}
+              {videoDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${d.deviceId.slice(0, 6)}`}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Microphone selector */}
+          <div>
+            <label className="text-xs text-slate-400 uppercase tracking-wide mb-1 block">Microphone</label>
+            <select
+              value={selectedAudioId}
+              onChange={(e) => { setSelectedAudioId(e.target.value); switchMicrophone(e.target.value); }}
+              className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              {audioDevices.length === 0 && <option>No microphones found</option>}
+              {audioDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>{d.label || `Mic ${d.deviceId.slice(0, 6)}`}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
