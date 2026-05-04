@@ -855,7 +855,10 @@ export class YunafiedService {
               to_char(a.due_at, 'YYYY-MM-DD') AS "dueDate",
               a.teacher_id AS "teacherId",
               t.full_name AS "teacherName",
-              a.created_at AS "createdAt"
+              a.created_at AS "createdAt",
+              a.attachment_file_name AS "attachmentFileName",
+              a.attachment_url AS "attachmentUrl",
+              COALESCE(a.is_closed, false) AS "isClosed"
          FROM assignments a
          JOIN users t ON t.id = a.teacher_id
          ORDER BY a.created_at DESC`,
@@ -869,17 +872,22 @@ export class YunafiedService {
     description: string;
     dueDate: string;
     teacherId: string;
+    attachmentFileName?: string | null;
+    attachmentUrl?: string | null;
   }): Promise<AssignmentItem> {
     const result = await pool.query(
-      `INSERT INTO assignments (title, description, due_at, teacher_id)
-       VALUES ($1, $2, $3::date, $4)
+      `INSERT INTO assignments (title, description, due_at, teacher_id, attachment_file_name, attachment_url)
+       VALUES ($1, $2, $3::date, $4, $5, $6)
        RETURNING id,
                  title,
                  description,
                  to_char(due_at, 'YYYY-MM-DD') AS "dueDate",
                  teacher_id AS "teacherId",
-                 created_at AS "createdAt"`,
-      [input.title, input.description, input.dueDate, input.teacherId],
+                 created_at AS "createdAt",
+                 attachment_file_name AS "attachmentFileName",
+                 attachment_url AS "attachmentUrl",
+                 COALESCE(is_closed, false) AS "isClosed"`,
+      [input.title, input.description, input.dueDate, input.teacherId, input.attachmentFileName || null, input.attachmentUrl || null],
     );
 
     const assignment = result.rows[0] as Omit<AssignmentItem, "teacherName">;
@@ -889,6 +897,24 @@ export class YunafiedService {
       ...assignment,
       teacherName: teacherResult.rows[0]?.full_name || "Teacher",
     };
+  }
+
+  async toggleAssignmentClosed(assignmentId: string, isClosed: boolean): Promise<AssignmentItem> {
+    const result = await pool.query(
+      `UPDATE assignments SET is_closed = $1
+       WHERE id = $2
+       RETURNING id, title, description,
+                 to_char(due_at, 'YYYY-MM-DD') AS "dueDate",
+                 teacher_id AS "teacherId",
+                 created_at AS "createdAt",
+                 attachment_file_name AS "attachmentFileName",
+                 attachment_url AS "attachmentUrl",
+                 COALESCE(is_closed, false) AS "isClosed"`,
+      [isClosed, assignmentId],
+    );
+    const assignment = result.rows[0] as Omit<AssignmentItem, "teacherName">;
+    const teacherResult = await pool.query("SELECT full_name FROM users WHERE id = $1", [assignment.teacherId]);
+    return { ...assignment, teacherName: teacherResult.rows[0]?.full_name || "Teacher" };
   }
 
   async listSubmissionsForRole(requester: { id: string; role: UserRole }): Promise<SubmissionItem[]> {
