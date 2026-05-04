@@ -112,13 +112,31 @@ function LandingScreen({ navigation }: any) {
 }
 
 function LoginScreen() {
-  const { login, signup } = useAppContext();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const { login, signup, verifyOtp, resendOtp } = useAppContext();
+  const [mode, setMode] = useState<'login' | 'signup' | 'otp'>('login');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // OTP state
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [otpValue, setOtpValue] = useState('');
+  const [resendCountdown, setResendCountdown] = useState(0);
+
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const timer = setTimeout(() => setResendCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCountdown]);
+
+  const enterOtpMode = (forEmail: string) => {
+    setPendingEmail(forEmail);
+    setOtpValue('');
+    setResendCountdown(60);
+    setMode('otp');
+  };
 
   const onSubmit = async () => {
     try {
@@ -130,16 +148,81 @@ function LoginScreen() {
           Alert.alert('Validation', 'Passwords do not match.');
           return;
         }
-        await signup(fullName.trim(), email.trim(), password);
-        Alert.alert('Success', 'Account created. Please login.');
-        setMode('login');
+        const result = await signup(fullName.trim(), email.trim(), password);
+        if (result.needsVerification) {
+          Alert.alert('Check your email', 'A 6-digit verification code has been sent to ' + result.email);
+          enterOtpMode(result.email);
+        }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Authentication failed.');
+      if (error.needsVerification) {
+        Alert.alert('Verify your email', 'A new code has been sent to ' + (error.email || email.trim()));
+        enterOtpMode(error.email || email.trim());
+      } else {
+        Alert.alert('Error', error.message || 'Authentication failed.');
+      }
     } finally {
       setBusy(false);
     }
   };
+
+  const onVerifyOtp = async () => {
+    if (otpValue.length !== 6) {
+      Alert.alert('Validation', 'Please enter the complete 6-digit code.');
+      return;
+    }
+    try {
+      setBusy(true);
+      await verifyOtp(pendingEmail, otpValue);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Invalid or expired code.');
+      setOtpValue('');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onResendOtp = async () => {
+    if (resendCountdown > 0) return;
+    try {
+      await resendOtp(pendingEmail);
+      setResendCountdown(60);
+      setOtpValue('');
+      Alert.alert('Code sent', 'A new verification code has been sent to your email.');
+    } catch {
+      Alert.alert('Error', 'Failed to resend code. Please try again.');
+    }
+  };
+
+  if (mode === 'otp') {
+    return (
+      <Shell title="Verify Your Email" subtitle={'Enter the 6-digit code sent to ' + pendingEmail}>
+        <Card>
+          <Text style={styles.label}>6-Digit Code</Text>
+          <TextInput
+            value={otpValue}
+            onChangeText={(v) => setOtpValue(v.replace(/\D/g, '').slice(0, 6))}
+            style={[styles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8, fontWeight: 'bold' }]}
+            keyboardType="number-pad"
+            maxLength={6}
+            placeholder="000000"
+          />
+
+          <PillButton label={busy ? 'Verifying...' : 'Verify & Continue'} onPress={onVerifyOtp} disabled={busy || otpValue.length !== 6} />
+
+          <Pressable onPress={onResendOtp} disabled={resendCountdown > 0}>
+            <Text style={[styles.linkText, resendCountdown > 0 && { opacity: 0.4 }]}>
+              {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : 'Resend Code'}
+            </Text>
+          </Pressable>
+
+          <Pressable onPress={() => setMode('login')}>
+            <Text style={styles.linkText}>← Back to login</Text>
+          </Pressable>
+        </Card>
+      </Shell>
+    );
+  }
 
   return (
     <Shell title="Welcome to YUNAFied" subtitle="Sign in to continue">
