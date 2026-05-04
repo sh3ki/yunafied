@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Megaphone, Plus } from 'lucide-react';
+import { Megaphone, Plus, X, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { AnnouncementItem, UserRole } from '@/app/types/models';
 
@@ -13,6 +13,7 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ title: '', content: '' });
+  const [openAnnouncement, setOpenAnnouncement] = useState<AnnouncementItem | null>(null);
 
   const canPost = role === 'teacher' || role === 'admin';
 
@@ -59,18 +60,54 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
 
       <div className="space-y-3">
         {announcements.map((item) => (
-          <div key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+          <div
+            key={item.id}
+            className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm cursor-pointer hover:shadow-md hover:border-violet-200 transition group"
+            onClick={() => setOpenAnnouncement(item)}
+          >
             <div className="flex items-center justify-between gap-3">
-              <h3 className="font-semibold text-gray-800">{item.title}</h3>
-              <span className="text-xs text-gray-400">{new Date(item.createdAt).toLocaleString()}</span>
+              <h3 className="font-semibold text-gray-800 group-hover:text-violet-700 transition">{item.title}</h3>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-gray-400">{new Date(item.createdAt).toLocaleString()}</span>
+                <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-violet-500 transition" />
+              </div>
             </div>
-            <p className="mt-2 text-sm text-gray-600 whitespace-pre-wrap">{item.content}</p>
+            <p className="mt-2 text-sm text-gray-600 line-clamp-2 whitespace-pre-wrap">{item.content}</p>
             <p className="mt-3 text-xs text-indigo-700 font-medium">Posted by: {item.postedByName}</p>
           </div>
         ))}
 
         {announcements.length === 0 && <div className="text-center text-gray-400 py-16">No announcements posted yet.</div>}
       </div>
+
+      {/* Announcement Detail Modal */}
+      {openAnnouncement && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 pt-16 backdrop-blur-sm" onClick={() => setOpenAnnouncement(null)}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 p-6 border-b border-gray-100">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">{openAnnouncement.title}</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  Posted by <span className="text-indigo-700 font-medium">{openAnnouncement.postedByName}</span>
+                  {' · '}{new Date(openAnnouncement.createdAt).toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setOpenAnnouncement(null)}
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition shrink-0"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-base">{openAnnouncement.content}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
