@@ -34,6 +34,9 @@ interface DbUserRow {
   profile_image_public_id: string | null;
   password_hash: string;
   created_at: string;
+  is_verified: boolean;
+  otp_code: string | null;
+  otp_expires_at: string | null;
 }
 
 interface DbTranslationRow {
@@ -200,7 +203,7 @@ export class YunafiedService {
 
   async findUserWithPasswordByEmail(email: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at FROM users WHERE email = $1",
+      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users WHERE email = $1",
       [email],
     );
 
@@ -209,11 +212,42 @@ export class YunafiedService {
 
   async findUserWithPasswordById(userId: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at FROM users WHERE id = $1",
+      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users WHERE id = $1",
       [userId],
     );
 
     return result.rows[0] || null;
+  }
+
+  async saveOtp(userId: string, otpCode: string, expiresAt: Date): Promise<void> {
+    await pool.query(
+      "UPDATE users SET otp_code = $1, otp_expires_at = $2 WHERE id = $3",
+      [otpCode, expiresAt.toISOString(), userId],
+    );
+  }
+
+  async verifyOtp(email: string, otpCode: string): Promise<DbUserRow | null> {
+    const row = await this.findUserWithPasswordByEmail(email);
+    if (!row) return null;
+    if (!row.otp_code || row.otp_code !== otpCode) return null;
+    if (!row.otp_expires_at || new Date(row.otp_expires_at) < new Date()) return null;
+
+    await pool.query(
+      "UPDATE users SET is_verified = TRUE, otp_code = NULL, otp_expires_at = NULL WHERE id = $1",
+      [row.id],
+    );
+
+    row.is_verified = true;
+    row.otp_code = null;
+    row.otp_expires_at = null;
+    return row;
+  }
+
+  async clearOtp(userId: string): Promise<void> {
+    await pool.query(
+      "UPDATE users SET otp_code = NULL, otp_expires_at = NULL WHERE id = $1",
+      [userId],
+    );
   }
 
   toAuthUser(row: DbUserRow): AuthUser {
@@ -231,7 +265,7 @@ export class YunafiedService {
 
   async listUsers(): Promise<AuthUser[]> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at FROM users ORDER BY created_at DESC",
+      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users ORDER BY created_at DESC",
     );
 
     return result.rows.map((row) => this.toAuthUser(row));
@@ -239,7 +273,7 @@ export class YunafiedService {
 
   async listUsersByRoles(roles: UserRole[]): Promise<AuthUser[]> {
     const result = await pool.query<DbUserRow>(
-      `SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at
+      `SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at
          FROM users
         WHERE role = ANY($1::user_role[])
         ORDER BY full_name ASC`,
@@ -257,9 +291,11 @@ export class YunafiedService {
     profileImageUrl?: string | null;
     profileImagePublicId?: string | null;
     passwordHash: string;
+    isVerified?: boolean;
   }): Promise<AuthUser> {
+    const isVerified = input.isVerified ?? true;
     const result = await pool.query<DbUserRow>(
-      "INSERT INTO users (email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at",
+      "INSERT INTO users (email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, is_verified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at",
       [
         input.email,
         input.fullName,
@@ -268,6 +304,7 @@ export class YunafiedService {
         input.profileImageUrl || null,
         input.profileImagePublicId || null,
         input.passwordHash,
+        isVerified,
       ],
     );
 
@@ -314,7 +351,7 @@ export class YunafiedService {
               profile_image_public_id = $6${passwordSetSql},
               updated_at = NOW()
         WHERE id = $${userIdParam}
-      RETURNING id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at`,
+      RETURNING id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at`,
       values,
     );
 
