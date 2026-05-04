@@ -13,30 +13,46 @@ interface IncomingCallProps {
 export function IncomingCall({ call, onAccept, onDecline }: IncomingCallProps) {
   const [declining, setDeclining] = useState(false);
 
-  // Ring tone via Web Audio API
+  // Phone ringtone via Web Audio API
   useEffect(() => {
     let stopped = false;
     let ctx: AudioContext | null = null;
 
+    const playRingTone = (context: AudioContext) => {
+      if (stopped) return;
+      const now = context.currentTime;
+
+      // Two-tone phone ring: high + low beeps
+      const tones = [
+        { freq: 480, start: 0, dur: 0.4 },
+        { freq: 440, start: 0, dur: 0.4 },
+        { freq: 480, start: 0.5, dur: 0.4 },
+        { freq: 440, start: 0.5, dur: 0.4 },
+      ];
+
+      tones.forEach(({ freq, start, dur }) => {
+        const osc = context.createOscillator();
+        const gain = context.createGain();
+        osc.connect(gain);
+        gain.connect(context.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+        gain.gain.setValueAtTime(0, now + start);
+        gain.gain.linearRampToValueAtTime(0.18, now + start + 0.02);
+        gain.gain.setValueAtTime(0.18, now + start + dur - 0.05);
+        gain.gain.linearRampToValueAtTime(0, now + start + dur);
+        osc.start(now + start);
+        osc.stop(now + start + dur);
+      });
+    };
+
     try {
       ctx = new AudioContext();
-
-      const ring = () => {
-        if (stopped || !ctx) return;
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.45);
-      };
-
-      ring();
-      const interval = setInterval(ring, 1500);
+      playRingTone(ctx);
+      // Repeat every 2.5 seconds
+      const interval = setInterval(() => {
+        if (!stopped && ctx) playRingTone(ctx);
+      }, 2500);
 
       return () => {
         stopped = true;
