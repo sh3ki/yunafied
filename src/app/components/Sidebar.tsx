@@ -45,7 +45,7 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
     { id: 'enrollments', label: 'Enrollments', icon: Users, roles: ['admin', 'teacher', 'student'] },
     { id: 'materials', label: 'Learning Materials', icon: Library, roles: ['admin', 'teacher', 'student'] },
     { id: 'assignments', label: 'Assignments', icon: BookOpen, roles: ['teacher', 'student'] },
-    { id: 'grades', label: 'Grades & Feedback', icon: BookOpen, roles: ['student'] },
+    { id: 'grades', label: 'Grades & Feedback', icon: BookOpen, roles: ['admin', 'teacher', 'student'] },
     { id: 'gamified-learning', label: 'Gamified Learning', icon: Sparkles, roles: ['admin', 'teacher', 'student'] },
     { id: 'video-summarizer', label: 'Video Summarizer', icon: Sparkles, roles: ['student'] },
     { id: 'word-translator', label: 'Word Translator', icon: BookOpen, roles: ['student'] },
