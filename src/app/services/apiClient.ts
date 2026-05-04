@@ -400,10 +400,25 @@ class YunafiedApiClient {
     title: string;
     description: string;
     dueDate: string;
+    attachmentFile?: File | null;
   }): Promise<AssignmentItem> {
+    const formData = new FormData();
+    formData.append("title", payload.title);
+    formData.append("description", payload.description);
+    formData.append("dueDate", payload.dueDate);
+    if (payload.attachmentFile) {
+      formData.append("attachmentFile", payload.attachmentFile);
+    }
     return this.request<AssignmentItem>("/api/assignments", {
       method: "POST",
-      body: JSON.stringify(payload),
+      body: formData,
+    });
+  }
+
+  async toggleAssignmentClosed(assignmentId: string, isClosed: boolean): Promise<AssignmentItem> {
+    return this.request<AssignmentItem>(`/api/assignments/${assignmentId}/toggle-close`, {
+      method: "PATCH",
+      body: JSON.stringify({ isClosed }),
     });
   }
 
