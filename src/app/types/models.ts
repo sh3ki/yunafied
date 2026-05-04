@@ -62,6 +62,9 @@ export interface AssignmentItem {
   teacherId: string;
   teacherName: string;
   createdAt: string;
+  attachmentFileName?: string | null;
+  attachmentUrl?: string | null;
+  isClosed?: boolean;
 }
 
 export interface SubmissionItem {
