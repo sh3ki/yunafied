@@ -19,9 +19,10 @@ interface BottomNavProps {
   role: 'admin' | 'teacher' | 'student';
   currentView: string;
   onNavigate: (view: string) => void;
+  chatUnreadTotal?: number;
 }
 
-export function BottomNav({ role, currentView, onNavigate }: BottomNavProps) {
+export function BottomNav({ role, currentView, onNavigate, chatUnreadTotal = 0 }: BottomNavProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student'] },
     { id: 'schedule', label: 'Schedule', icon: Calendar, roles: ['admin', 'teacher', 'student'] },
@@ -52,11 +53,18 @@ export function BottomNav({ role, currentView, onNavigate }: BottomNavProps) {
             key={item.id}
             onClick={() => onNavigate(item.id)}
             className={clsx(
-              "flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 active:scale-95 min-w-16",
+              "flex flex-col items-center justify-center p-2 rounded-lg transition-all duration-200 active:scale-95 min-w-16 relative",
               isActive ? 'text-violet-600' : 'text-gray-400 hover:text-gray-600'
             )}
           >
-            <Icon className={clsx("h-6 w-6 mb-1", isActive && "fill-current opacity-20")} />
+            <div className="relative">
+              <Icon className={clsx("h-6 w-6 mb-1", isActive && "fill-current opacity-20")} />
+              {item.id === 'chats' && chatUnreadTotal > 0 && currentView !== 'chats' && (
+                <span className="absolute -top-1 -right-2 inline-flex items-center justify-center min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[9px] font-bold px-0.5">
+                  {chatUnreadTotal > 99 ? '99+' : chatUnreadTotal}
+                </span>
+              )}
+            </div>
             <span className="text-[10px] font-medium">{item.label}</span>
           </button>
         );
