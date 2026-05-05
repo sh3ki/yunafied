@@ -4,6 +4,12 @@
     "slug": "yunafied-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/logo.png",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
     "updates": {
       "fallbackToCacheTimeout": 0
     },
@@ -15,15 +21,25 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#4f46e5"
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#0f172a"
       },
-      "package": "ph.edu.yunafied"
+      "package": "ph.edu.yunafied",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.VIBRATE"
+      ]
     },
     "extra": {
       "apiUrl": "https://yunafied.online",
       "eas": {
         "projectId": "fcf9065f-5d16-4e2d-a144-5b3c44220639"
       }
-    }
+    },
+    "owner": "yunafied"
   }
 }
