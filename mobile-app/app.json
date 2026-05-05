@@ -19,7 +19,7 @@
       }
     },
     "extra": {
-      "apiUrl": "auto"
+      "apiUrl": "http://10.138.197.11:4000"
     }
   }
 }
