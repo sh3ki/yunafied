@@ -16,10 +16,14 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#4f46e5"
-      }
+      },
+      "package": "ph.edu.yunafied"
     },
     "extra": {
-      "apiUrl": "http://10.138.197.11:4000"
+      "apiUrl": "https://yunafied.online",
+      "eas": {
+        "projectId": "fcf9065f-5d16-4e2d-a144-5b3c44220639"
+      }
     }
   }
 }
