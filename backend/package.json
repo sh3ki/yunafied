@@ -10,7 +10,8 @@
     "db:init": "tsx src/scripts/initDb.ts",
     "db:check": "tsx src/scripts/checkDb.ts",
     "db:seed": "tsx src/scripts/seedDemo.ts",
-    "db:seed:gamified": "tsx src/scripts/seedGamified.ts"
+    "db:seed:gamified": "tsx src/scripts/seedGamified.ts",
+    "db:seed:full": "tsx src/scripts/seedFull.ts"
   },
   "dependencies": {
     "@xenova/transformers": "^2.17.2",
@@ -20,6 +21,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.5.0",
     "ffmpeg-static": "^5.3.0",
     "helmet": "^7.2.0",
     "jsonwebtoken": "^9.0.2",
