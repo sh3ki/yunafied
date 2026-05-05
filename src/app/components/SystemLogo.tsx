@@ -9,8 +9,7 @@ interface SystemLogoProps {
   textClassName?: string;
 }
 
-const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-const logoSrc = `${backendBaseUrl}/yunafied%20logo.png`;
+const logoSrc = '/yunafied%20logo.png';
 
 export function SystemLogo({
   showText = true,
