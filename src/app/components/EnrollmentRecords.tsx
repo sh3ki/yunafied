@@ -19,9 +19,16 @@ export function EnrollmentRecords({ role }: EnrollmentRecordsProps) {
     teacherId: '',
     subject: '',
     tutorialGroup: '',
+    gradeLevel: '',
     note: '',
     status: 'active' as EnrollmentStatus,
   });
+
+  // Filters
+  const [filterSubject, setFilterSubject] = useState('');
+  const [filterTeacher, setFilterTeacher] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterGradeLevel, setFilterGradeLevel] = useState('');
 
   const students = useMemo(() => users.filter((u) => u.role === 'student' && u.status === 'active'), [users]);
   const teachers = useMemo(() => users.filter((u) => u.role === 'teacher' && u.status === 'active'), [users]);
@@ -59,11 +66,12 @@ export function EnrollmentRecords({ role }: EnrollmentRecordsProps) {
         teacherId: form.teacherId,
         subject: form.subject.trim(),
         tutorialGroup: form.tutorialGroup.trim() || undefined,
+        gradeLevel: form.gradeLevel.trim() || undefined,
         note: form.note.trim() || undefined,
         status: form.status,
       });
       setRows((prev) => [created, ...prev]);
-      setForm({ studentId: '', teacherId: '', subject: '', tutorialGroup: '', note: '', status: 'active' });
+      setForm({ studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', status: 'active' });
       toast.success('Enrollment record created.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to create enrollment record.');
@@ -91,6 +99,21 @@ export function EnrollmentRecords({ role }: EnrollmentRecordsProps) {
     }
   };
 
+  // Stat counts
+  const total = rows.length;
+  const activeCount = rows.filter((r) => r.status === 'active').length;
+  const completedCount = rows.filter((r) => r.status === 'completed').length;
+  const droppedCount = rows.filter((r) => r.status === 'dropped').length;
+
+  // Filtered rows
+  const filteredRows = useMemo(() => rows.filter((r) => {
+    if (filterSubject && !r.subject.toLowerCase().includes(filterSubject.toLowerCase())) return false;
+    if (filterTeacher && r.teacherName && !r.teacherName.toLowerCase().includes(filterTeacher.toLowerCase())) return false;
+    if (filterStatus && r.status !== filterStatus) return false;
+    if (filterGradeLevel && (r as any).gradeLevel && !(r as any).gradeLevel.toLowerCase().includes(filterGradeLevel.toLowerCase())) return false;
+    return true;
+  }), [rows, filterSubject, filterTeacher, filterStatus, filterGradeLevel]);
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between gap-3 mb-6">
@@ -105,6 +128,57 @@ export function EnrollmentRecords({ role }: EnrollmentRecordsProps) {
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
+      </div>
+
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
+        {[
+          { label: 'Total', value: total, color: 'bg-indigo-50 text-indigo-700' },
+          { label: 'Active', value: activeCount, color: 'bg-emerald-50 text-emerald-700' },
+          { label: 'Completed', value: completedCount, color: 'bg-blue-50 text-blue-700' },
+          { label: 'Dropped', value: droppedCount, color: 'bg-rose-50 text-rose-700' },
+        ].map((s) => (
+          <div key={s.label} className={`rounded-xl px-4 py-3 ${s.color}`}>
+            <div className="text-2xl font-bold">{s.value}</div>
+            <div className="text-sm font-medium mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter bar */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <input
+          value={filterSubject}
+          onChange={(e) => setFilterSubject(e.target.value)}
+          placeholder="Filter by subject"
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+        />
+        <input
+          value={filterTeacher}
+          onChange={(e) => setFilterTeacher(e.target.value)}
+          placeholder="Filter by teacher"
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+        />
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+          <option value="">All statuses</option>
+          <option value="active">Active</option>
+          <option value="completed">Completed</option>
+          <option value="dropped">Dropped</option>
+        </select>
+        <input
+          value={filterGradeLevel}
+          onChange={(e) => setFilterGradeLevel(e.target.value)}
+          placeholder="Filter by grade level"
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+        />
+        {(filterSubject || filterTeacher || filterStatus || filterGradeLevel) && (
+          <button
+            onClick={() => { setFilterSubject(''); setFilterTeacher(''); setFilterStatus(''); setFilterGradeLevel(''); }}
+            className="text-sm text-gray-500 hover:text-gray-700 px-2"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {isAdmin && (
@@ -134,6 +208,13 @@ export function EnrollmentRecords({ role }: EnrollmentRecordsProps) {
             value={form.tutorialGroup}
             onChange={(e) => setForm((p) => ({ ...p, tutorialGroup: e.target.value }))}
             placeholder="Tutorial group (optional)"
+            className="border rounded-lg px-3 py-2"
+          />
+
+          <input
+            value={form.gradeLevel}
+            onChange={(e) => setForm((p) => ({ ...p, gradeLevel: e.target.value }))}
+            placeholder="Grade level (optional)"
             className="border rounded-lg px-3 py-2"
           />
 
@@ -169,17 +250,19 @@ export function EnrollmentRecords({ role }: EnrollmentRecordsProps) {
               <th className="px-4 py-3">Teacher</th>
               <th className="px-4 py-3">Subject</th>
               <th className="px-4 py-3">Group</th>
+              <th className="px-4 py-3">Grade Level</th>
               <th className="px-4 py-3">Status</th>
               {isAdmin && <th className="px-4 py-3 text-right">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {filteredRows.map((row) => (
               <tr key={row.id} className="border-b border-gray-100 last:border-b-0">
                 <td className="px-4 py-3">{row.studentName}</td>
                 <td className="px-4 py-3">{row.teacherName}</td>
                 <td className="px-4 py-3">{row.subject}</td>
                 <td className="px-4 py-3">{row.tutorialGroup || '-'}</td>
+                <td className="px-4 py-3">{(row as any).gradeLevel || '-'}</td>
                 <td className="px-4 py-3">
                   {isAdmin ? (
                     <select value={row.status} onChange={(e) => updateStatus(row.id, e.target.value as EnrollmentStatus)} className="border rounded px-2 py-1 text-sm">
@@ -201,9 +284,9 @@ export function EnrollmentRecords({ role }: EnrollmentRecordsProps) {
                 )}
               </tr>
             ))}
-            {rows.length === 0 && (
+            {filteredRows.length === 0 && (
               <tr>
-                <td className="px-4 py-8 text-center text-gray-500" colSpan={isAdmin ? 6 : 5}>
+                <td className="px-4 py-8 text-center text-gray-500" colSpan={isAdmin ? 7 : 6}>
                   No enrollment records found.
                 </td>
               </tr>
@@ -214,3 +297,5 @@ export function EnrollmentRecords({ role }: EnrollmentRecordsProps) {
     </div>
   );
 }
+
+
