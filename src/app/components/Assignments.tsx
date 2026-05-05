@@ -4,6 +4,18 @@ import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { AssignmentItem, SubmissionItem } from '@/app/types/models';
 
+/** Resolve a file URL: absolute URLs (Cloudinary) are used as-is; relative paths get backendBaseUrl prepended. */
+function resolveFileUrl(url: string, backendBaseUrl: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${backendBaseUrl}${url}`;
+}
+
+/** Force download from Cloudinary by injecting fl_attachment transformation flag. */
+function toDownloadUrl(url: string): string {
+  if (!url.includes('res.cloudinary.com')) return url;
+  return url.replace(/\/upload\/(?!fl_attachment)/, '/upload/fl_attachment/');
+}
+
 interface AssignmentsProps {
   assignments: AssignmentItem[];
   submissions: SubmissionItem[];
@@ -283,7 +295,7 @@ export function Assignments({
                   )}
                   {selectedAssignment.attachmentFileName && selectedAssignment.attachmentUrl && (
                     <a
-                      href={`${backendBaseUrl}${selectedAssignment.attachmentUrl}`}
+                      href={toDownloadUrl(resolveFileUrl(selectedAssignment.attachmentUrl, backendBaseUrl))}
                       target="_blank"
                       rel="noopener noreferrer"
                       download={selectedAssignment.attachmentFileName}
@@ -295,7 +307,7 @@ export function Assignments({
                   )}
                   {selectedAssignment.rubricFileName && selectedAssignment.rubricUrl && (
                     <a
-                      href={selectedAssignment.rubricUrl}
+                      href={toDownloadUrl(selectedAssignment.rubricUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       download={selectedAssignment.rubricFileName}
@@ -330,9 +342,10 @@ export function Assignments({
                       )}
                       {mySubmission.fileName && mySubmission.fileUrl && (
                         <a
-                          href={`${backendBaseUrl}${mySubmission.fileUrl}`}
+                          href={toDownloadUrl(resolveFileUrl(mySubmission.fileUrl, backendBaseUrl))}
                           target="_blank"
                           rel="noopener noreferrer"
+                          download={mySubmission.fileName}
                           className="mt-3 inline-flex items-center gap-1 text-sm text-indigo-600 underline"
                         >
                           <Paperclip className="h-3.5 w-3.5" />
@@ -419,7 +432,7 @@ export function Assignments({
                             {submission.contentText && <div className="text-sm text-gray-500 mt-1 line-clamp-2">{submission.contentText}</div>}
                             {submission.fileName && submission.fileUrl && (
                               <a
-                                href={`${backendBaseUrl}${submission.fileUrl}`}
+                                href={toDownloadUrl(resolveFileUrl(submission.fileUrl, backendBaseUrl))}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 download={submission.fileName}
