@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Video, Clock, User, Calendar, ChevronRight, History } from 'lucide-react';
+import { Video, VideoOff, Clock, User, Calendar, ChevronRight, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { ScheduleItem } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
@@ -124,7 +124,23 @@ function MeetingCard({ item, isActive, isPast, showDate, startingId, onStart }: 
         </div>
       </div>
 
-      <button
+      {isPast ? (
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
+            <VideoOff className="h-3.5 w-3.5" />
+            Closed
+          </span>
+          <button
+            onClick={() => onStart(item)}
+            disabled={startingId === item.id}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs border border-emerald-300 text-emerald-700 hover:bg-emerald-50 transition-all disabled:opacity-50 whitespace-nowrap"
+          >
+            <Video className="h-3.5 w-3.5" />
+            {startingId === item.id ? 'Starting…' : 'Reopen'}
+          </button>
+        </div>
+      ) : (
+        <button
           onClick={() => onStart(item)}
           disabled={startingId === item.id}
           className={[
@@ -138,6 +154,7 @@ function MeetingCard({ item, isActive, isPast, showDate, startingId, onStart }: 
           {startingId === item.id ? 'Starting…' : 'Start Video Call'}
           {startingId !== item.id && <ChevronRight className="h-4 w-4" />}
         </button>
+      )}
     </div>
   );
 }
