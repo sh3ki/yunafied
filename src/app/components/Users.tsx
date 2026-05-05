@@ -9,7 +9,9 @@ interface ProfileUploadResult {
 }
 
 interface CreateUserInput {
-  fullName: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   email: string;
   role: UserRole;
   status: UserStatus;
@@ -19,7 +21,9 @@ interface CreateUserInput {
 }
 
 interface UpdateUserInput {
-  fullName: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   email: string;
   role: UserRole;
   status: UserStatus;
@@ -51,7 +55,9 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   const [page, setPage] = useState(1);
 
   const [newUser, setNewUser] = useState<CreateUserInput>({
-    fullName: '',
+    firstName: '',
+    middleName: '',
+    lastName: '',
     email: '',
     role: 'student',
     status: 'active',
@@ -61,7 +67,9 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   });
 
   const [editUser, setEditUser] = useState<UpdateUserInput>({
-    fullName: '',
+    firstName: '',
+    middleName: '',
+    lastName: '',
     email: '',
     role: 'student',
     status: 'active',
@@ -71,7 +79,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   });
 
   const sortedUsers = useMemo(
-    () => [...users].sort((a, b) => a.fullName.localeCompare(b.fullName)),
+    () => [...users].sort((a, b) => a.lastName.localeCompare(b.lastName)),
     [users],
   );
 
@@ -104,7 +112,9 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
 
   const resetCreateForm = () => {
     setNewUser({
-      fullName: '',
+      firstName: '',
+      middleName: '',
+      lastName: '',
       email: '',
       role: 'student',
       status: 'active',
@@ -117,7 +127,9 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   const openEdit = (user: AuthUser) => {
     setSelectedUser(user);
     setEditUser({
-      fullName: user.fullName,
+      firstName: user.firstName,
+      middleName: user.middleName || '',
+      lastName: user.lastName,
       email: user.email,
       role: user.role,
       status: user.status,
@@ -129,7 +141,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   };
 
   const handleCreate = async () => {
-    if (!newUser.fullName || !newUser.email || !newUser.password) {
+    if (!newUser.firstName || !newUser.lastName || !newUser.email || !newUser.password) {
       toast.error('Please complete all required fields.');
       return;
     }
@@ -152,7 +164,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
       return;
     }
 
-    if (!editUser.fullName || !editUser.email) {
+    if (!editUser.firstName || !editUser.lastName || !editUser.email) {
       toast.error('Please complete all required fields.');
       return;
     }
@@ -366,7 +378,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <img
-                  src={newUser.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(newUser.fullName || 'User')}&background=e0e7ff&color=3730a3`}
+                  src={newUser.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((newUser.firstName || '') + ' ' + (newUser.lastName || 'User'))}&background=e0e7ff&color=3730a3`}
                   alt="New user profile"
                   className="h-14 w-14 rounded-full object-cover border border-gray-200"
                 />
@@ -388,11 +400,27 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name <span className="text-red-500">*</span></label>
                 <input
                   className="w-full border rounded-lg px-3 py-2"
-                  value={newUser.fullName}
-                  onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                  value={newUser.firstName}
+                  onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name <span className="text-gray-400">(optional)</span></label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={newUser.middleName || ''}
+                  onChange={(e) => setNewUser({ ...newUser, middleName: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name <span className="text-red-500">*</span></label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={newUser.lastName}
+                  onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })}
                 />
               </div>
               <div>
@@ -458,7 +486,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
             <div className="space-y-4">
               <div className="flex items-center gap-4">
                 <img
-                  src={editUser.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(editUser.fullName || 'User')}&background=e0e7ff&color=3730a3`}
+                  src={editUser.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((editUser.firstName || '') + ' ' + (editUser.lastName || 'User'))}&background=e0e7ff&color=3730a3`}
                   alt="Edit user profile"
                   className="h-14 w-14 rounded-full object-cover border border-gray-200"
                 />
@@ -480,11 +508,27 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">First Name <span className="text-red-500">*</span></label>
                 <input
                   className="w-full border rounded-lg px-3 py-2"
-                  value={editUser.fullName}
-                  onChange={(e) => setEditUser({ ...editUser, fullName: e.target.value })}
+                  value={editUser.firstName}
+                  onChange={(e) => setEditUser({ ...editUser, firstName: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Middle Name <span className="text-gray-400">(optional)</span></label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={editUser.middleName || ''}
+                  onChange={(e) => setEditUser({ ...editUser, middleName: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Last Name <span className="text-red-500">*</span></label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={editUser.lastName}
+                  onChange={(e) => setEditUser({ ...editUser, lastName: e.target.value })}
                 />
               </div>
               <div>
