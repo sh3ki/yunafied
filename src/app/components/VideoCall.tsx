@@ -5,11 +5,27 @@ import { Mic, MicOff, Video, VideoOff, PhoneOff, CameraOff, AlertTriangle, Phone
 import { MeetingRoom } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
 
-// Free public STUN servers — no TURN needed for same-network calls
+// STUN (discovery) + free TURN relay servers for cross-network calls
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
+  // Free open-relay TURN — works across symmetric NAT (mobile ↔ web, different ISPs)
+  {
+    urls: 'turn:openrelay.metered.ca:80',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
+  {
+    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+    username: 'openrelayproject',
+    credential: 'openrelayproject',
+  },
 ];
 
 interface VideoCallProps {
