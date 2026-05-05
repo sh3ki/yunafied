@@ -1,5 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, FileText, Link as LinkIcon, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Download, ExternalLink, FileText, Link as LinkIcon, Plus, RefreshCw, Trash2 } from 'lucide-react';
+
+/** Resolve a file URL: absolute URLs (Cloudinary) are used as-is; relative paths get backendBaseUrl prepended. */
+function resolveFileUrl(url: string, backendBaseUrl: string): string {
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${backendBaseUrl}${url}`;
+}
+
+/** Force download from Cloudinary by injecting fl_attachment transformation flag. */
+function toDownloadUrl(url: string): string {
+  if (!url.includes('res.cloudinary.com')) return url;
+  return url.replace(/\/upload\/(?!fl_attachment)/, '/upload/fl_attachment/');
+}
 import { toast } from 'sonner';
 import { apiClient } from '@/app/services/apiClient';
 import { LearningMaterialItem, UserRole } from '@/app/types/models';
@@ -162,7 +174,9 @@ export function LearningMaterials({ role, backendBaseUrl }: LearningMaterialsPro
 
       <div className="space-y-3">
         {rows.map((item) => {
-          const href = item.materialType === 'file' ? `${backendBaseUrl}${item.resourceUrl}` : item.resourceUrl;
+          const resolvedUrl = item.materialType === 'file'
+            ? toDownloadUrl(resolveFileUrl(item.resourceUrl, backendBaseUrl))
+            : item.resourceUrl;
           return (
             <article key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
@@ -174,9 +188,15 @@ export function LearningMaterials({ role, backendBaseUrl }: LearningMaterialsPro
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <a href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50">
-                    {item.materialType === 'link' ? <LinkIcon className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-                    Open
+                  <a
+                    href={resolvedUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    download={item.materialType === 'file' ? (item.fileName || true) : undefined}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
+                  >
+                    {item.materialType === 'link' ? <LinkIcon className="h-4 w-4" /> : <Download className="h-4 w-4" />}
+                    {item.materialType === 'file' ? 'Download' : 'Open'}
                   </a>
                   {canManage && (
                     <button onClick={() => remove(item.id)} className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 text-sm px-2 py-1.5">
