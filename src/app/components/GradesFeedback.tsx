@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Award, BookOpen, CheckCircle, Clock, MessageSquare, Star } from 'lucide-react';
+import { Award, BookOpen, CheckCircle, Clock, Download, MessageSquare, Star } from 'lucide-react';
 import { clsx } from 'clsx';
 import { AssignmentItem, SubmissionItem } from '@/app/types/models';
 
@@ -137,6 +137,18 @@ export function GradesFeedback({ assignments, submissions, role, userId, onGrade
                     {assignment && (
                       <p className="text-sm text-gray-500 mt-0.5">Due: {assignment.dueDate} · Teacher: {assignment.teacherName}</p>
                     )}
+                    {assignment?.rubricFileName && assignment?.rubricUrl && (
+                      <a
+                        href={assignment.rubricUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download={assignment.rubricFileName}
+                        className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline mt-1"
+                      >
+                        <Download className="h-3 w-3" />
+                        Rubric: {assignment.rubricFileName}
+                      </a>
+                    )}
                     {submission.contentText && (
                       <p className="mt-3 text-sm text-gray-600 bg-gray-50 rounded-lg p-3 line-clamp-3">{submission.contentText}</p>
                     )}
@@ -244,6 +256,18 @@ export function GradesFeedback({ assignments, submissions, role, userId, onGrade
                   </div>
                   {assignment && (
                     <p className="text-xs text-gray-500">Due: {assignment.dueDate}</p>
+                  )}
+                  {assignment?.rubricFileName && assignment?.rubricUrl && (
+                    <a
+                      href={assignment.rubricUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={assignment.rubricFileName}
+                      className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline mt-0.5"
+                    >
+                      <Download className="h-3 w-3" />
+                      Rubric: {assignment.rubricFileName}
+                    </a>
                   )}
                   {submission.contentText && (
                     <p className="mt-2 text-sm text-gray-600 bg-gray-50 rounded-lg p-3 line-clamp-2">{submission.contentText}</p>
