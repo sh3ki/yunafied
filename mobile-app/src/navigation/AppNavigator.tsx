@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Linking,
   Modal,
   Pressable,
@@ -66,11 +67,11 @@ const navTheme = {
 function Shell({ children, title, subtitle }: { children: React.ReactNode; title: string; subtitle?: string }) {
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        </View>
+      <View style={styles.screenHeader}>
+        <Text style={styles.title}>{title}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </View>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {children}
       </ScrollView>
     </SafeAreaView>
@@ -78,7 +79,11 @@ function Shell({ children, title, subtitle }: { children: React.ReactNode; title
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <View style={styles.card}>{children}</View>;
+  return (
+    <View style={styles.card}>
+      {children}
+    </View>
+  );
 }
 
 function PillButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
@@ -98,17 +103,88 @@ function PillButton({ label, onPress, disabled }: { label: string; onPress: () =
 }
 
 function LandingScreen({ navigation }: any) {
+  const logoUri = 'https://yunafied.online/yunafied%20logo.png';
+  const features = [
+    { icon: '👥', title: 'Role-Based Access', text: 'Dedicated modules for admin, teacher, and student.' },
+    { icon: '📅', title: 'Smart Scheduling', text: 'Conflict-free timetable with request workflows.' },
+    { icon: '📚', title: 'Assignments & Grades', text: 'Submission tracking, grading, and feedback.' },
+    { icon: '✨', title: 'AI Learning Tools', text: 'YUNA AI, translator, guide, and gamified quizzes.' },
+  ];
   return (
-    <SafeAreaView style={[styles.safe, styles.landingBg]}>
+    <SafeAreaView style={styles.landingBg}>
       <StatusBar style="light" />
-      <View style={styles.landingWrap}>
-        <Text style={styles.landingTag}>YUNAFIED MOBILE</Text>
-        <Text style={styles.landingTitle}>Your tutorial system, now in your pocket.</Text>
-        <Text style={styles.landingText}>
-          Manage tutorials, classes, assignments, grades, and AI-powered study support in one mobile workspace.
-        </Text>
-        <PillButton label="Continue to Login" onPress={() => navigation.navigate('Login')} />
-      </View>
+      <ScrollView contentContainerStyle={styles.landingScroll} showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.landingHeader}>
+          <View style={styles.logoWrap}>
+            <Image source={{ uri: logoUri }} style={styles.logoImg} resizeMode="contain" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.landingBrandName}>YUNAFied</Text>
+            <Text style={styles.landingBrandSub}>AI-Powered Tutorial System</Text>
+          </View>
+          <Pressable onPress={() => navigation.navigate('Login')} style={styles.landingLoginBtn}>
+            <Text style={styles.landingLoginBtnText}>Login</Text>
+          </Pressable>
+        </View>
+
+        {/* Hero */}
+        <View style={styles.landingHero}>
+          <View style={styles.landingBadge}>
+            <Text style={styles.landingBadgeText}>Built for Students & Teachers</Text>
+          </View>
+          <Text style={styles.landingTitle}>
+            Smarter Tutorials,{' '}
+            <Text style={styles.landingTitleAccent}>Guided by YUNA AI</Text>
+          </Text>
+          <Text style={styles.landingText}>
+            Manage schedules, assignments, grading, AI learning support, and more in one unified platform for admins, teachers, and students.
+          </Text>
+          <View style={styles.landingActions}>
+            <Pressable onPress={() => navigation.navigate('Login')} style={styles.landingGetStartedBtn}>
+              <Text style={styles.landingGetStartedText}>Get Started</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Feature Cards */}
+        <View style={styles.landingFeatureGrid}>
+          {features.map((f) => (
+            <View key={f.title} style={styles.landingFeatureCard}>
+              <Text style={styles.landingFeatureIcon}>{f.icon}</Text>
+              <Text style={styles.landingFeatureTitle}>{f.title}</Text>
+              <Text style={styles.landingFeatureText}>{f.text}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Purpose Section */}
+        <View style={styles.landingPurpose}>
+          <Text style={styles.landingPurposeTitle}>System Purpose</Text>
+          <Text style={styles.landingPurposeText}>
+            YUNAFied supports tutorial operations and student success through structured management tools plus AI assistance.
+          </Text>
+          <View style={styles.landingRoleRow}>
+            <View style={[styles.landingRoleCard, { borderColor: '#a78bfa' }]}>
+              <Text style={[styles.landingRoleTitle, { color: '#c4b5fd' }]}>Administration</Text>
+              <Text style={styles.landingRoleText}>User governance, analytics, and platform control.</Text>
+            </View>
+            <View style={[styles.landingRoleCard, { borderColor: '#67e8f9' }]}>
+              <Text style={[styles.landingRoleTitle, { color: '#a5f3fc' }]}>Instruction</Text>
+              <Text style={styles.landingRoleText}>Scheduling, assignments, and announcements.</Text>
+            </View>
+            <View style={[styles.landingRoleCard, { borderColor: '#f0abfc' }]}>
+              <Text style={[styles.landingRoleTitle, { color: '#f5d0fe' }]}>Student Growth</Text>
+              <Text style={styles.landingRoleText}>Milestones, AI study support, and translation.</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* CTA Footer */}
+        <View style={styles.landingCta}>
+          <PillButton label="Get Started — Login" onPress={() => navigation.navigate('Login')} />
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -198,92 +274,120 @@ function LoginScreen() {
     }
   };
 
+  const logoUri = 'https://yunafied.online/yunafied%20logo.png';
+
   if (mode === 'otp') {
     return (
-      <Shell title="Verify Your Email" subtitle={'Enter the 6-digit code sent to ' + pendingEmail}>
-        <Card>
-          <Text style={styles.label}>6-Digit Code</Text>
-          <TextInput
-            value={otpValue}
-            onChangeText={(v) => setOtpValue(v.replace(/\D/g, '').slice(0, 6))}
-            style={[styles.input, { textAlign: 'center', fontSize: 24, letterSpacing: 8, fontWeight: 'bold' }]}
-            keyboardType="number-pad"
-            maxLength={6}
-            placeholder="000000"
-          />
-
-          <PillButton label={busy ? 'Verifying...' : 'Verify & Continue'} onPress={onVerifyOtp} disabled={busy || otpValue.length !== 6} />
-
-          <Pressable onPress={onResendOtp} disabled={resendCountdown > 0}>
-            <Text style={[styles.linkText, resendCountdown > 0 && { opacity: 0.4 }]}>
-              {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : 'Resend Code'}
-            </Text>
-          </Pressable>
-
-          <Pressable onPress={() => setMode('login')}>
-            <Text style={styles.linkText}>← Back to login</Text>
-          </Pressable>
-        </Card>
-      </Shell>
+      <SafeAreaView style={styles.loginBg}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.loginScroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.loginLogoRow}>
+            <View style={styles.logoWrap}><Image source={{ uri: logoUri }} style={styles.logoImg} resizeMode="contain" /></View>
+            <View>
+              <Text style={styles.loginBrand}>YUNAFied</Text>
+              <Text style={styles.loginBrandSub}>AI-Powered Tutorial System</Text>
+            </View>
+          </View>
+          <View style={styles.loginCard}>
+            <Text style={styles.loginCardTitle}>Verify Your Email</Text>
+            <Text style={styles.loginCardSub}>Enter the 6-digit code sent to {pendingEmail}</Text>
+            <Text style={styles.label}>6-Digit Code</Text>
+            <TextInput
+              value={otpValue}
+              onChangeText={(v) => setOtpValue(v.replace(/\D/g, '').slice(0, 6))}
+              style={[styles.input, { textAlign: 'center', fontSize: 26, letterSpacing: 10, fontWeight: 'bold' }]}
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="000000"
+              placeholderTextColor="#9ca3af"
+            />
+            <PillButton label={busy ? 'Verifying...' : 'Verify & Continue'} onPress={onVerifyOtp} disabled={busy || otpValue.length !== 6} />
+            <Pressable onPress={onResendOtp} disabled={resendCountdown > 0}>
+              <Text style={[styles.linkText, resendCountdown > 0 && { opacity: 0.4 }]}>
+                {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : 'Resend Code'}
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => setMode('login')}>
+              <Text style={styles.linkText}>← Back to login</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
   return (
-    <Shell title="Welcome to YUNAFied" subtitle="Sign in to continue">
-      <Card>
-        {mode === 'signup' ? (
-          <>
-            <Text style={styles.label}>First Name</Text>
-            <TextInput value={firstName} onChangeText={setFirstName} style={styles.input} placeholder="Juan" />
-            <Text style={styles.label}>Middle Name (optional)</Text>
-            <TextInput value={middleName} onChangeText={setMiddleName} style={styles.input} placeholder="Santos" />
-            <Text style={styles.label}>Last Name</Text>
-            <TextInput value={lastName} onChangeText={setLastName} style={styles.input} placeholder="Dela Cruz" />
-          </>
-        ) : null}
+    <SafeAreaView style={styles.loginBg}>
+      <StatusBar style="light" />
+      <ScrollView contentContainerStyle={styles.loginScroll} showsVerticalScrollIndicator={false}>
+        <View style={styles.loginLogoRow}>
+          <View style={styles.logoWrap}><Image source={{ uri: logoUri }} style={styles.logoImg} resizeMode="contain" /></View>
+          <View>
+            <Text style={styles.loginBrand}>YUNAFied</Text>
+            <Text style={styles.loginBrandSub}>AI-Powered Tutorial System</Text>
+          </View>
+        </View>
 
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          style={styles.input}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          placeholder="name@email.com"
-        />
+        <View style={styles.loginCard}>
+          <Text style={styles.loginCardTitle}>{mode === 'login' ? 'Welcome Back' : 'Create Account'}</Text>
+          <Text style={styles.loginCardSub}>{mode === 'login' ? 'Sign in to your workspace' : 'Join the YUNAFied platform'}</Text>
 
-        <Text style={styles.label}>Password</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          style={styles.input}
-          placeholder="********"
-        />
+          {mode === 'signup' ? (
+            <>
+              <Text style={styles.label}>First Name</Text>
+              <TextInput value={firstName} onChangeText={setFirstName} style={styles.input} placeholder="Juan" placeholderTextColor="#9ca3af" />
+              <Text style={styles.label}>Middle Name (optional)</Text>
+              <TextInput value={middleName} onChangeText={setMiddleName} style={styles.input} placeholder="Santos" placeholderTextColor="#9ca3af" />
+              <Text style={styles.label}>Last Name</Text>
+              <TextInput value={lastName} onChangeText={setLastName} style={styles.input} placeholder="Dela Cruz" placeholderTextColor="#9ca3af" />
+            </>
+          ) : null}
 
-        {mode === 'signup' ? (
-          <>
-            <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              style={styles.input}
-              placeholder="********"
-            />
-          </>
-        ) : null}
+          <Text style={styles.label}>Email Address</Text>
+          <TextInput
+            value={email}
+            onChangeText={setEmail}
+            style={styles.input}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            placeholder="name@email.com"
+            placeholderTextColor="#9ca3af"
+          />
 
-        <PillButton label={busy ? 'Please wait...' : mode === 'login' ? 'Login' : 'Create Account'} onPress={onSubmit} disabled={busy} />
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            style={styles.input}
+            placeholder="••••••••"
+            placeholderTextColor="#9ca3af"
+          />
 
-        <Pressable onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}>
-          <Text style={styles.linkText}>
-            {mode === 'login' ? 'Need an account? Sign up' : 'Already registered? Login'}
-          </Text>
-        </Pressable>
-      </Card>
+          {mode === 'signup' ? (
+            <>
+              <Text style={styles.label}>Confirm Password</Text>
+              <TextInput
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                style={styles.input}
+                placeholder="••••••••"
+                placeholderTextColor="#9ca3af"
+              />
+            </>
+          ) : null}
 
-    </Shell>
+          <PillButton label={busy ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'} onPress={onSubmit} disabled={busy} />
+
+          <Pressable onPress={() => setMode(mode === 'login' ? 'signup' : 'login')}>
+            <Text style={styles.linkText}>
+              {mode === 'login' ? "Don't have an account? Sign up" : 'Already registered? Sign in'}
+            </Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -2279,8 +2383,9 @@ function VideoSummarizerScreen() {
 }
 
 function VideoCallWebScreen({ roomToken, token, onClose }: { roomToken: string; token: string; onClose: () => void }) {
-  const webUrl = `http://10.138.197.11:5173/app/video-call/${roomToken}`;
-  // Inject the auth token into localStorage before the page loads so the web app recognises the session
+  const webUrl = `https://yunafied.online/app/video-call/${roomToken}`;
+
+  // Inject auth token into localStorage BEFORE the web app script loads so it can read the session.
   const injectedJs = `
     (function() {
       try { localStorage.setItem('yunafied_token', ${JSON.stringify(token)}); } catch(e) {}
@@ -2289,20 +2394,33 @@ function VideoCallWebScreen({ roomToken, token, onClose }: { roomToken: string; 
   `;
 
   return (
-    <Modal visible animationType="slide" onRequestClose={onClose}>
+    <Modal visible animationType="slide" statusBarTranslucent onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a' }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#6d28d9', paddingHorizontal: 12, paddingVertical: 10 }}>
-          <Pressable onPress={onClose} style={{ marginRight: 12, padding: 4 }}>
-            <Text style={{ color: '#fff', fontSize: 18 }}>✕</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e1b4b', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(109,40,217,0.4)' }}>
+          <View style={styles.logoWrap}>
+            <Image source={{ uri: 'https://yunafied.online/yunafied%20logo.png' }} style={styles.logoImg} resizeMode="contain" />
+          </View>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16, flex: 1, marginLeft: 10 }}>Video Call</Text>
+          <Pressable
+            onPress={onClose}
+            style={{ backgroundColor: 'rgba(220,38,38,0.15)', borderWidth: 1, borderColor: 'rgba(220,38,38,0.5)', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 }}
+          >
+            <Text style={{ color: '#f87171', fontWeight: '700', fontSize: 13 }}>✕ Leave</Text>
           </Pressable>
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Video Call</Text>
         </View>
         <WebView
           source={{ uri: webUrl }}
           injectedJavaScriptBeforeContentLoaded={injectedJs}
           javaScriptEnabled
+          domStorageEnabled
           mediaPlaybackRequiresUserAction={false}
           allowsInlineMediaPlayback
+          allowsFullscreenVideo
+          // Grant camera/microphone permission requests from the WebView (Android)
+          onPermissionRequest={(request: { grant: (resources: string[]) => void; resources: string[] }) => request.grant(request.resources)}
+          // Auto-grant media capture for iOS
+          mediaCapturePermissionGrantType="grant"
+          originWhitelist={['*']}
           style={{ flex: 1 }}
         />
       </SafeAreaView>
@@ -2926,21 +3044,70 @@ function AllStudentMilestonesScreen() {
 
 function CustomDrawerContent(props: any) {
   const { session, logout } = useAppContext();
+  const logoUri = 'https://yunafied.online/yunafied%20logo.png';
+  const user = session?.user;
+  const roleColors: Record<string, string> = {
+    admin: '#f59e0b',
+    teacher: '#34d399',
+    student: '#a78bfa',
+  };
+  const roleColor = roleColors[user?.role || 'student'] || '#a78bfa';
 
   return (
-    <DrawerContentScrollView {...props}>
-      <View style={styles.drawerHeader}>
-        <Text style={styles.drawerName}>{session?.user.fullName}</Text>
-        <Text style={styles.drawerEmail}>{session?.user.email}</Text>
-        <Text style={styles.drawerRole}>{session?.user.role.toUpperCase()}</Text>
+    <DrawerContentScrollView
+      {...props}
+      style={{ backgroundColor: '#0f172a' }}
+      contentContainerStyle={{ paddingTop: 0 }}
+    >
+      {/* Logo + Brand */}
+      <View style={styles.drawerLogoRow}>
+        <View style={styles.logoWrap}>
+          <Image source={{ uri: logoUri }} style={styles.logoImg} resizeMode="contain" />
+        </View>
+        <View>
+          <Text style={styles.drawerBrandName}>YUNAFied</Text>
+          <Text style={styles.drawerBrandSub}>Tutorial Management</Text>
+        </View>
       </View>
-      <DrawerItemList {...props} />
-      <DrawerItem
-        label="Sign Out"
-        onPress={() => {
-          logout();
-        }}
-      />
+
+      {/* User Profile Card */}
+      <View style={styles.drawerProfileCard}>
+        <View style={styles.drawerAvatar}>
+          <Text style={styles.drawerAvatarText}>{user?.fullName?.charAt(0)?.toUpperCase() || 'U'}</Text>
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.drawerName} numberOfLines={1}>{user?.fullName}</Text>
+          <Text style={styles.drawerEmail} numberOfLines={1}>{user?.email}</Text>
+        </View>
+      </View>
+      <View style={styles.drawerRoleBadgeRow}>
+        <View style={[styles.drawerRoleBadge, { borderColor: roleColor }]}>
+          <Text style={[styles.drawerRoleBadgeText, { color: roleColor }]}>{user?.role?.toUpperCase()} MODULE</Text>
+        </View>
+      </View>
+
+      {/* Nav Items */}
+      <View style={styles.drawerNav}>
+        <DrawerItemList
+          {...props}
+          activeTintColor="#fff"
+          inactiveTintColor="#94a3b8"
+          activeBackgroundColor="#6d28d9"
+          inactiveBackgroundColor="transparent"
+          labelStyle={{ fontWeight: '600', fontSize: 14 }}
+          itemStyle={{ borderRadius: 10, marginHorizontal: 4, marginVertical: 1 }}
+        />
+      </View>
+
+      {/* Sign Out */}
+      <View style={styles.drawerSignOutWrap}>
+        <Pressable
+          onPress={() => logout()}
+          style={({ pressed }) => [styles.drawerSignOutBtn, pressed && { opacity: 0.8 }]}
+        >
+          <Text style={styles.drawerSignOutText}>⏻  Sign Out</Text>
+        </Pressable>
+      </View>
     </DrawerContentScrollView>
   );
 }
@@ -2955,9 +3122,16 @@ function DrawerArea() {
   return (
     <Drawer.Navigator
       screenOptions={{
-        headerStyle: { backgroundColor: '#6d28d9' },
+        headerStyle: { backgroundColor: '#1e1b4b' },
         headerTintColor: '#fff',
-        drawerActiveTintColor: '#6d28d9',
+        headerTitleStyle: { fontWeight: '700', fontSize: 17 },
+        drawerStyle: { backgroundColor: '#0f172a', width: 272 },
+        drawerActiveTintColor: '#fff',
+        drawerInactiveTintColor: '#94a3b8',
+        drawerActiveBackgroundColor: '#6d28d9',
+        drawerInactiveBackgroundColor: 'transparent',
+        drawerItemStyle: { borderRadius: 10, marginHorizontal: 4, marginVertical: 1 },
+        drawerLabelStyle: { fontWeight: '600', fontSize: 14 },
       }}
       drawerContent={(props) => <CustomDrawerContent {...props} />}
     >
@@ -3004,9 +3178,14 @@ export function AppNavigator() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.safe, styles.center]}>
-        <ActivityIndicator size="large" color="#6d28d9" />
-        <Text style={styles.muted}>Loading mobile workspace...</Text>
+      <SafeAreaView style={[styles.loadingScreen, styles.center]}>
+        <StatusBar style="light" />
+        <View style={styles.loadingLogoWrap}>
+          <Image source={{ uri: 'https://yunafied.online/yunafied%20logo.png' }} style={styles.loadingLogo} resizeMode="contain" />
+        </View>
+        <Text style={styles.loadingBrand}>YUNAFied</Text>
+        <ActivityIndicator size="large" color="#a78bfa" style={{ marginTop: 24 }} />
+        <Text style={styles.loadingText}>Loading your workspace...</Text>
       </SafeAreaView>
     );
   }
@@ -3049,58 +3228,83 @@ export function AppNavigator() {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#f7f7fb',
-  },
-  center: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  landingBg: {
-    backgroundColor: '#0f172a',
-  },
-  landingWrap: {
-    flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: 'center',
-    gap: 14,
-  },
-  landingTag: {
-    color: '#a5b4fc',
-    fontWeight: '700',
-    letterSpacing: 1.4,
-  },
-  landingTitle: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 34,
-    lineHeight: 40,
-  },
-  landingText: {
-    color: '#cbd5e1',
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  container: {
-    padding: 16,
-    gap: 12,
-    paddingBottom: 24,
-  },
-  header: {
-    gap: 4,
-    marginBottom: 2,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: '#111827',
-  },
-  subtitle: {
-    color: '#6b7280',
-    fontSize: 14,
-  },
+  // ─── LOADING ─────────────────────────────────────────────────────────
+  loadingScreen: { flex: 1, backgroundColor: '#0f172a' },
+  loadingLogoWrap: { width: 80, height: 80, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 8, shadowColor: '#7c3aed', shadowOpacity: 0.4, shadowRadius: 16, elevation: 8 },
+  loadingLogo: { width: 64, height: 64, borderRadius: 12 },
+  loadingBrand: { color: '#fff', fontSize: 26, fontWeight: '800', letterSpacing: 0.5 },
+  loadingText: { color: '#94a3b8', fontSize: 14, marginTop: 8 },
+  // ─── LOGO ─────────────────────────────────────────────────────────────
+  logoWrap: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', padding: 4, shadowColor: '#7c3aed', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  logoImg: { width: 36, height: 36, borderRadius: 8 },
+  // ─── GENERAL ──────────────────────────────────────────────────────────
+  safe: { flex: 1, backgroundColor: '#f0f4ff' },
+  center: { alignItems: 'center', justifyContent: 'center', gap: 10 },
+  // ─── LANDING ──────────────────────────────────────────────────────────
+  landingBg: { flex: 1, backgroundColor: '#0f172a' },
+  landingScroll: { flexGrow: 1, paddingBottom: 40 },
+  landingHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16 },
+  landingLoginBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: '#fff' },
+  landingLoginBtnText: { color: '#1e1b4b', fontWeight: '700', fontSize: 14 },
+  landingBrandName: { color: '#fff', fontWeight: '800', fontSize: 18 },
+  landingBrandSub: { color: '#a5b4fc', fontSize: 11 },
+  landingHero: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 28 },
+  landingBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(103,232,249,0.1)', borderWidth: 1, borderColor: 'rgba(103,232,249,0.3)', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 14 },
+  landingBadgeText: { color: '#a5f3fc', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
+  landingTitle: { color: '#fff', fontWeight: '900', fontSize: 32, lineHeight: 38, marginBottom: 14 },
+  landingTitleAccent: { color: '#c4b5fd' },
+  landingText: { color: '#94a3b8', fontSize: 15, lineHeight: 22, marginBottom: 20 },
+  landingActions: { flexDirection: 'row', gap: 10 },
+  landingGetStartedBtn: { backgroundColor: '#6d28d9', borderRadius: 12, paddingVertical: 13, paddingHorizontal: 24, alignItems: 'center' },
+  landingGetStartedText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  landingFeatureGrid: { paddingHorizontal: 14, flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 },
+  landingFeatureCard: { width: '47%', backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14 },
+  landingFeatureIcon: { fontSize: 24, marginBottom: 8 },
+  landingFeatureTitle: { color: '#fff', fontWeight: '700', fontSize: 14, marginBottom: 4 },
+  landingFeatureText: { color: '#94a3b8', fontSize: 12, lineHeight: 17 },
+  landingPurpose: { marginHorizontal: 14, backgroundColor: 'rgba(0,0,0,0.25)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', borderRadius: 20, padding: 18, marginBottom: 24 },
+  landingPurposeTitle: { color: '#fff', fontWeight: '800', fontSize: 18, marginBottom: 8 },
+  landingPurposeText: { color: '#94a3b8', fontSize: 13, lineHeight: 20, marginBottom: 14 },
+  landingRoleRow: { flexDirection: 'row', gap: 8 },
+  landingRoleCard: { flex: 1, borderWidth: 1, borderRadius: 12, padding: 10, backgroundColor: 'rgba(255,255,255,0.04)' },
+  landingRoleTitle: { fontWeight: '700', fontSize: 12, marginBottom: 4 },
+  landingRoleText: { color: '#94a3b8', fontSize: 11, lineHeight: 16 },
+  landingCta: { paddingHorizontal: 20, paddingBottom: 20 },
+  // ─── LOGIN ────────────────────────────────────────────────────────────
+  loginBg: { flex: 1, backgroundColor: '#0f172a' },
+  loginScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 32 },
+  loginLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 28, paddingHorizontal: 4 },
+  loginBrand: { color: '#fff', fontWeight: '800', fontSize: 20 },
+  loginBrandSub: { color: '#a5b4fc', fontSize: 12 },
+  loginCard: { backgroundColor: '#fff', borderRadius: 20, padding: 22, gap: 10, shadowColor: '#6d28d9', shadowOpacity: 0.2, shadowRadius: 20, elevation: 8 },
+  loginCardTitle: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 2 },
+  loginCardSub: { fontSize: 13, color: '#6b7280', marginBottom: 8 },
+  // ─── SHELL / SCREEN HEADER ────────────────────────────────────────────
+  screenHeader: { backgroundColor: '#1e1b4b', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(109,40,217,0.3)' },
+  // ─── DRAWER ───────────────────────────────────────────────────────────
+  drawerLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
+  drawerBrandName: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  drawerBrandSub: { color: '#94a3b8', fontSize: 11 },
+  drawerProfileCard: { flexDirection: 'row', alignItems: 'center', gap: 12, marginHorizontal: 12, marginTop: 14, backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  drawerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#6d28d9', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#a78bfa' },
+  drawerAvatarText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  drawerRoleBadgeRow: { paddingHorizontal: 12, marginTop: 8, marginBottom: 8 },
+  drawerRoleBadge: { alignSelf: 'flex-start', borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  drawerRoleBadgeText: { fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  drawerNav: { marginTop: 4 },
+  drawerSignOutWrap: { padding: 12, paddingBottom: 20, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.08)', marginTop: 8 },
+  drawerSignOutBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 10, backgroundColor: 'rgba(220,38,38,0.1)', borderWidth: 1, borderColor: 'rgba(220,38,38,0.3)' },
+  drawerSignOutText: { color: '#f87171', fontWeight: '700', fontSize: 14 },
+  // kept for compatibility with unchanged drawer code
+  drawerHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)', marginBottom: 8 },
+  drawerName: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  drawerEmail: { color: '#94a3b8', marginTop: 4 },
+  drawerRole: { marginTop: 8, color: '#a78bfa', fontWeight: '700', fontSize: 12 },
+  // ─── CONTAINERS / LAYOUT ──────────────────────────────────────────────
+  container: { padding: 16, gap: 12, paddingBottom: 24 },
+  header: { gap: 4, marginBottom: 2 },
+  title: { fontSize: 28, fontWeight: '800', color: '#fff' },
+  subtitle: { color: '#c4b5fd', fontSize: 14 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 14,
@@ -3319,27 +3523,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f3ff',
     padding: 10,
     gap: 6,
-  },
-  drawerHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    marginBottom: 8,
-  },
-  drawerName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  drawerEmail: {
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  drawerRole: {
-    marginTop: 8,
-    color: '#6d28d9',
-    fontWeight: '700',
-    fontSize: 12,
   },
   rowBetween: {
     flexDirection: 'row',
