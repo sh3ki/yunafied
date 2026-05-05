@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { AuthUser, MeetingRoom, ScheduleItem, UserRole } from '@/app/types/models';
+import { AuthUser, MeetingRoom, ScheduleItem, TeacherAvailabilityItem, UserRole } from '@/app/types/models';
 import { Button } from '@/app/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/app/components/ui/dialog';
 import { Input } from '@/app/components/ui/input';
@@ -149,6 +149,18 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   const [adminEditOpen, setAdminEditOpen] = useState(false);
   const [adminEditItem, setAdminEditItem] = useState<ScheduleItem | null>(null);
   const [adminEditForm, setAdminEditForm] = useState({ title: '', description: '', date: '', startTime: '', endTime: '', status: 'pending' as 'pending' | 'accepted' | 'declined' | 'cancelled', responseNote: '' });
+
+  // Teacher availability
+  const [availabilityBlocks, setAvailabilityBlocks] = useState<TeacherAvailabilityItem[]>([]);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [availForm, setAvailForm] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '10:00' });
+  const [savingAvail, setSavingAvail] = useState(false);
+
+  useEffect(() => {
+    if (role === 'teacher') {
+      apiClient.listTeacherAvailability().then(setAvailabilityBlocks).catch(() => {});
+    }
+  }, [role]);
 
   const [requestForm, setRequestForm] = useState({
     title: 'English',
@@ -1097,6 +1109,87 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Teacher Availability Panel */}
+      {role === 'teacher' && (
+        <div className="mx-auto max-w-7xl px-4 pb-8">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+            <button
+              className="w-full flex items-center justify-between px-6 py-4 text-left"
+              onClick={() => setAvailabilityOpen((v) => !v)}
+            >
+              <span className="font-semibold text-gray-800">My Weekly Availability</span>
+              <span className="text-sm text-gray-400">{availabilityOpen ? 'Hide' : 'Show'}</span>
+            </button>
+            {availabilityOpen && (
+              <div className="px-6 pb-6 space-y-4 border-t border-gray-100 pt-4">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Day</label>
+                    <select
+                      value={availForm.dayOfWeek}
+                      onChange={(e) => setAvailForm((p) => ({ ...p, dayOfWeek: Number(e.target.value) }))}
+                      className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                    >
+                      {WEEKDAY_LABELS.map((d, i) => <option key={d} value={i}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">Start</label>
+                    <Input type="time" value={availForm.startTime} onChange={(e) => setAvailForm((p) => ({ ...p, startTime: e.target.value }))} className="w-32" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-1">End</label>
+                    <Input type="time" value={availForm.endTime} onChange={(e) => setAvailForm((p) => ({ ...p, endTime: e.target.value }))} className="w-32" />
+                  </div>
+                  <Button
+                    disabled={savingAvail}
+                    onClick={async () => {
+                      try {
+                        setSavingAvail(true);
+                        const block = await apiClient.createTeacherAvailability(availForm);
+                        setAvailabilityBlocks((prev) => [...prev, block]);
+                        toast.success('Availability block added.');
+                      } catch {
+                        toast.error('Failed to add availability block.');
+                      } finally {
+                        setSavingAvail(false);
+                      }
+                    }}
+                  >
+                    {savingAvail ? 'Adding…' : 'Add Block'}
+                  </Button>
+                </div>
+                {availabilityBlocks.length === 0 ? (
+                  <p className="text-sm text-gray-500">No availability blocks added yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {availabilityBlocks.map((b) => (
+                      <div key={b.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2 text-sm">
+                        <span className="font-medium">{WEEKDAY_LABELS[b.dayOfWeek]}</span>
+                        <span className="text-gray-600">{b.startTime} – {b.endTime}</span>
+                        <button
+                          className="text-xs text-red-500 hover:text-red-700 transition"
+                          onClick={async () => {
+                            try {
+                              await apiClient.deleteTeacherAvailability(b.id);
+                              setAvailabilityBlocks((prev) => prev.filter((x) => x.id !== b.id));
+                            } catch {
+                              toast.error('Failed to delete block.');
+                            }
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
