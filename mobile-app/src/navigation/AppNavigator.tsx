@@ -12,6 +12,7 @@ import {
   Vibration,
   View,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   NavigationContainer,
@@ -39,6 +40,7 @@ import {
   GamifiedQuizItem,
   LearningMaterialItem,
   MeetingRoom,
+  MessageUserItem,
   NotificationItem,
   SubmissionItem,
   TranslationHistoryItem,
@@ -114,7 +116,9 @@ function LandingScreen({ navigation }: any) {
 function LoginScreen() {
   const { login, signup, verifyOtp, resendOtp } = useAppContext();
   const [mode, setMode] = useState<'login' | 'signup' | 'otp'>('login');
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName, setMiddleName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -148,7 +152,7 @@ function LoginScreen() {
           Alert.alert('Validation', 'Passwords do not match.');
           return;
         }
-        const result = await signup(fullName.trim(), email.trim(), password);
+        const result = await signup(firstName.trim(), middleName.trim(), lastName.trim(), email.trim(), password);
         if (result.needsVerification) {
           Alert.alert('Check your email', 'A 6-digit verification code has been sent to ' + result.email);
           enterOtpMode(result.email);
@@ -229,8 +233,12 @@ function LoginScreen() {
       <Card>
         {mode === 'signup' ? (
           <>
-            <Text style={styles.label}>Full Name</Text>
-            <TextInput value={fullName} onChangeText={setFullName} style={styles.input} placeholder="Juan Dela Cruz" />
+            <Text style={styles.label}>First Name</Text>
+            <TextInput value={firstName} onChangeText={setFirstName} style={styles.input} placeholder="Juan" />
+            <Text style={styles.label}>Middle Name (optional)</Text>
+            <TextInput value={middleName} onChangeText={setMiddleName} style={styles.input} placeholder="Santos" />
+            <Text style={styles.label}>Last Name</Text>
+            <TextInput value={lastName} onChangeText={setLastName} style={styles.input} placeholder="Dela Cruz" />
           </>
         ) : null}
 
@@ -275,11 +283,6 @@ function LoginScreen() {
         </Pressable>
       </Card>
 
-      <Card>
-        <Text style={styles.smallTitle}>Demo Accounts</Text>
-        <Text style={styles.muted}>Use password: password</Text>
-        <Text style={styles.muted}>admin@yuna.edu | teacher@yuna.edu | student@yuna.edu</Text>
-      </Card>
     </Shell>
   );
 }
@@ -1601,21 +1604,30 @@ function GradesScreen() {
 }
 
 function LearningMaterialsScreen() {
+  const { session } = useAppContext();
+  const role = session!.user.role;
+  const canManage = role === 'admin' || role === 'teacher';
   const [materials, setMaterials] = useState<LearningMaterialItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [title, setTitle] = useState('');
+  const [subject, setSubject] = useState('');
+  const [description, setDescription] = useState('');
+  const [url, setUrl] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      setBusy(true);
+      const items = await mobileApiClient.listLearningMaterials();
+      setMaterials(items);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load materials.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setBusy(true);
-        const items = await mobileApiClient.listLearningMaterials();
-        setMaterials(items);
-      } catch (error: any) {
-        Alert.alert('Error', error.message || 'Failed to load materials.');
-      } finally {
-        setBusy(false);
-      }
-    };
     load();
   }, []);
 
@@ -1628,8 +1640,62 @@ function LearningMaterialsScreen() {
     return map;
   }, [materials]);
 
+  const addLink = async () => {
+    if (!title.trim() || !subject.trim() || !url.trim()) {
+      Alert.alert('Validation', 'Title, subject, and URL are required.');
+      return;
+    }
+    try {
+      setSaving(true);
+      await mobileApiClient.createLearningMaterialLink({
+        title: title.trim(),
+        subject: subject.trim(),
+        description: description.trim() || undefined,
+        url: url.trim(),
+      });
+      setTitle(''); setSubject(''); setDescription(''); setUrl('');
+      await load();
+      Alert.alert('Success', 'Learning material added.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to add material.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (id: string) => {
+    try {
+      await mobileApiClient.deleteLearningMaterial(id);
+      setMaterials((prev) => prev.filter((m) => m.id !== id));
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to remove material.');
+    }
+  };
+
   return (
-    <Shell title="Learning Materials" subtitle="Access study resources by subject">
+    <Shell title="Learning Materials" subtitle="Access and manage study resources by subject">
+      {canManage ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Add Link Material</Text>
+          <TextInput value={title} onChangeText={setTitle} style={styles.input} placeholder="Title" />
+          <TextInput value={subject} onChangeText={setSubject} style={styles.input} placeholder="Subject" />
+          <TextInput
+            value={description}
+            onChangeText={setDescription}
+            style={[styles.input, styles.textarea]}
+            placeholder="Description (optional)"
+            multiline
+          />
+          <TextInput
+            value={url}
+            onChangeText={setUrl}
+            style={styles.input}
+            placeholder="https://..."
+            autoCapitalize="none"
+          />
+          <PillButton label={saving ? 'Saving...' : 'Add Material'} onPress={addLink} disabled={saving} />
+        </Card>
+      ) : null}
       {busy ? (
         <Card>
           <ActivityIndicator color="#6d28d9" />
@@ -1640,12 +1706,19 @@ function LearningMaterialsScreen() {
           <Text style={styles.muted}>No learning materials available yet.</Text>
         </Card>
       ) : null}
-      {Array.from(bySubject.entries()).map(([subject, items]) => (
-        <Card key={subject}>
-          <Text style={styles.sectionTitle}>{subject}</Text>
+      {Array.from(bySubject.entries()).map(([subj, items]) => (
+        <Card key={subj}>
+          <Text style={styles.sectionTitle}>{subj}</Text>
           {items.map((item) => (
             <View key={item.id} style={styles.listItem}>
-              <Text style={styles.listTitle}>{item.title}</Text>
+              <View style={styles.rowBetween}>
+                <Text style={[styles.listTitle, { flex: 1 }]}>{item.title}</Text>
+                {canManage ? (
+                  <Pressable onPress={() => remove(item.id)}>
+                    <Text style={styles.dangerText}>Delete</Text>
+                  </Pressable>
+                ) : null}
+              </View>
               {item.description ? <Text style={styles.muted}>{item.description}</Text> : null}
               <Text style={styles.muted}>By {item.createdByName}</Text>
               <Pressable onPress={() => Linking.openURL(item.resourceUrl)}>
@@ -1662,33 +1735,41 @@ function LearningMaterialsScreen() {
 }
 
 function EnrollmentsScreen() {
-  const { session } = useAppContext();
+  const { session, data } = useAppContext();
   const [enrollments, setEnrollments] = useState<EnrollmentRecordItem[]>([]);
   const [busy, setBusy] = useState(false);
   const role = session!.user.role;
+  const isAdmin = role === 'admin';
+
+  const students = useMemo(() => data.users.filter((u) => u.role === 'student' && u.status === 'active'), [data.users]);
+  const teachers = useMemo(() => data.users.filter((u) => u.role === 'teacher' && u.status === 'active'), [data.users]);
+
+  const [studentId, setStudentId] = useState('');
+  const [teacherId, setTeacherId] = useState('');
+  const [subject, setSubject] = useState('');
+  const [tutorialGroup, setTutorialGroup] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const load = async () => {
+    try {
+      setBusy(true);
+      const items = await mobileApiClient.listEnrollments();
+      setEnrollments(items);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load enrollments.');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        setBusy(true);
-        const items = await mobileApiClient.listEnrollments();
-        setEnrollments(items);
-      } catch (error: any) {
-        Alert.alert('Error', error.message || 'Failed to load enrollments.');
-      } finally {
-        setBusy(false);
-      }
-    };
     load();
   }, []);
 
   const myEnrollments = useMemo(() => {
-    if (role === 'student') {
-      return enrollments.filter((e) => e.studentId === session!.user.id);
-    }
-    if (role === 'teacher') {
-      return enrollments.filter((e) => e.teacherId === session!.user.id);
-    }
+    if (role === 'student') return enrollments.filter((e) => e.studentId === session!.user.id);
+    if (role === 'teacher') return enrollments.filter((e) => e.teacherId === session!.user.id);
     return enrollments;
   }, [enrollments, role, session]);
 
@@ -1698,8 +1779,75 @@ function EnrollmentsScreen() {
     return '#dc2626';
   };
 
+  const onCreate = async () => {
+    if (!studentId || !teacherId || !subject.trim()) {
+      Alert.alert('Validation', 'Student, teacher, and subject are required.');
+      return;
+    }
+    try {
+      setSaving(true);
+      await mobileApiClient.createEnrollment({
+        studentId,
+        teacherId,
+        subject: subject.trim(),
+        tutorialGroup: tutorialGroup.trim() || undefined,
+        note: note.trim() || undefined,
+      });
+      setStudentId(''); setTeacherId(''); setSubject(''); setTutorialGroup(''); setNote('');
+      await load();
+      Alert.alert('Success', 'Enrollment created.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to create enrollment.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onUpdateStatus = async (id: string, status: string) => {
+    try {
+      await mobileApiClient.updateEnrollment(id, { status });
+      await load();
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update enrollment.');
+    }
+  };
+
+  const onDelete = async (id: string) => {
+    try {
+      await mobileApiClient.deleteEnrollment(id);
+      setEnrollments((prev) => prev.filter((e) => e.id !== id));
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to delete enrollment.');
+    }
+  };
+
   return (
-    <Shell title="Enrollments" subtitle="Your enrolled subjects and classes">
+    <Shell title="Enrollments" subtitle={isAdmin ? 'Manage student-teacher enrollments' : 'Your enrolled subjects and classes'}>
+      {isAdmin ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Create Enrollment</Text>
+          <Text style={styles.label}>Student</Text>
+          <View style={styles.chipWrap}>
+            {students.map((s) => (
+              <Pressable key={s.id} onPress={() => setStudentId(s.id)} style={[styles.chip, studentId === s.id ? styles.chipActive : null]}>
+                <Text style={studentId === s.id ? styles.chipActiveText : styles.chipText}>{s.fullName}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.label}>Teacher</Text>
+          <View style={styles.chipWrap}>
+            {teachers.map((t) => (
+              <Pressable key={t.id} onPress={() => setTeacherId(t.id)} style={[styles.chip, teacherId === t.id ? styles.chipActive : null]}>
+                <Text style={teacherId === t.id ? styles.chipActiveText : styles.chipText}>{t.fullName}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <TextInput value={subject} onChangeText={setSubject} style={styles.input} placeholder="Subject" />
+          <TextInput value={tutorialGroup} onChangeText={setTutorialGroup} style={styles.input} placeholder="Tutorial group (optional)" />
+          <TextInput value={note} onChangeText={setNote} style={[styles.input, styles.textarea]} placeholder="Note (optional)" multiline />
+          <PillButton label={saving ? 'Saving...' : 'Create Enrollment'} onPress={onCreate} disabled={saving} />
+        </Card>
+      ) : null}
       {busy ? (
         <Card>
           <ActivityIndicator color="#6d28d9" />
@@ -1720,6 +1868,16 @@ function EnrollmentsScreen() {
           <Text style={styles.muted}>Teacher: {item.teacherName}</Text>
           <Text style={styles.muted}>Student: {item.studentName}</Text>
           {item.note ? <Text style={styles.muted}>Note: {item.note}</Text> : null}
+          {isAdmin ? (
+            <View style={[styles.rowWrap, { marginTop: 8 }]}>
+              <Pressable onPress={() => onUpdateStatus(item.id, item.status === 'active' ? 'completed' : 'active')}>
+                <Text style={styles.linkInline}>{item.status === 'active' ? 'Mark Completed' : 'Mark Active'}</Text>
+              </Pressable>
+              <Pressable onPress={() => onDelete(item.id)} style={{ marginLeft: 12 }}>
+                <Text style={styles.dangerText}>Delete</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </Card>
       ))}
     </Shell>
@@ -1777,13 +1935,24 @@ function NotificationsScreen() {
 function ChatsScreen({ navigation }: any) {
   const { session } = useAppContext();
   const [chats, setChats] = useState<ChatSummaryItem[]>([]);
+  const [users, setUsers] = useState<MessageUserItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [showComposer, setShowComposer] = useState(false);
+  const [composerMode, setComposerMode] = useState<'direct' | 'group'>('direct');
+  const [directUserId, setDirectUserId] = useState('');
+  const [groupName, setGroupName] = useState('');
+  const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
 
   const load = async () => {
     try {
       setBusy(true);
-      const items = await mobileApiClient.listChats();
+      const [items, chatUsers] = await Promise.all([
+        mobileApiClient.listChats(),
+        mobileApiClient.listChatUsers(),
+      ]);
       setChats(items);
+      setUsers(chatUsers.filter((u) => u.id !== session!.user.id));
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load chats.');
     } finally {
@@ -1795,6 +1964,39 @@ function ChatsScreen({ navigation }: any) {
     load();
   }, []);
 
+  const createChat = async () => {
+    try {
+      setCreating(true);
+      if (composerMode === 'direct') {
+        if (!directUserId) { Alert.alert('Validation', 'Select a user.'); return; }
+        const chat = await mobileApiClient.openDirectChat(directUserId);
+        const displayName = users.find((u) => u.id === directUserId)?.fullName || 'Chat';
+        setShowComposer(false);
+        await load();
+        navigation.navigate('ChatDetail', { chatId: chat.id, chatName: displayName });
+      } else {
+        if (!groupName.trim() || groupMemberIds.length === 0) {
+          Alert.alert('Validation', 'Group name and at least one member are required.');
+          return;
+        }
+        const chat = await mobileApiClient.createGroupChat({ name: groupName.trim(), memberIds: groupMemberIds });
+        const name = groupName.trim();
+        setGroupName(''); setGroupMemberIds([]);
+        setShowComposer(false);
+        await load();
+        navigation.navigate('ChatDetail', { chatId: chat.id, chatName: name });
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to create chat.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const toggleGroupMember = (id: string) => {
+    setGroupMemberIds((prev) => prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]);
+  };
+
   const formatTime = (ts: string | null) => {
     if (!ts) return '';
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1802,10 +2004,53 @@ function ChatsScreen({ navigation }: any) {
 
   return (
     <Shell title="Chats" subtitle="Direct and group messages">
-      <PillButton label={busy ? 'Loading...' : 'Refresh'} onPress={load} disabled={busy} />
+      <View style={styles.rowWrap}>
+        <PillButton label={busy ? 'Loading...' : 'Refresh'} onPress={load} disabled={busy} />
+        <PillButton label={showComposer ? 'Cancel' : '+ New Chat'} onPress={() => setShowComposer((v) => !v)} />
+      </View>
+
+      {showComposer ? (
+        <Card>
+          <Text style={styles.sectionTitle}>New Conversation</Text>
+          <View style={styles.chipWrap}>
+            <Pressable onPress={() => setComposerMode('direct')} style={[styles.chip, composerMode === 'direct' ? styles.chipActive : null]}>
+              <Text style={composerMode === 'direct' ? styles.chipActiveText : styles.chipText}>Direct</Text>
+            </Pressable>
+            <Pressable onPress={() => setComposerMode('group')} style={[styles.chip, composerMode === 'group' ? styles.chipActive : null]}>
+              <Text style={composerMode === 'group' ? styles.chipActiveText : styles.chipText}>Group</Text>
+            </Pressable>
+          </View>
+          {composerMode === 'direct' ? (
+            <>
+              <Text style={styles.label}>Select User</Text>
+              <View style={styles.chipWrap}>
+                {users.map((u) => (
+                  <Pressable key={u.id} onPress={() => setDirectUserId(u.id)} style={[styles.chip, directUserId === u.id ? styles.chipActive : null]}>
+                    <Text style={directUserId === u.id ? styles.chipActiveText : styles.chipText}>{u.fullName}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          ) : (
+            <>
+              <TextInput value={groupName} onChangeText={setGroupName} style={styles.input} placeholder="Group name" />
+              <Text style={styles.label}>Members</Text>
+              <View style={styles.chipWrap}>
+                {users.map((u) => (
+                  <Pressable key={u.id} onPress={() => toggleGroupMember(u.id)} style={[styles.chip, groupMemberIds.includes(u.id) ? styles.chipActive : null]}>
+                    <Text style={groupMemberIds.includes(u.id) ? styles.chipActiveText : styles.chipText}>{u.fullName}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
+          <PillButton label={creating ? 'Creating...' : 'Start Chat'} onPress={createChat} disabled={creating} />
+        </Card>
+      ) : null}
+
       {!busy && chats.length === 0 ? (
         <Card>
-          <Text style={styles.muted}>No conversations yet. Start a chat from a user's profile.</Text>
+          <Text style={styles.muted}>No conversations yet. Start a new chat above.</Text>
         </Card>
       ) : null}
       {chats.map((chat) => {
@@ -2030,6 +2275,38 @@ function VideoSummarizerScreen() {
         </Card>
       ) : null}
     </Shell>
+  );
+}
+
+function VideoCallWebScreen({ roomToken, token, onClose }: { roomToken: string; token: string; onClose: () => void }) {
+  const webUrl = `http://10.138.197.11:5173/app/video-call/${roomToken}`;
+  // Inject the auth token into localStorage before the page loads so the web app recognises the session
+  const injectedJs = `
+    (function() {
+      try { localStorage.setItem('yunafied_token', ${JSON.stringify(token)}); } catch(e) {}
+    })();
+    true;
+  `;
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#6d28d9', paddingHorizontal: 12, paddingVertical: 10 }}>
+          <Pressable onPress={onClose} style={{ marginRight: 12, padding: 4 }}>
+            <Text style={{ color: '#fff', fontSize: 18 }}>✕</Text>
+          </Pressable>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>Video Call</Text>
+        </View>
+        <WebView
+          source={{ uri: webUrl }}
+          injectedJavaScriptBeforeContentLoaded={injectedJs}
+          javaScriptEnabled
+          mediaPlaybackRequiresUserAction={false}
+          allowsInlineMediaPlayback
+          style={{ flex: 1 }}
+        />
+      </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -2273,7 +2550,9 @@ function PerformanceScreen() {
 
 function UsersScreen() {
   const { data, addUser, editUser, deleteUser } = useAppContext();
-  const [fullName, setFullName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [middleName2, setMiddleName2] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('student');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
@@ -2281,8 +2560,10 @@ function UsersScreen() {
 
   const create = async () => {
     try {
-      await addUser({ fullName, email, role, status, password });
-      setFullName('');
+      await addUser({ firstName, middleName: middleName2 || undefined, lastName, email, role, status, password });
+      setFirstName('');
+      setMiddleName2('');
+      setLastName('');
       setEmail('');
       Alert.alert('Success', 'User created.');
     } catch (error: any) {
@@ -2293,7 +2574,9 @@ function UsersScreen() {
   const toggleStatus = async (id: string, currentStatus: 'active' | 'inactive', row: any) => {
     try {
       await editUser(id, {
-        fullName: row.fullName,
+        firstName: row.firstName,
+        middleName: row.middleName,
+        lastName: row.lastName,
         email: row.email,
         role: row.role,
         status: currentStatus === 'active' ? 'inactive' : 'active',
@@ -2307,7 +2590,9 @@ function UsersScreen() {
     <Shell title="Users" subtitle="Admin user management">
       <Card>
         <Text style={styles.sectionTitle}>Create User</Text>
-        <TextInput value={fullName} onChangeText={setFullName} style={styles.input} placeholder="Full name" />
+        <TextInput value={firstName} onChangeText={setFirstName} style={styles.input} placeholder="First name" />
+        <TextInput value={middleName2} onChangeText={setMiddleName2} style={styles.input} placeholder="Middle name (optional)" />
+        <TextInput value={lastName} onChangeText={setLastName} style={styles.input} placeholder="Last name" />
         <TextInput value={email} onChangeText={setEmail} style={styles.input} placeholder="Email" autoCapitalize="none" />
         <TextInput value={role} onChangeText={(text) => setRole(text as UserRole)} style={styles.input} placeholder="Role" />
         <TextInput value={status} onChangeText={(text) => setStatus(text as 'active' | 'inactive')} style={styles.input} placeholder="Status" />
@@ -2341,7 +2626,9 @@ function UsersScreen() {
 
 function ProfileScreen() {
   const { session, updateProfile } = useAppContext();
-  const [fullName, setFullName] = useState(session!.user.fullName);
+  const [firstName, setFirstNameP] = useState(session!.user.firstName);
+  const [middleName, setMiddleNameP] = useState(session!.user.middleName || '');
+  const [lastName, setLastNameP] = useState(session!.user.lastName);
   const [email, setEmail] = useState(session!.user.email);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -2349,7 +2636,9 @@ function ProfileScreen() {
   const save = async () => {
     try {
       await updateProfile({
-        fullName,
+        firstName,
+        middleName: middleName || undefined,
+        lastName,
         email,
         currentPassword: currentPassword.trim() || undefined,
         newPassword: newPassword.trim() || undefined,
@@ -2365,8 +2654,12 @@ function ProfileScreen() {
   return (
     <Shell title="Profile Settings" subtitle="Manage account details">
       <Card>
-        <Text style={styles.label}>Full Name</Text>
-        <TextInput value={fullName} onChangeText={setFullName} style={styles.input} />
+        <Text style={styles.label}>First Name</Text>
+        <TextInput value={firstName} onChangeText={setFirstNameP} style={styles.input} />
+        <Text style={styles.label}>Middle Name (optional)</Text>
+        <TextInput value={middleName} onChangeText={setMiddleNameP} style={styles.input} />
+        <Text style={styles.label}>Last Name</Text>
+        <TextInput value={lastName} onChangeText={setLastNameP} style={styles.input} />
 
         <Text style={styles.label}>Email</Text>
         <TextInput value={email} onChangeText={setEmail} style={styles.input} autoCapitalize="none" />
@@ -2379,6 +2672,254 @@ function ProfileScreen() {
 
         <PillButton label="Save Changes" onPress={save} />
       </Card>
+    </Shell>
+  );
+}
+
+function AnalyticsScreen() {
+  const { data } = useAppContext();
+
+  const gradeDistribution = useMemo(() => {
+    const map: Record<string, number> = {};
+    data.submissions.forEach((s) => {
+      if (s.grade) {
+        const letter = s.grade.charAt(0).toUpperCase();
+        map[letter] = (map[letter] || 0) + 1;
+      }
+    });
+    return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [data.submissions]);
+
+  const graded = data.submissions.filter((s) => !!s.grade).length;
+  const pending = data.submissions.length - graded;
+
+  return (
+    <Shell title="Analytics" subtitle="Performance overview and grade distribution">
+      <View style={styles.rowWrap}>
+        <Card>
+          <Text style={styles.smallTitle}>Total Submissions</Text>
+          <Text style={styles.bigValue}>{data.submissions.length}</Text>
+        </Card>
+        <Card>
+          <Text style={styles.smallTitle}>Total Assignments</Text>
+          <Text style={styles.bigValue}>{data.assignments.length}</Text>
+        </Card>
+      </View>
+      <View style={styles.rowWrap}>
+        <Card>
+          <Text style={styles.smallTitle}>Graded</Text>
+          <Text style={[styles.bigValue, { color: '#16a34a' }]}>{graded}</Text>
+        </Card>
+        <Card>
+          <Text style={styles.smallTitle}>Pending Review</Text>
+          <Text style={[styles.bigValue, { color: '#d97706' }]}>{pending}</Text>
+        </Card>
+      </View>
+      <Card>
+        <Text style={styles.sectionTitle}>Grade Distribution</Text>
+        {gradeDistribution.length === 0 ? <Text style={styles.muted}>No graded submissions yet.</Text> : null}
+        {gradeDistribution.map(([letter, count]) => (
+          <View key={letter} style={[styles.listItemRow, { alignItems: 'center', marginBottom: 6 }]}>
+            <Text style={[styles.listTitle, { width: 40 }]}>{letter}</Text>
+            <View style={{ flex: 1, height: 18, backgroundColor: '#f3f4f6', borderRadius: 9, overflow: 'hidden', marginHorizontal: 8 }}>
+              <View
+                style={{
+                  width: data.submissions.length ? `${Math.round((count / data.submissions.length) * 100)}%` : '0%',
+                  height: '100%',
+                  backgroundColor: '#6d28d9',
+                  borderRadius: 9,
+                }}
+              />
+            </View>
+            <Text style={styles.muted}>{count}</Text>
+          </View>
+        ))}
+      </Card>
+      <Card>
+        <Text style={styles.sectionTitle}>Users</Text>
+        <View style={styles.rowWrap}>
+          <View style={{ marginRight: 20 }}>
+            <Text style={styles.muted}>Students</Text>
+            <Text style={styles.bigValue}>{data.users.filter((u) => u.role === 'student').length}</Text>
+          </View>
+          <View>
+            <Text style={styles.muted}>Teachers</Text>
+            <Text style={styles.bigValue}>{data.users.filter((u) => u.role === 'teacher').length}</Text>
+          </View>
+        </View>
+      </Card>
+    </Shell>
+  );
+}
+
+function MeetingsScreen() {
+  const { data, session, startVideoCall } = useAppContext();
+  const role = session!.user.role;
+  const isTeacher = role === 'teacher';
+  const [startingId, setStartingId] = useState<string | null>(null);
+
+  const sessions = useMemo(() => {
+    return data.schedules.filter((s) => {
+      if (s.status !== 'accepted') return false;
+      if (role === 'teacher') return s.teacherId === session!.user.id;
+      if (role === 'student') return s.studentId === session!.user.id;
+      return true;
+    });
+  }, [data.schedules, role, session]);
+
+  const startMeeting = async (scheduleId: string, studentId: string | null) => {
+    try {
+      setStartingId(scheduleId);
+      const room = await mobileApiClient.createMeeting({ scheduleId, studentId: studentId || undefined });
+      startVideoCall(room.roomToken);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to start meeting.');
+    } finally {
+      setStartingId(null);
+    }
+  };
+
+  return (
+    <Shell title="Meetings" subtitle="Video call sessions based on your schedules">
+      <Card>
+        <Text style={styles.sectionTitle}>Accepted Sessions</Text>
+        {sessions.length === 0 ? <Text style={styles.muted}>No accepted sessions found.</Text> : null}
+        {sessions.map((item) => (
+          <View key={item.id} style={[styles.listItemRow, { marginBottom: 10 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.listTitle}>{item.title}</Text>
+              <Text style={styles.muted}>{`${item.date} | ${item.startTime} – ${item.endTime}`}</Text>
+              <Text style={styles.muted}>Teacher: {item.teacherName}</Text>
+              {item.studentName ? <Text style={styles.muted}>Student: {item.studentName}</Text> : null}
+            </View>
+            {isTeacher ? (
+              <Pressable
+                onPress={() => startMeeting(item.id, item.studentId)}
+                disabled={startingId === item.id}
+              >
+                <Text style={styles.linkInline}>{startingId === item.id ? 'Starting...' : '▶ Start'}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ))}
+      </Card>
+      {role === 'student' ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Incoming Calls</Text>
+          <Text style={styles.muted}>When your teacher starts a session, an incoming call popup will appear automatically.</Text>
+        </Card>
+      ) : null}
+      {role === 'admin' ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Admin Note</Text>
+          <Text style={styles.muted}>Teachers initiate video calls from their accepted sessions. All accepted schedules are listed above.</Text>
+        </Card>
+      ) : null}
+    </Shell>
+  );
+}
+
+function YunaAIScreen() {
+  const { session } = useAppContext();
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [messages, setMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([
+    { role: 'assistant', content: 'Hi! I am YUNA AI. I can help you navigate pages, explain features, and answer study or system questions.' },
+  ]);
+
+  const send = async () => {
+    const content = input.trim();
+    if (!content || busy) return;
+    const userMsg = { role: 'user' as const, content };
+    const history = messages.slice(-8).map((m) => ({ role: m.role, content: m.content }));
+    setMessages((prev) => [...prev, userMsg]);
+    setInput('');
+    setBusy(true);
+    try {
+      const result = await mobileApiClient.askYunaAi({
+        message: content,
+        role: session!.user.role,
+        currentView: 'mobile',
+        history,
+      });
+      setMessages((prev) => [...prev, { role: 'assistant', content: result.answer }]);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'YUNA AI is unavailable right now.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Shell title="YUNA AI" subtitle="Your AI assistant for study and navigation help">
+      <Card>
+        {messages.map((m, index) => (
+          <View key={`${m.role}-${index}`} style={[styles.chatBubble, m.role === 'user' ? styles.userBubble : styles.aiBubble]}>
+            <Text style={m.role === 'user' ? styles.userText : styles.aiText}>{m.content}</Text>
+          </View>
+        ))}
+        <TextInput
+          value={input}
+          onChangeText={setInput}
+          style={[styles.input, styles.textarea]}
+          multiline
+          placeholder="Ask YUNA AI anything..."
+        />
+        <PillButton label={busy ? 'Thinking...' : 'Send'} onPress={send} disabled={busy || !input.trim()} />
+      </Card>
+    </Shell>
+  );
+}
+
+function AllStudentMilestonesScreen() {
+  const { data } = useAppContext();
+  const students = data.users.filter((u) => u.role === 'student');
+
+  return (
+    <Shell title="All Milestones" subtitle="Student progress and achievement overview">
+      {students.length === 0 ? (
+        <Card><Text style={styles.muted}>No students found.</Text></Card>
+      ) : null}
+      {students.map((student) => {
+        const subs = data.submissions.filter((s) => s.studentId === student.id);
+        const graded = subs.filter((s) => !!s.grade).length;
+        const grades = subs.filter((s) => s.grade).map((s) => parseFloat(s.grade || '0')).filter((n) => !isNaN(n));
+        const avg = grades.length ? (grades.reduce((a, b) => a + b, 0) / grades.length).toFixed(1) : null;
+        const badges = [
+          { icon: '🎯', earned: subs.length >= 1 },
+          { icon: '📚', earned: subs.length >= 5 },
+          { icon: '🏆', earned: subs.length >= 10 },
+          { icon: '⭐', earned: subs.some((s) => !!s.grade) },
+          { icon: '🎓', earned: subs.filter((s) => parseFloat(s.grade || '0') >= 60).length >= 5 },
+        ];
+        return (
+          <Card key={student.id}>
+            <Text style={styles.listTitle}>{student.fullName}</Text>
+            <Text style={styles.muted}>{student.email}</Text>
+            <View style={styles.rowWrap}>
+              <View style={{ marginRight: 16 }}>
+                <Text style={styles.muted}>Submitted</Text>
+                <Text style={styles.smallTitle}>{subs.length}</Text>
+              </View>
+              <View style={{ marginRight: 16 }}>
+                <Text style={styles.muted}>Graded</Text>
+                <Text style={styles.smallTitle}>{graded}</Text>
+              </View>
+              {avg ? (
+                <View>
+                  <Text style={styles.muted}>Avg Grade</Text>
+                  <Text style={styles.smallTitle}>{avg}</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={[styles.rowWrap, { marginTop: 6 }]}>
+              {badges.map((badge, i) => (
+                <Text key={i} style={{ fontSize: 22, opacity: badge.earned ? 1 : 0.2, marginRight: 6 }}>{badge.icon}</Text>
+              ))}
+            </View>
+          </Card>
+        );
+      })}
     </Shell>
   );
 }
@@ -2420,37 +2961,37 @@ function DrawerArea() {
       }}
       drawerContent={(props) => <CustomDrawerContent {...props} />}
     >
+      {/* All roles */}
       <Drawer.Screen name="Dashboard" component={DashboardScreen} />
       <Drawer.Screen name="Schedule" component={ScheduleScreen} />
-
-      {isStudent ? <Drawer.Screen name="Learning Materials" component={LearningMaterialsScreen} /> : null}
-
       <Drawer.Screen name="Assignments" component={AssignmentsScreen} />
-
-      {isStudent ? <Drawer.Screen name="Grades" component={GradesScreen} /> : null}
-
-      {isStudent ? <Drawer.Screen name="Enrollments" component={EnrollmentsScreen} /> : null}
-
-      {isStudent ? <Drawer.Screen name="AI Guide" component={AIGuideScreen} /> : null}
-
       <Drawer.Screen name="Gamified Learning" component={GamifiedLearningScreen} />
+      <Drawer.Screen name="Announcements" component={AnnouncementsScreen} />
+      <Drawer.Screen name="Chats" component={ChatsScreen} />
+      <Drawer.Screen name="Notifications" component={NotificationsScreen} />
+      <Drawer.Screen name="Meetings" component={MeetingsScreen} />
+      <Drawer.Screen name="YUNA AI" component={YunaAIScreen} />
 
+      {/* Student screens */}
+      {isStudent ? <Drawer.Screen name="Learning Materials" component={LearningMaterialsScreen} /> : null}
+      {isStudent ? <Drawer.Screen name="Grades" component={GradesScreen} /> : null}
+      {isStudent ? <Drawer.Screen name="Enrollments" component={EnrollmentsScreen} /> : null}
+      {isStudent ? <Drawer.Screen name="AI Guide" component={AIGuideScreen} /> : null}
       {isStudent ? <Drawer.Screen name="Milestones" component={MilestonesScreen} /> : null}
-
       {isStudent ? <Drawer.Screen name="Video Summarizer" component={VideoSummarizerScreen} /> : null}
-
       {isStudent ? <Drawer.Screen name="Word Translator" component={WordTranslatorScreen} /> : null}
 
-      {isStudent ? <Drawer.Screen name="Chats" component={ChatsScreen} /> : null}
-
-      <Drawer.Screen name="Announcements" component={AnnouncementsScreen} />
-
-      {isStudent ? <Drawer.Screen name="Notifications" component={NotificationsScreen} /> : null}
-
-      {isTeacherOrAdmin ? <Drawer.Screen name="Word Translator" component={WordTranslatorScreen} /> : null}
+      {/* Teacher / Admin screens */}
+      {isTeacherOrAdmin ? <Drawer.Screen name="Learning Materials" component={LearningMaterialsScreen} /> : null}
       {isTeacherOrAdmin ? <Drawer.Screen name="AI Guide" component={AIGuideScreen} /> : null}
+      {isTeacherOrAdmin ? <Drawer.Screen name="Video Summarizer" component={VideoSummarizerScreen} /> : null}
+      {isTeacherOrAdmin ? <Drawer.Screen name="Word Translator" component={WordTranslatorScreen} /> : null}
       {isTeacherOrAdmin ? <Drawer.Screen name="Performance" component={PerformanceScreen} /> : null}
+      {isTeacherOrAdmin ? <Drawer.Screen name="All Milestones" component={AllStudentMilestonesScreen} /> : null}
 
+      {/* Admin-only screens */}
+      {isAdmin ? <Drawer.Screen name="Enrollments" component={EnrollmentsScreen} /> : null}
+      {isAdmin ? <Drawer.Screen name="Analytics" component={AnalyticsScreen} /> : null}
       {isAdmin ? <Drawer.Screen name="Users" component={UsersScreen} /> : null}
 
       <Drawer.Screen name="Profile" component={ProfileScreen} />
@@ -2459,7 +3000,7 @@ function DrawerArea() {
 }
 
 export function AppNavigator() {
-  const { loading, session, incomingCall, acceptCall, declineCall } = useAppContext();
+  const { loading, session, incomingCall, acceptCall, declineCall, activeCallToken, endVideoCall } = useAppContext();
 
   if (loading) {
     return (
@@ -2494,6 +3035,13 @@ export function AppNavigator() {
           call={incomingCall}
           onAccept={() => acceptCall(incomingCall.roomToken)}
           onDecline={() => declineCall(incomingCall.roomToken)}
+        />
+      ) : null}
+      {activeCallToken && session ? (
+        <VideoCallWebScreen
+          roomToken={activeCallToken}
+          token={session.token}
+          onClose={endVideoCall}
         />
       ) : null}
     </>
