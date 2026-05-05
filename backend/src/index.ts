@@ -2673,6 +2673,11 @@ app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ message: "Unexpected server error" });
 });
 
+// Serve frontend for all non-API routes (SPA fallback)
+app.get("*", (_req, res) => {
+  res.sendFile(path.resolve(__dirname, "../public/index.html"));
+});
+
 async function start(): Promise<void> {
   await testDatabaseConnection();
   app.listen(port, () => {
