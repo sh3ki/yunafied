@@ -17,7 +17,12 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "YUNAFied needs camera access for video calls.",
+        "NSMicrophoneUsageDescription": "YUNAFied needs microphone access for video calls.",
+        "NSUserTrackingUsageDescription": "This app does not track you."
+      }
     },
     "android": {
       "adaptiveIcon": {
