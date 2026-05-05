@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Plus, FileText, CheckCircle, Clock, Paperclip, Download, X } from 'lucide-react';
+import { Plus, FileText, CheckCircle, Clock, Paperclip, Download, X, BookOpen, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { AssignmentItem, SubmissionItem } from '@/app/types/models';
@@ -9,7 +9,8 @@ interface AssignmentsProps {
   submissions: SubmissionItem[];
   role: 'admin' | 'teacher' | 'student';
   userId: string;
-  onCreateAssignment: (input: { title: string; description: string; dueDate: string; attachmentFile?: File | null }) => Promise<void>;
+  students?: { id: string; name: string }[];
+  onCreateAssignment: (input: { title: string; description: string; dueDate: string; attachmentFile?: File | null; rubricFile?: File | null; assignedStudentIds?: string[] }) => Promise<void>;
   onSubmitAssignment: (assignmentId: string, input: { file?: File | null; contentText?: string }) => Promise<void>;
   onGradeSubmission: (submissionId: string, grade: string, feedback: string) => Promise<void>;
   onToggleClose?: (assignmentId: string, isClosed: boolean) => Promise<void>;
@@ -21,6 +22,7 @@ export function Assignments({
   submissions,
   role,
   userId,
+  students = [],
   onCreateAssignment,
   onSubmitAssignment,
   onGradeSubmission,
@@ -50,6 +52,40 @@ export function Assignments({
   });
   const [newAssignmentFile, setNewAssignmentFile] = useState<File | null>(null);
   const assignmentFileRef = useRef<HTMLInputElement>(null);
+  const [newRubricFile, setNewRubricFile] = useState<File | null>(null);
+  const rubricFileRef = useRef<HTMLInputElement>(null);
+
+  const [assignToAll, setAssignToAll] = useState(true);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [studentSearch, setStudentSearch] = useState('');
+
+  const fuzzyMatch = (name: string, query: string): { match: boolean; indices: number[] } => {
+    if (!query.trim()) return { match: true, indices: [] };
+    const lName = name.toLowerCase();
+    const lQuery = query.toLowerCase().trim();
+    const indices: number[] = [];
+    let qi = 0;
+    for (let i = 0; i < lName.length && qi < lQuery.length; i++) {
+      if (lName[i] === lQuery[qi]) {
+        indices.push(i);
+        qi++;
+      }
+    }
+    return { match: qi === lQuery.length, indices };
+  };
+
+  const renderHighlighted = (name: string, indices: number[]) => {
+    if (indices.length === 0) return <span>{name}</span>;
+    const parts: React.ReactNode[] = [];
+    let last = 0;
+    indices.forEach((idx, i) => {
+      if (idx > last) parts.push(<span key={`t${i}`}>{name.slice(last, idx)}</span>);
+      parts.push(<span key={`h${i}`} className="text-indigo-600 font-semibold">{name[idx]}</span>);
+      last = idx + 1;
+    });
+    if (last < name.length) parts.push(<span key="end">{name.slice(last)}</span>);
+    return <>{parts}</>;
+  };
 
   const selectedAssignment = useMemo(
     () => assignments.find((a) => a.id === selectedAssignmentId) || null,
@@ -79,13 +115,28 @@ export function Assignments({
       return;
     }
 
+    if (!assignToAll && selectedStudentIds.length === 0) {
+      toast.error('Please select at least one student or assign to all.');
+      return;
+    }
+
     try {
       setSaving(true);
-      await onCreateAssignment({ ...newAssignment, attachmentFile: newAssignmentFile });
+      await onCreateAssignment({
+        ...newAssignment,
+        attachmentFile: newAssignmentFile,
+        rubricFile: newRubricFile,
+        assignedStudentIds: assignToAll ? undefined : selectedStudentIds,
+      });
       setIsCreateModalOpen(false);
       setNewAssignment({ title: '', description: '', dueDate: '' });
       setNewAssignmentFile(null);
+      setNewRubricFile(null);
       if (assignmentFileRef.current) assignmentFileRef.current.value = '';
+      if (rubricFileRef.current) rubricFileRef.current.value = '';
+      setAssignToAll(true);
+      setSelectedStudentIds([]);
+      setStudentSearch('');
       toast.success('Assignment posted successfully.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to create assignment.');
@@ -242,6 +293,18 @@ export function Assignments({
                       {selectedAssignment.attachmentFileName}
                     </a>
                   )}
+                  {selectedAssignment.rubricFileName && selectedAssignment.rubricUrl && (
+                    <a
+                      href={selectedAssignment.rubricUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download={selectedAssignment.rubricFileName}
+                      className="inline-flex items-center gap-1 text-emerald-600 hover:underline"
+                    >
+                      <BookOpen className="h-3.5 w-3.5" />
+                      Rubric: {selectedAssignment.rubricFileName}
+                    </a>
+                  )}
                 </div>
               </div>
 
@@ -395,8 +458,11 @@ export function Assignments({
 
       {isCreateModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 animate-in fade-in zoom-in-95">
-            <h3 className="text-xl font-bold mb-4">Create New Assignment</h3>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
+            <div className="px-6 pt-6 pb-4 border-b border-gray-100 shrink-0">
+              <h3 className="text-xl font-bold">Create New Assignment</h3>
+            </div>
+            <div className="overflow-y-auto flex-1 px-6 py-4">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
@@ -460,8 +526,128 @@ export function Assignments({
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Students will see a download link.</p>
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rubric / Grading Criteria (optional)</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    ref={rubricFileRef}
+                    type="file"
+                    accept={ALLOWED_ACCEPT}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      if (f) {
+                        const ext = '.' + f.name.split('.').pop()!.toLowerCase();
+                        if (!ALLOWED_EXTENSIONS.includes(ext)) {
+                          toast.error('Only PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX files are allowed.');
+                          e.target.value = '';
+                          return;
+                        }
+                      }
+                      setNewRubricFile(f);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => rubricFileRef.current?.click()}
+                    className="flex items-center gap-2 px-3 py-2 border border-emerald-200 rounded-lg text-sm text-emerald-700 hover:bg-emerald-50 transition"
+                  >
+                    <BookOpen className="h-4 w-4" />
+                    {newRubricFile ? newRubricFile.name : 'Choose Rubric'}
+                  </button>
+                  {newRubricFile && (
+                    <button type="button" onClick={() => { setNewRubricFile(null); if (rubricFileRef.current) rubricFileRef.current.value = ''; }} className="text-gray-400 hover:text-red-500">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Students can download this to understand grading criteria.</p>
+              </div>
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                  <Users className="h-4 w-4" />
+                  Assign To
+                </label>
+                <div className="flex gap-3 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setAssignToAll(true)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
+                      assignToAll
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    All Students
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAssignToAll(false)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition border ${
+                      !assignToAll
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    Specific Students
+                  </button>
+                </div>
+                {!assignToAll && (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="p-2 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+                      <Search className="h-4 w-4 text-gray-400 shrink-0" />
+                      <input
+                        type="text"
+                        placeholder="Search students..."
+                        className="flex-1 text-sm outline-none bg-transparent"
+                        value={studentSearch}
+                        onChange={(e) => setStudentSearch(e.target.value)}
+                      />
+                      {selectedStudentIds.length > 0 && (
+                        <span className="text-xs text-indigo-600 font-medium shrink-0">{selectedStudentIds.length} selected</span>
+                      )}
+                    </div>
+                    <div className="max-h-48 overflow-y-auto divide-y divide-gray-50">
+                      {(() => {
+                        const filtered = students
+                          .map((s) => ({ ...s, ...fuzzyMatch(s.name, studentSearch) }))
+                          .filter((s) => s.match);
+                        if (filtered.length === 0) {
+                          return <div className="text-center text-gray-400 text-sm py-4">No students found</div>;
+                        }
+                        return filtered.map((student) => {
+                          const checked = selectedStudentIds.includes(student.id);
+                          return (
+                            <label
+                              key={student.id}
+                              className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition select-none ${
+                                checked ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  setSelectedStudentIds((prev) =>
+                                    checked ? prev.filter((id) => id !== student.id) : [...prev, student.id],
+                                  )
+                                }
+                                className="accent-indigo-600 w-4 h-4 shrink-0"
+                              />
+                              <span className="text-sm text-gray-700">
+                                {renderHighlighted(student.name, student.indices)}
+                              </span>
+                            </label>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex justify-end gap-2 mt-6">
+            </div>
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 shrink-0">
               <button onClick={() => setIsCreateModalOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
                 Cancel
               </button>
