@@ -31,6 +31,8 @@ import { mobileApiClient } from '../api/client';
 import { useAppContext } from '../context/AppContext';
 import {
   AssignmentItem,
+  AuditLogItem,
+  CallHistoryItem,
   ChatMessageItem,
   ChatSummaryItem,
   EnrollmentRecordItem,
@@ -191,7 +193,7 @@ function LandingScreen({ navigation }: any) {
 
 function LoginScreen() {
   const { login, signup, verifyOtp, resendOtp } = useAppContext();
-  const [mode, setMode] = useState<'login' | 'signup' | 'otp'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'otp' | 'forgot' | 'reset'>('login');
   const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -200,10 +202,12 @@ function LoginScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // OTP state
+  // OTP state (email verify + password reset)
   const [pendingEmail, setPendingEmail] = useState('');
   const [otpValue, setOtpValue] = useState('');
   const [resendCountdown, setResendCountdown] = useState(0);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
   useEffect(() => {
     if (resendCountdown <= 0) return;
@@ -274,7 +278,105 @@ function LoginScreen() {
     }
   };
 
+  const onForgotPassword = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      Alert.alert('Validation', 'Please enter your email address first.');
+      return;
+    }
+    try {
+      setBusy(true);
+      await mobileApiClient.forgotPassword(trimmedEmail);
+      setPendingEmail(trimmedEmail);
+      setOtpValue('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setResendCountdown(60);
+      setMode('reset');
+      Alert.alert('Code sent', `A reset code has been sent to ${trimmedEmail}`);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send reset code.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onResetPassword = async () => {
+    if (otpValue.length !== 6) {
+      Alert.alert('Validation', 'Please enter the 6-digit code.');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      Alert.alert('Validation', 'New password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      Alert.alert('Validation', 'Passwords do not match.');
+      return;
+    }
+    try {
+      setBusy(true);
+      await mobileApiClient.resetPassword(pendingEmail, otpValue, newPassword);
+      Alert.alert('Success', 'Password reset successfully. You can now log in.');
+      setMode('login');
+      setOtpValue('');
+      setNewPassword('');
+      setConfirmNewPassword('');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to reset password.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onResendResetOtp = async () => {
+    if (resendCountdown > 0) return;
+    try {
+      await mobileApiClient.forgotPassword(pendingEmail);
+      setResendCountdown(60);
+      setOtpValue('');
+      Alert.alert('Code sent', 'A new reset code has been sent.');
+    } catch {
+      Alert.alert('Error', 'Failed to resend reset code.');
+    }
+  };
+
   const logoUri = 'https://yunafied.online/yunafied%20logo.png';
+
+  if (mode === 'forgot') {
+    return (
+      <SafeAreaView style={styles.loginBg}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.loginScroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.loginLogoRow}>
+            <View style={styles.logoWrap}><Image source={{ uri: logoUri }} style={styles.logoImg} resizeMode="contain" /></View>
+            <View>
+              <Text style={styles.loginBrand}>YUNAFied</Text>
+              <Text style={styles.loginBrandSub}>AI-Powered Tutorial System</Text>
+            </View>
+          </View>
+          <View style={styles.loginCard}>
+            <Text style={styles.loginCardTitle}>Forgot Password</Text>
+            <Text style={styles.loginCardSub}>Enter your email to receive a reset code</Text>
+            <Text style={styles.label}>Email Address</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              style={styles.input}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              placeholder="name@email.com"
+              placeholderTextColor="#9ca3af"
+            />
+            <PillButton label={busy ? 'Sending...' : 'Send Reset Code'} onPress={onForgotPassword} disabled={busy} />
+            <Pressable onPress={() => setMode('login')}>
+              <Text style={styles.linkText}>← Back to login</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   if (mode === 'otp') {
     return (
@@ -303,6 +405,50 @@ function LoginScreen() {
             />
             <PillButton label={busy ? 'Verifying...' : 'Verify & Continue'} onPress={onVerifyOtp} disabled={busy || otpValue.length !== 6} />
             <Pressable onPress={onResendOtp} disabled={resendCountdown > 0}>
+              <Text style={[styles.linkText, resendCountdown > 0 && { opacity: 0.4 }]}>
+                {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : 'Resend Code'}
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => setMode('login')}>
+              <Text style={styles.linkText}>← Back to login</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (mode === 'reset') {
+    return (
+      <SafeAreaView style={styles.loginBg}>
+        <StatusBar style="light" />
+        <ScrollView contentContainerStyle={styles.loginScroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.loginLogoRow}>
+            <View style={styles.logoWrap}><Image source={{ uri: logoUri }} style={styles.logoImg} resizeMode="contain" /></View>
+            <View>
+              <Text style={styles.loginBrand}>YUNAFied</Text>
+              <Text style={styles.loginBrandSub}>AI-Powered Tutorial System</Text>
+            </View>
+          </View>
+          <View style={styles.loginCard}>
+            <Text style={styles.loginCardTitle}>Reset Password</Text>
+            <Text style={styles.loginCardSub}>Enter the code sent to {pendingEmail}</Text>
+            <Text style={styles.label}>6-Digit Reset Code</Text>
+            <TextInput
+              value={otpValue}
+              onChangeText={(v) => setOtpValue(v.replace(/\D/g, '').slice(0, 6))}
+              style={[styles.input, { textAlign: 'center', fontSize: 26, letterSpacing: 10, fontWeight: 'bold' }]}
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="000000"
+              placeholderTextColor="#9ca3af"
+            />
+            <Text style={styles.label}>New Password</Text>
+            <TextInput value={newPassword} onChangeText={setNewPassword} secureTextEntry style={styles.input} placeholder="••••••••" placeholderTextColor="#9ca3af" />
+            <Text style={styles.label}>Confirm New Password</Text>
+            <TextInput value={confirmNewPassword} onChangeText={setConfirmNewPassword} secureTextEntry style={styles.input} placeholder="••••••••" placeholderTextColor="#9ca3af" />
+            <PillButton label={busy ? 'Resetting...' : 'Reset Password'} onPress={onResetPassword} disabled={busy || otpValue.length !== 6} />
+            <Pressable onPress={onResendResetOtp} disabled={resendCountdown > 0}>
               <Text style={[styles.linkText, resendCountdown > 0 && { opacity: 0.4 }]}>
                 {resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : 'Resend Code'}
               </Text>
@@ -385,6 +531,12 @@ function LoginScreen() {
               {mode === 'login' ? "Don't have an account? Sign up" : 'Already registered? Sign in'}
             </Text>
           </Pressable>
+
+          {mode === 'login' ? (
+            <Pressable onPress={() => { setMode('forgot'); }}>
+              <Text style={styles.linkText}>Forgot Password?</Text>
+            </Pressable>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -1447,18 +1599,71 @@ function AnnouncementsScreen() {
   const { data, session, createAnnouncement } = useAppContext();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [editTarget, setEditTarget] = useState<{ id: string; title: string; content: string } | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [saving, setSaving] = useState(false);
   const canCreate = session!.user.role === 'admin' || session!.user.role === 'teacher';
+  const userId = session!.user.id;
+  const [localAnnouncements, setLocalAnnouncements] = useState(data.announcements);
+
+  React.useEffect(() => {
+    setLocalAnnouncements(data.announcements);
+  }, [data.announcements]);
 
   const onCreate = async () => {
     try {
+      setSaving(true);
       await createAnnouncement({ title, content });
       setTitle('');
       setContent('');
       Alert.alert('Success', 'Announcement posted.');
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to post announcement.');
+    } finally {
+      setSaving(false);
     }
   };
+
+  const openEdit = (item: { id: string; title: string; content: string }) => {
+    setEditTarget(item);
+    setEditTitle(item.title);
+    setEditContent(item.content);
+  };
+
+  const onEditSave = async () => {
+    if (!editTarget) return;
+    try {
+      setSaving(true);
+      const updated = await mobileApiClient.updateAnnouncement(editTarget.id, { title: editTitle, content: editContent });
+      setLocalAnnouncements((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+      setEditTarget(null);
+      Alert.alert('Success', 'Announcement updated.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update announcement.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDelete = (item: { id: string; title: string }) => {
+    Alert.alert('Confirm Delete', `Delete "${item.title}"?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            await mobileApiClient.deleteAnnouncement(item.id);
+            setLocalAnnouncements((prev) => prev.filter((a) => a.id !== item.id));
+          } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to delete announcement.');
+          }
+        }
+      },
+    ]);
+  };
+
+  const canManage = (postedById: string) =>
+    session!.user.role === 'admin' || postedById === userId;
 
   return (
     <Shell title="Announcements" subtitle="School and class updates">
@@ -1473,15 +1678,48 @@ function AnnouncementsScreen() {
             placeholder="Write announcement"
             multiline
           />
-          <PillButton label="Post Announcement" onPress={onCreate} />
+          <PillButton label={saving ? 'Posting...' : 'Post Announcement'} onPress={onCreate} disabled={saving} />
+        </Card>
+      ) : null}
+
+      {editTarget ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Edit Announcement</Text>
+          <TextInput value={editTitle} onChangeText={setEditTitle} style={styles.input} placeholder="Title" />
+          <TextInput
+            value={editContent}
+            onChangeText={setEditContent}
+            style={[styles.input, styles.textarea]}
+            placeholder="Content"
+            multiline
+          />
+          <View style={styles.rowWrap}>
+            <PillButton label={saving ? 'Saving...' : 'Save Changes'} onPress={onEditSave} disabled={saving} />
+            <Pressable onPress={() => setEditTarget(null)} style={{ alignSelf: 'center' }}>
+              <Text style={styles.dangerText}>Cancel</Text>
+            </Pressable>
+          </View>
         </Card>
       ) : null}
 
       <Card>
         <Text style={styles.sectionTitle}>Recent</Text>
-        {data.announcements.map((item) => (
+        {localAnnouncements.length === 0 ? <Text style={styles.muted}>No announcements yet.</Text> : null}
+        {localAnnouncements.map((item) => (
           <View key={item.id} style={styles.listItem}>
-            <Text style={styles.listTitle}>{item.title}</Text>
+            <View style={styles.rowBetween}>
+              <Text style={[styles.listTitle, { flex: 1 }]}>{item.title}</Text>
+              {canManage(item.postedById) ? (
+                <View style={styles.rowWrap}>
+                  <Pressable onPress={() => openEdit(item)} style={{ marginLeft: 8 }}>
+                    <Text style={styles.linkInline}>Edit</Text>
+                  </Pressable>
+                  <Pressable onPress={() => onDelete(item)} style={{ marginLeft: 8 }}>
+                    <Text style={styles.dangerText}>Delete</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
             <Text style={styles.muted}>{item.content}</Text>
             <Text style={styles.muted}>By {item.postedByName}</Text>
           </View>
@@ -2989,8 +3227,176 @@ function YunaAIScreen() {
   );
 }
 
-function AllStudentMilestonesScreen() {
-  const { data } = useAppContext();
+function AuditLogsScreen() {
+  const [rows, setRows] = useState<AuditLogItem[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [filterAction, setFilterAction] = useState('');
+  const [filterEntityType, setFilterEntityType] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<AuditLogItem | null>(null);
+
+  const load = async (pg = 1) => {
+    try {
+      setBusy(true);
+      const result = await mobileApiClient.listAuditLogs({
+        action: filterAction || undefined,
+        entityType: filterEntityType || undefined,
+        dateFrom: filterDateFrom || undefined,
+        dateTo: filterDateTo || undefined,
+        page: pg,
+        pageSize: 20,
+      });
+      setRows(result.rows);
+      setTotal(result.total);
+      setPage(result.page);
+      setTotalPages(result.totalPages);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load audit logs.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => { load(1); }, [filterAction, filterEntityType, filterDateFrom, filterDateTo]);
+
+  const displayedRows = search.trim()
+    ? rows.filter((r) => {
+        const q = search.toLowerCase();
+        return (
+          r.actorName.toLowerCase().includes(q) ||
+          r.action.toLowerCase().includes(q) ||
+          r.entityType.toLowerCase().includes(q)
+        );
+      })
+    : rows;
+
+  return (
+    <Shell title="Audit Logs" subtitle={`${total} total log entries`}>
+      <Card>
+        <Text style={styles.sectionTitle}>Filters</Text>
+        <TextInput value={filterAction} onChangeText={setFilterAction} style={styles.input} placeholder="Action (e.g. CREATE_USER)" />
+        <TextInput value={filterEntityType} onChangeText={setFilterEntityType} style={styles.input} placeholder="Entity type (e.g. user)" />
+        <View style={styles.rowWrap}>
+          <TextInput value={filterDateFrom} onChangeText={setFilterDateFrom} style={[styles.input, styles.half]} placeholder="Date from YYYY-MM-DD" />
+          <TextInput value={filterDateTo} onChangeText={setFilterDateTo} style={[styles.input, styles.half]} placeholder="Date to YYYY-MM-DD" />
+        </View>
+        <TextInput value={search} onChangeText={setSearch} style={styles.input} placeholder="Search actor / action / entity…" />
+        <PillButton label={busy ? 'Loading...' : 'Refresh'} onPress={() => load(1)} disabled={busy} />
+      </Card>
+
+      {selected ? (
+        <Card>
+          <View style={styles.rowBetween}>
+            <Text style={styles.sectionTitle}>Log Detail</Text>
+            <Pressable onPress={() => setSelected(null)}><Text style={styles.dangerText}>✕ Close</Text></Pressable>
+          </View>
+          <Text style={styles.muted}>{`Action: ${selected.action}`}</Text>
+          <Text style={styles.muted}>{`Actor: ${selected.actorName} (${selected.actorRole})`}</Text>
+          <Text style={styles.muted}>{`Entity: ${selected.entityType}${selected.entityId ? ` #${selected.entityId}` : ''}`}</Text>
+          {selected.ipAddress ? <Text style={styles.muted}>{`IP: ${selected.ipAddress}`}</Text> : null}
+          <Text style={styles.muted}>{`Time: ${new Date(selected.createdAt).toLocaleString()}`}</Text>
+          {selected.payload ? (
+            <Text style={[styles.muted, { fontFamily: 'monospace', fontSize: 11 }]}>{JSON.stringify(selected.payload, null, 2)}</Text>
+          ) : null}
+        </Card>
+      ) : null}
+
+      <Card>
+        <Text style={styles.sectionTitle}>Logs</Text>
+        {!busy && displayedRows.length === 0 ? <Text style={styles.muted}>No log entries found.</Text> : null}
+        {displayedRows.map((row) => (
+          <Pressable key={row.id} onPress={() => setSelected(row)}>
+            <View style={[styles.listItemRow, { paddingVertical: 8 }]}>
+              <View style={styles.flexGrow}>
+                <Text style={styles.listTitle}>{row.action}</Text>
+                <Text style={styles.muted}>{`${row.actorName} · ${row.entityType}${row.entityId ? ` #${row.entityId}` : ''}`}</Text>
+                <Text style={styles.muted}>{new Date(row.createdAt).toLocaleString()}</Text>
+              </View>
+              <Text style={[styles.muted, { fontSize: 11 }]}>{row.actorRole}</Text>
+            </View>
+          </Pressable>
+        ))}
+        <View style={[styles.rowWrap, { marginTop: 8 }]}>
+          <PillButton label="Prev" onPress={() => load(Math.max(1, page - 1))} disabled={page <= 1 || busy} />
+          <PillButton label={`${page}/${totalPages}`} onPress={() => {}} disabled />
+          <PillButton label="Next" onPress={() => load(Math.min(totalPages, page + 1))} disabled={page >= totalPages || busy} />
+        </View>
+      </Card>
+    </Shell>
+  );
+}
+
+function MeetingHistoryScreen() {
+  const [rooms, setRooms] = useState<CallHistoryItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const load = async () => {
+    try {
+      setBusy(true);
+      const items = await mobileApiClient.listMeetingHistory();
+      setRooms(items);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load meeting history.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const filtered = search.trim()
+    ? rooms.filter((r) => {
+        const q = search.toLowerCase();
+        return (
+          r.teacherName.toLowerCase().includes(q) ||
+          (r.studentName || '').toLowerCase().includes(q) ||
+          r.roomToken.toLowerCase().includes(q)
+        );
+      })
+    : rooms;
+
+  const fmtDuration = (secs: number | null) => {
+    if (secs == null) return '—';
+    return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+  };
+
+  return (
+    <Shell title="Meeting History" subtitle={`${rooms.length} total rooms recorded`}>
+      <Card>
+        <TextInput value={search} onChangeText={setSearch} style={styles.input} placeholder="Search by teacher, student or token…" />
+        <PillButton label={busy ? 'Loading...' : 'Refresh'} onPress={load} disabled={busy} />
+      </Card>
+      {!busy && filtered.length === 0 ? (
+        <Card><Text style={styles.muted}>No meeting rooms found.</Text></Card>
+      ) : null}
+      {filtered.map((room) => (
+        <Card key={room.id}>
+          <Text style={styles.listTitle}>{room.teacherName} → {room.studentName || 'No student'}</Text>
+          <Text style={[styles.muted, { fontFamily: 'monospace', fontSize: 11 }]}>{room.roomToken.slice(0, 16)}…</Text>
+          <View style={styles.rowWrap}>
+            <View style={{ marginRight: 16 }}>
+              <Text style={styles.muted}>Started</Text>
+              <Text style={styles.smallTitle}>{new Date(room.startedAt).toLocaleString()}</Text>
+            </View>
+            <View>
+              <Text style={styles.muted}>Duration</Text>
+              <Text style={styles.smallTitle}>{fmtDuration(room.durationSeconds)}</Text>
+            </View>
+          </View>
+          {room.endedAt ? <Text style={styles.muted}>Ended: {new Date(room.endedAt).toLocaleString()}</Text> : null}
+        </Card>
+      ))}
+    </Shell>
+  );
+}
+
+function AllStudentMilestonesScreen() {  const { data } = useAppContext();
   const students = data.users.filter((u) => u.role === 'student');
 
   return (
@@ -3167,6 +3573,8 @@ function DrawerArea() {
       {isAdmin ? <Drawer.Screen name="Enrollments" component={EnrollmentsScreen} /> : null}
       {isAdmin ? <Drawer.Screen name="Analytics" component={AnalyticsScreen} /> : null}
       {isAdmin ? <Drawer.Screen name="Users" component={UsersScreen} /> : null}
+      {isAdmin ? <Drawer.Screen name="Audit Logs" component={AuditLogsScreen} /> : null}
+      {isAdmin ? <Drawer.Screen name="Meeting History" component={MeetingHistoryScreen} /> : null}
 
       <Drawer.Screen name="Profile" component={ProfileScreen} />
     </Drawer.Navigator>
