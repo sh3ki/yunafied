@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import multer from "multer";
 import ffmpegPath from "ffmpeg-static";
+import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { testDatabaseConnection, pool } from "./lib/db.js";
 import { AuthenticatedRequest, requireAuth, requireRole, signAccessToken } from "./middleware/auth.js";
@@ -25,7 +27,7 @@ const execFileAsync = promisify(execFile);
 const app = express();
 const port = Number(process.env.PORT || 4000);
 const service = new YunafiedService();
-const BOOTSTRAP_CACHE_TTL_MS = 8000;
+const BOOTSTRAP_CACHE_TTL_MS = 30000;
 const bootstrapCache = new Map<string, { expiresAt: number; data: unknown }>();
 
 interface GroqMessage {
@@ -486,17 +488,11 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const storage = multer.diskStorage({
-  destination: (_req: Request, _file: Express.Multer.File, cb: (error: Error | null, destination: string) => void) =>
-    cb(null, uploadsDir),
-  filename: (_req: Request, file: Express.Multer.File, cb: (error: Error | null, filename: string) => void) => {
-    const safeOriginal = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, "_");
-    cb(null, `${Date.now()}_${safeOriginal}`);
-  },
-});
+// All multer instances use memoryStorage — safe for Render Free Tier (no persistent disk)
+const memStorage = multer.memoryStorage();
 
 const upload = multer({
-  storage,
+  storage: memStorage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -510,7 +506,7 @@ const upload = multer({
 });
 
 const profileImageUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: memStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -524,7 +520,7 @@ const profileImageUpload = multer({
 });
 
 const learningMaterialUpload = multer({
-  storage,
+  storage: memStorage,
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -538,7 +534,7 @@ const learningMaterialUpload = multer({
 });
 
 const videoUpload = multer({
-  storage,
+  storage: memStorage,
   limits: { fileSize: 200 * 1024 * 1024 },
   fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -573,6 +569,31 @@ async function uploadProfileBufferToCloudinary(file: Express.Multer.File): Promi
   });
 }
 
+async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Promise<{ secureUrl: string; publicId: string }> {
+  return new Promise((resolve, reject) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: "yunafied/documents",
+        resource_type: "auto",
+        public_id: `${Date.now()}_${safeName}`,
+        use_filename: false,
+      },
+      (error, result) => {
+        if (error || !result) {
+          reject(error || new Error("Cloudinary document upload failed."));
+          return;
+        }
+        resolve({
+          secureUrl: result.secure_url,
+          publicId: result.public_id,
+        });
+      },
+    );
+    stream.end(file.buffer);
+  });
+}
+
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors());
 app.use(compression());
@@ -580,6 +601,38 @@ app.use(express.json());
 app.use(morgan("dev"));
 app.use(express.static(path.resolve(__dirname, "../public")));
 app.use("/uploads", express.static(uploadsDir));
+
+// Rate limiting — Render Free Tier: single instance, MemoryStore is acceptable
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many requests. Please try again later." },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "Too many authentication attempts. Please try again later." },
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: "AI rate limit reached. Please wait a moment." },
+});
+
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/forgot-password", authLimiter);
+app.use("/api/auth/reset-password", authLimiter);
+app.use("/api/ai", aiLimiter);
+app.use("/api", generalLimiter);
 
 const signupSchema = z.object({
   email: z.string().email(),
@@ -884,6 +937,8 @@ app.post("/api/auth/login", async (req: Request, res: Response, next: NextFuncti
 
     const sanitized = service.toAuthUser(user);
     const token = signAccessToken({ sub: sanitized.id, email: sanitized.email, role: sanitized.role });
+    // Update last_login_at non-blocking
+    pool.query("UPDATE users SET last_login_at = NOW() WHERE id = $1", [user.id]).catch(() => undefined);
     res.json({ token, user: sanitized });
   } catch (error) {
     next(error);
@@ -1068,17 +1123,33 @@ app.post(
   requireAuth,
   videoUpload.single("file"),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  let tmpVideoPath: string | null = null;
   try {
     const context = typeof req.body?.context === "string" ? req.body.context : undefined;
     const videoUrl = typeof req.body?.videoUrl === "string" ? req.body.videoUrl : undefined;
-    const uploadedVideoPath = req.file?.path;
+    const userId = req.auth?.sub;
+
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
 
     let transcript = "";
     let transcriptFetchError: string | null = null;
+    let sourceType: "youtube" | "upload" = "youtube";
+    let sourceReference: string | null = null;
 
-    if (uploadedVideoPath) {
-      transcript = await transcribeUploadedVideoWithWhisper(uploadedVideoPath);
+    if (req.file) {
+      // Write buffer to OS temp dir (writable on all platforms including Render)
+      sourceType = "upload";
+      sourceReference = req.file.originalname;
+      const safeExt = path.extname(req.file.originalname).toLowerCase() || ".mp4";
+      tmpVideoPath = path.join(os.tmpdir(), `yunafied_vid_${Date.now()}${safeExt}`);
+      await fs.writeFile(tmpVideoPath, req.file.buffer);
+      transcript = await transcribeUploadedVideoWithWhisper(tmpVideoPath);
     } else if (videoUrl) {
+      sourceType = "youtube";
+      sourceReference = videoUrl;
       const videoId = extractYoutubeVideoId(videoUrl);
       if (!videoId) {
         res.status(400).json({ message: "Please provide a valid YouTube URL." });
@@ -1108,16 +1179,65 @@ app.post(
 
     const structuredSummary = await summarizeTranscript({ transcript, context });
 
-    res.json(structuredSummary);
+    // Persist to video_summaries table so user can access history
+    const saved = await service.createVideoSummary({
+      userId,
+      sourceType,
+      sourceReference,
+      contextNote: context || null,
+      generatedTitle: structuredSummary.title,
+      summary: structuredSummary.summary,
+      takeaways: structuredSummary.takeaways,
+    });
+
+    res.json({ ...structuredSummary, id: saved.id, createdAt: saved.createdAt });
   } catch (error) {
     next(error);
   } finally {
-    if (req.file?.path) {
-      await fs.unlink(req.file.path).catch(() => undefined);
+    if (tmpVideoPath) {
+      await fs.unlink(tmpVideoPath).catch(() => undefined);
     }
   }
   },
 );
+
+const videoSummaryHistoryQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(20).default(10),
+});
+
+app.get("/api/ai/video-summaries", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const query = videoSummaryHistoryQuerySchema.parse(req.query);
+    const result = await service.listVideoSummaries({ userId, page: query.page, pageSize: query.pageSize });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/ai/video-summaries/:id", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const deleted = await service.deleteVideoSummary(req.params.id, userId);
+    if (!deleted) {
+      res.status(404).json({ message: "Video summary not found." });
+      return;
+    }
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -1131,12 +1251,18 @@ app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res
 
     const query = notificationsQuerySchema.parse(req.query);
     const requester = { id: userId, role };
-    const [assignments, submissions, schedules, announcements] = await Promise.all([
+    const [assignments, submissions, schedules, announcements, readState] = await Promise.all([
       service.listAssignments(),
       service.listSubmissionsForRole(requester),
       service.listSchedulesForRole(requester),
       service.listAnnouncements(),
+      service.getNotificationReadState(userId),
     ]);
+
+    const isRefRead = (id: string, createdAt: string): boolean => {
+      if (readState.allReadAt && new Date(createdAt) <= readState.allReadAt) return true;
+      return readState.readRefs.has(id);
+    };
 
     type NotificationItem = {
       id: string;
@@ -1146,20 +1272,23 @@ app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res
       priority: "low" | "medium" | "high";
       createdAt: string;
       actionView: string;
+      isRead: boolean;
     };
 
     const now = new Date();
     const notificationRows: NotificationItem[] = [];
 
     for (const announcement of announcements.slice(0, 8)) {
+      const id = `announcement:${announcement.id}`;
       notificationRows.push({
-        id: `announcement:${announcement.id}`,
+        id,
         type: "announcement",
         title: "New announcement",
         message: `${announcement.title} by ${announcement.postedByName}`,
         priority: "medium",
         createdAt: announcement.createdAt,
         actionView: "announcements",
+        isRead: isRefRead(id, announcement.createdAt),
       });
     }
 
@@ -1172,56 +1301,66 @@ app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res
         const submitted = mySubmissionByAssignment.has(assignment.id);
 
         if (!submitted && hoursUntilDue <= 72 && hoursUntilDue >= -24) {
+          const id = `assignment-due:${assignment.id}`;
           notificationRows.push({
-            id: `assignment-due:${assignment.id}`,
+            id,
             type: "assignment",
             title: "Assignment due soon",
             message: `${assignment.title} is due on ${assignment.dueDate}.`,
             priority: hoursUntilDue <= 24 ? "high" : "medium",
             createdAt: assignment.createdAt,
             actionView: "assignments",
+            isRead: isRefRead(id, assignment.createdAt),
           });
         }
       }
 
       for (const submission of submissions) {
         if (submission.grade) {
+          const id = `grade:${submission.id}`;
+          const createdAt = submission.gradedAt || submission.submittedAt;
           notificationRows.push({
-            id: `grade:${submission.id}`,
+            id,
             type: "grade",
             title: "Submission graded",
             message: `${submission.assignmentTitle}: grade ${submission.grade}`,
             priority: "medium",
-            createdAt: submission.gradedAt || submission.submittedAt,
+            createdAt,
             actionView: "grades",
+            isRead: isRefRead(id, createdAt),
           });
         }
       }
     } else {
       const ungraded = submissions.filter((item) => !item.grade);
       for (const submission of ungraded.slice(0, 12)) {
+        const id = `submission:${submission.id}`;
         notificationRows.push({
-          id: `submission:${submission.id}`,
+          id,
           type: "submission",
           title: "New submission needs grading",
           message: `${submission.studentName} submitted ${submission.assignmentTitle}.`,
           priority: "high",
           createdAt: submission.submittedAt,
           actionView: "assignments",
+          isRead: isRefRead(id, submission.submittedAt),
         });
       }
     }
 
     for (const schedule of schedules.slice(0, 12)) {
       if (schedule.status === "pending") {
+        const id = `schedule-pending:${schedule.id}`;
+        const createdAt = schedule.updatedAt || schedule.createdAt;
         notificationRows.push({
-          id: `schedule-pending:${schedule.id}`,
+          id,
           type: "schedule",
           title: "Schedule request pending",
           message: `${schedule.title} on ${schedule.date} ${schedule.startTime}-${schedule.endTime}`,
           priority: "medium",
-          createdAt: schedule.updatedAt || schedule.createdAt,
+          createdAt,
           actionView: "schedule",
+          isRead: isRefRead(id, createdAt),
         });
       }
     }
@@ -1883,7 +2022,7 @@ const createAssignmentSchema = z.object({
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
-app.post("/api/assignments", requireAuth, requireRole("admin", "teacher"), learningMaterialUpload.single("attachmentFile"), async (req: AuthenticatedRequest, res, next) => {
+app.post("/api/assignments", requireAuth, requireRole("admin", "teacher"), learningMaterialUpload.fields([{ name: "attachmentFile", maxCount: 1 }, { name: "rubricFile", maxCount: 1 }]), async (req: AuthenticatedRequest, res, next) => {
   try {
     const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
     const payload = createAssignmentSchema.parse(body);
@@ -1894,10 +2033,25 @@ app.post("/api/assignments", requireAuth, requireRole("admin", "teacher"), learn
       return;
     }
 
-    const attachmentFileName = req.file ? req.file.originalname : null;
-    const attachmentUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+    const attachmentFileObj = files?.attachmentFile?.[0];
+    const rubricFileObj = files?.rubricFile?.[0];
 
-    const assignment = await service.createAssignment({ ...payload, teacherId, attachmentFileName, attachmentUrl });
+    const attachmentFileName = attachmentFileObj ? attachmentFileObj.originalname : null;
+    let attachmentUrl: string | null = null;
+    if (attachmentFileObj) {
+      const uploaded = await uploadDocumentBufferToCloudinary(attachmentFileObj);
+      attachmentUrl = uploaded.secureUrl;
+    }
+
+    const rubricFileName = rubricFileObj ? rubricFileObj.originalname : null;
+    let rubricUrl: string | null = null;
+    if (rubricFileObj) {
+      const uploaded = await uploadDocumentBufferToCloudinary(rubricFileObj);
+      rubricUrl = uploaded.secureUrl;
+    }
+
+    const assignment = await service.createAssignment({ ...payload, teacherId, attachmentFileName, attachmentUrl, rubricFileName, rubricUrl });
     res.status(201).json(assignment);
     clearBootstrapCache();
   } catch (error) {
@@ -1945,7 +2099,11 @@ app.post(
       const body = req.body && typeof req.body === "object" ? (req.body as Record<string, unknown>) : {};
       const contentText = typeof body.contentText === "string" ? body.contentText : null;
       const fileName = req.file ? req.file.originalname : null;
-      const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
+      let fileUrl: string | null = null;
+      if (req.file) {
+        const uploaded = await uploadDocumentBufferToCloudinary(req.file);
+        fileUrl = uploaded.secureUrl;
+      }
 
       if (!contentText && !fileUrl) {
         res.status(400).json({ message: "Submission requires text content or a file." });
@@ -2340,12 +2498,14 @@ app.post(
         return;
       }
 
+      const uploaded = await uploadDocumentBufferToCloudinary(req.file);
+
       const row = await service.createLearningMaterial({
         title,
         description,
         subject,
         materialType: "file",
-        resourceUrl: `/uploads/${req.file.filename}`,
+        resourceUrl: uploaded.secureUrl,
         fileName: req.file.originalname,
         createdById: creatorId,
       });
@@ -2646,6 +2806,294 @@ app.patch("/api/meetings/:roomToken/status", requireAuth, async (req: Authentica
   }
 });
 
+// ─── Notification Mark-Read / Delete ─────────────────────────────────────────
+
+app.patch("/api/notifications/:id/read", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    await service.markNotificationRead(req.params.id, userId);
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/notifications/read-all", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    await service.markAllNotificationsRead(userId);
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/notifications/:id", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const deleted = await service.deleteNotification(req.params.id, userId);
+    if (!deleted) { res.status(404).json({ message: "Notification not found." }); return; }
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+// ─── Teacher Availability ─────────────────────────────────────────────────────
+
+app.get("/api/teacher/availability", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const teacherId = req.query.teacherId as string | undefined || req.auth?.sub;
+    if (!teacherId) { res.status(400).json({ message: "teacherId required" }); return; }
+    const blocks = await service.listAvailabilityByTeacher(teacherId);
+    res.json(blocks);
+  } catch (error) { next(error); }
+});
+
+app.post("/api/teacher/availability", requireAuth, requireRole("teacher", "admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const teacherId = req.auth?.sub;
+    if (!teacherId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const input = z.object({
+      dayOfWeek: z.number().int().min(0).max(6),
+      startTime: z.string(),
+      endTime: z.string(),
+    }).parse(req.body);
+    const block = await service.createAvailabilityBlock(teacherId, input);
+    res.status(201).json(block);
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/teacher/availability/:id", requireAuth, requireRole("teacher", "admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const teacherId = req.auth?.sub;
+    if (!teacherId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const deleted = await service.deleteAvailabilityBlock(req.params.id, teacherId);
+    if (!deleted) { res.status(404).json({ message: "Availability block not found." }); return; }
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+// ─── Milestones ───────────────────────────────────────────────────────────────
+
+app.get("/api/milestones", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    const role = req.auth?.role;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const targetId = (req.query.studentId as string) || (role === "student" ? userId : undefined);
+    if (!targetId) { res.status(400).json({ message: "studentId required" }); return; }
+    await service.initStudentMilestones(targetId);
+    const milestones = await service.listMilestones(targetId);
+    res.json(milestones);
+  } catch (error) { next(error); }
+});
+
+// ─── Student Tasks ────────────────────────────────────────────────────────────
+
+app.get("/api/student/tasks", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const tasks = await service.listStudentTasks(userId);
+    res.json(tasks);
+  } catch (error) { next(error); }
+});
+
+app.post("/api/student/tasks", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const input = z.object({
+      title: z.string().min(1).max(255),
+      dueDate: z.string().nullable().optional(),
+      source: z.string().optional(),
+      assignmentId: z.string().uuid().nullable().optional(),
+    }).parse(req.body);
+    const task = await service.createStudentTask(userId, input);
+    res.status(201).json(task);
+  } catch (error) { next(error); }
+});
+
+app.patch("/api/student/tasks/:id", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const input = z.object({
+      title: z.string().min(1).max(255).optional(),
+      dueDate: z.string().nullable().optional(),
+      isCompleted: z.boolean().optional(),
+    }).parse(req.body);
+    const task = await service.updateStudentTask(req.params.id, userId, input);
+    if (!task) { res.status(404).json({ message: "Task not found." }); return; }
+    res.json(task);
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/student/tasks/:id", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const deleted = await service.deleteStudentTask(req.params.id, userId);
+    if (!deleted) { res.status(404).json({ message: "Task not found." }); return; }
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+// ─── Badges & XP ─────────────────────────────────────────────────────────────
+
+app.get("/api/badges", requireAuth, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const badges = await service.listAllBadges();
+    res.json(badges);
+  } catch (error) { next(error); }
+});
+
+app.get("/api/student/badges", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const badges = await service.getStudentBadges(userId);
+    res.json(badges);
+  } catch (error) { next(error); }
+});
+
+app.get("/api/student/xp", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const xp = await service.getStudentXp(userId);
+    res.json(xp);
+  } catch (error) { next(error); }
+});
+
+// ─── Vocabulary ───────────────────────────────────────────────────────────────
+
+app.post("/api/translations/vocab", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const input = z.object({
+      sourceText: z.string().min(1),
+      translatedText: z.string().min(1),
+      sourceLanguage: z.string().min(1),
+      targetLanguage: z.string().min(1),
+    }).parse(req.body);
+    const item = await service.saveVocabItem(userId, input);
+    res.status(201).json(item);
+  } catch (error) { next(error); }
+});
+
+app.get("/api/translations/vocab", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const items = await service.listVocabItems(userId);
+    res.json(items);
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/translations/vocab/:id", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const deleted = await service.deleteVocabItem(req.params.id, userId);
+    if (!deleted) { res.status(404).json({ message: "Vocab item not found." }); return; }
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+// ─── Announcements Edit / Delete ──────────────────────────────────────────────
+
+app.put("/api/announcements/:id", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    const role = req.auth?.role;
+    if (!userId || !role) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const input = z.object({ title: z.string().min(1), content: z.string().min(1) }).parse(req.body);
+    const updated = await service.updateAnnouncement(req.params.id, userId, role as "admin" | "teacher", input);
+    if (!updated) { res.status(404).json({ message: "Announcement not found or permission denied." }); return; }
+    res.json(updated);
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/announcements/:id", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    const role = req.auth?.role;
+    if (!userId || !role) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const deleted = await service.softDeleteAnnouncement(req.params.id, userId, role as "admin" | "teacher");
+    if (!deleted) { res.status(404).json({ message: "Announcement not found or permission denied." }); return; }
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+// ─── Admin Routes ─────────────────────────────────────────────────────────────
+
+const auditLogsQuerySchema = z.object({
+  actorId: z.string().optional(),
+  action: z.string().optional(),
+  entityType: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+app.get("/api/admin/audit-logs", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const filters = auditLogsQuerySchema.parse(req.query);
+    const result = await service.listAuditLogs(filters);
+    res.json(result);
+  } catch (error) { next(error); }
+});
+
+app.get("/api/admin/meeting-history", requireAuth, requireRole("admin"), async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rooms = await service.listAllMeetingRoomsAdmin();
+    res.json(rooms);
+  } catch (error) { next(error); }
+});
+
+app.get("/api/admin/analytics", requireAuth, requireRole("admin"), async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const analytics = await service.getAdminAnalytics();
+    res.json(analytics);
+  } catch (error) { next(error); }
+});
+
+const csvImportUpload = multer({ storage: memStorage, limits: { fileSize: 2 * 1024 * 1024 } });
+
+app.post(
+  "/api/admin/users/import-csv",
+  requireAuth,
+  requireRole("admin"),
+  csvImportUpload.single("file"),
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.auth?.sub;
+      if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+      if (!req.file) { res.status(400).json({ message: "No file uploaded." }); return; }
+
+      const csvText = req.file.buffer.toString("utf-8");
+      const lines = csvText.split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length < 2) { res.status(400).json({ message: "CSV must have at least one data row." }); return; }
+
+      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+      const rows = lines.slice(1).map((line) => {
+        const cols = line.split(",").map((c) => c.trim());
+        return {
+          firstName: cols[headers.indexOf("first_name")] || "",
+          lastName: cols[headers.indexOf("last_name")] || "",
+          email: cols[headers.indexOf("email")] || "",
+          role: cols[headers.indexOf("role")] || "",
+          password: cols[headers.indexOf("password")] || "",
+        };
+      });
+
+      const result = await service.importUsersFromCsv(rows, userId);
+      res.json(result);
+    } catch (error) { next(error); }
+  },
+);
+
 app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (error instanceof z.ZodError) {
     res.status(400).json({ message: "Invalid request payload", issues: error.issues });
@@ -2672,6 +3120,26 @@ app.get("*", (_req, res) => {
 
 async function start(): Promise<void> {
   await testDatabaseConnection();
+  // Ensure notifications table exists (idempotent, handles un-migrated DBs)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      action_view TEXT,
+      priority TEXT NOT NULL DEFAULT 'medium',
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `).catch(() => { /* table may already exist */ });
+  // Ensure rubric columns exist on assignments
+  await pool.query(`
+    ALTER TABLE assignments
+      ADD COLUMN IF NOT EXISTS rubric_file_name TEXT,
+      ADD COLUMN IF NOT EXISTS rubric_url TEXT
+  `).catch(() => {});
   app.listen(port, () => {
     console.log(`Backend listening on http://localhost:${port}`);
   });
