@@ -516,9 +516,6 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
           {role === 'admin' ? (
             <Button onClick={openCreateModal} disabled={!selectedTeacherId}>Create Schedule</Button>
           ) : null}
-          {role === 'teacher' ? (
-            <Button onClick={openCreateModal}>Create Schedule</Button>
-          ) : null}
         </div>
       </div>
 
