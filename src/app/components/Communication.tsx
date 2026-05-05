@@ -1,21 +1,30 @@
 import React, { useState } from 'react';
-import { Megaphone, Plus, X, ChevronDown } from 'lucide-react';
+import { Megaphone, Plus, X, ChevronDown, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AnnouncementItem, UserRole } from '@/app/types/models';
+import { apiClient } from '@/app/services/apiClient';
 
 interface CommunicationProps {
   role: UserRole;
+  userId: string;
   announcements: AnnouncementItem[];
   onCreateAnnouncement: (input: { title: string; content: string }) => Promise<void>;
+  onAnnouncementsChange?: (updated: AnnouncementItem[]) => void;
 }
 
-export function Communication({ role, announcements, onCreateAnnouncement }: CommunicationProps) {
+export function Communication({ role, userId, announcements, onCreateAnnouncement, onAnnouncementsChange }: CommunicationProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ title: '', content: '' });
   const [openAnnouncement, setOpenAnnouncement] = useState<AnnouncementItem | null>(null);
+  const [editTarget, setEditTarget] = useState<AnnouncementItem | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', content: '' });
+  const [editSaving, setEditSaving] = useState(false);
 
   const canPost = role === 'teacher' || role === 'admin';
+
+  const canManage = (item: AnnouncementItem) =>
+    role === 'admin' || item.postedById === userId;
 
   const handlePost = async () => {
     if (!form.title || !form.content) {
@@ -29,10 +38,43 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
       setForm({ title: '', content: '' });
       setIsModalOpen(false);
       toast.success('Announcement posted.');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to post announcement.');
+    } catch (error: unknown) {
+      toast.error((error as Error).message || 'Failed to post announcement.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openEdit = (item: AnnouncementItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditTarget(item);
+    setEditForm({ title: item.title, content: item.content });
+  };
+
+  const handleEditSave = async () => {
+    if (!editTarget || !editForm.title || !editForm.content) return;
+    try {
+      setEditSaving(true);
+      const updated = await apiClient.updateAnnouncement(editTarget.id, editForm);
+      onAnnouncementsChange?.(announcements.map((a) => a.id === updated.id ? updated : a));
+      setEditTarget(null);
+      toast.success('Announcement updated.');
+    } catch (error: unknown) {
+      toast.error((error as Error).message || 'Failed to update announcement.');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDelete = async (item: AnnouncementItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm(`Delete announcement "${item.title}"?`)) return;
+    try {
+      await apiClient.deleteAnnouncement(item.id);
+      onAnnouncementsChange?.(announcements.filter((a) => a.id !== item.id));
+      toast.success('Announcement deleted.');
+    } catch (error: unknown) {
+      toast.error((error as Error).message || 'Failed to delete announcement.');
     }
   };
 
@@ -69,6 +111,24 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
               <h3 className="font-semibold text-gray-800 group-hover:text-violet-700 transition">{item.title}</h3>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-xs text-gray-400">{new Date(item.createdAt).toLocaleString()}</span>
+                {canManage(item) && (
+                  <>
+                    <button
+                      onClick={(e) => openEdit(item, e)}
+                      title="Edit"
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => handleDelete(item, e)}
+                      title="Delete"
+                      className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </>
+                )}
                 <ChevronDown className="h-4 w-4 text-gray-400 group-hover:text-violet-500 transition" />
               </div>
             </div>
@@ -104,6 +164,41 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               <p className="text-gray-700 leading-relaxed whitespace-pre-wrap text-base">{openAnnouncement.content}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 animate-in fade-in zoom-in-95">
+            <h3 className="text-xl font-bold mb-4">Edit Announcement</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={editForm.title}
+                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
+                <textarea
+                  className="w-full border rounded-lg px-3 py-2 h-36 resize-none"
+                  value={editForm.content}
+                  onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => setEditTarget(null)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                Cancel
+              </button>
+              <button disabled={editSaving} onClick={handleEditSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60">
+                {editSaving ? 'Saving…' : 'Save'}
+              </button>
             </div>
           </div>
         </div>
@@ -145,3 +240,4 @@ export function Communication({ role, announcements, onCreateAnnouncement }: Com
     </div>
   );
 }
+
