@@ -2,8 +2,10 @@ import Constants from 'expo-constants';
 import {
   AnnouncementItem,
   AssignmentItem,
+  AuditLogItem,
   AuthUser,
   BootstrapResponse,
+  CallHistoryItem,
   ChatMessageItem,
   ChatSummaryItem,
   EnrollmentRecordItem,
@@ -619,6 +621,54 @@ class MobileApiClient {
       body: JSON.stringify(input),
     });
   }
+
+  updateAnnouncement(id: string, input: { title: string; content: string }) {
+    return this.request<AnnouncementItem>(`/api/announcements/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteAnnouncement(id: string) {
+    return this.request<void>(`/api/announcements/${id}`, { method: 'DELETE' });
+  }
+
+  listAuditLogs(params?: {
+    action?: string;
+    entityType?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    const parts: string[] = [];
+    if (params?.action) parts.push(`action=${encodeURIComponent(params.action)}`);
+    if (params?.entityType) parts.push(`entityType=${encodeURIComponent(params.entityType)}`);
+    if (params?.dateFrom) parts.push(`dateFrom=${encodeURIComponent(params.dateFrom)}`);
+    if (params?.dateTo) parts.push(`dateTo=${encodeURIComponent(params.dateTo)}`);
+    if (params?.page) parts.push(`page=${encodeURIComponent(String(params.page))}`);
+    if (params?.pageSize) parts.push(`pageSize=${encodeURIComponent(String(params.pageSize))}`);
+    const qs = parts.join('&');
+    return this.request<{ rows: AuditLogItem[]; total: number; page: number; totalPages: number }>(
+      `/api/admin/audit-logs${qs ? `?${qs}` : ''}`,
+    );
+  }
+
+  listMeetingHistory() {
+    return this.request<CallHistoryItem[]>('/api/admin/meeting-history');
+  }
+
+  getMeeting(roomToken: string) {
+    return this.request<MeetingRoom>(`/api/meetings/${roomToken}`);
+  }
+
+  sendMeetingSignal(roomToken: string, payload: Record<string, unknown>) {
+    return this.request<MeetingRoom>(`/api/meetings/${roomToken}/signal`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
 }
 
 export const mobileApiClient = new MobileApiClient();
