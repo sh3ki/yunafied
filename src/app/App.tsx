@@ -32,6 +32,9 @@ import { LearningMaterials } from '@/app/components/LearningMaterials';
 import { VideoCall } from '@/app/components/VideoCall';
 import { IncomingCall } from '@/app/components/IncomingCall';
 import { Meetings } from '@/app/components/Meetings';
+import { AuditLogs } from '@/app/components/AuditLogs';
+import { MeetingHistory } from '@/app/components/MeetingHistory';
+import { Analytics } from '@/app/components/Analytics';
 import { apiClient } from '@/app/services/apiClient';
 import {
   AnnouncementItem,
@@ -143,7 +146,7 @@ interface AuthenticatedShellProps {
       responseNote?: string | null;
     },
   ) => Promise<void>;
-  onCreateAssignment: (payload: { title: string; description: string; dueDate: string; attachmentFile?: File | null }) => Promise<void>;
+  onCreateAssignment: (payload: { title: string; description: string; dueDate: string; attachmentFile?: File | null; rubricFile?: File | null; assignedStudentIds?: string[] }) => Promise<void>;
   onSubmitAssignment: (assignmentId: string, input: { file?: File | null; contentText?: string }) => Promise<void>;
   onGradeSubmission: (submissionId: string, grade: string, feedback: string) => Promise<void>;
   onToggleAssignmentClosed: (assignmentId: string, isClosed: boolean) => Promise<void>;
@@ -161,13 +164,14 @@ interface AuthenticatedShellProps {
   }) => Promise<AuthUser>;
   onStartMeeting: (roomToken: string) => void;
   chatUnreadTotal?: number;
+  notificationUnreadCount?: number;
 }
 
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'grades', 'users', 'profile'],
-  teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'gamified-learning', 'performance', 'profile'],
+  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'grades', 'users', 'analytics', 'audit-logs', 'meeting-history', 'profile'],
+  teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'gamified-learning', 'performance', 'video-summarizer', 'profile'],
   student: [
     'dashboard',
     'schedule',
@@ -211,6 +215,7 @@ function AuthenticatedShell({
   onUpdateMyProfile,
   onStartMeeting,
   chatUnreadTotal = 0,
+  notificationUnreadCount = 0,
 }: AuthenticatedShellProps) {
   const navigate = useNavigate();
   const params = useParams<{ view: string }>();
@@ -232,6 +237,7 @@ function AuthenticatedShell({
         onLogout={onLogout}
         userEmail={session.user.email}
         chatUnreadTotal={chatUnreadTotal}
+        notificationUnreadCount={notificationUnreadCount}
         schedulePendingCount={
           userRole === 'teacher'
             ? data.schedules.filter((s) => s.teacherId === session.user.id && s.status === 'pending').length
@@ -241,6 +247,13 @@ function AuthenticatedShell({
           userRole === 'student'
             ? data.assignments.filter(
                 (a) => !a.isClosed && !data.submissions.some((s) => s.assignmentId === a.id && s.studentId === session.user.id)
+              ).length
+            : 0
+        }
+        gradingPendingCount={
+          userRole === 'teacher'
+            ? data.submissions.filter(
+                (s) => s.grade === null || s.grade === ''
               ).length
             : 0
         }
@@ -549,7 +562,7 @@ function AuthenticatedShell({
 
               {currentView === 'announcements' && (
                 <div className="p-4 md:p-8 h-[calc(100vh-64px)]">
-                  <Communication role={userRole} announcements={data.announcements} onCreateAnnouncement={onCreateAnnouncement} />
+                  <Communication role={userRole} userId={session.user.id} announcements={data.announcements} onCreateAnnouncement={onCreateAnnouncement} />
                 </div>
               )}
 
@@ -565,7 +578,7 @@ function AuthenticatedShell({
                 <GamifiedLearning role={userRole} userId={session.user.id} />
               )}
 
-              {currentView === 'video-summarizer' && userRole === 'student' && <VideoSummarizer />}
+              {currentView === 'video-summarizer' && (userRole === 'student' || userRole === 'teacher') && <VideoSummarizer />}
 
               {currentView === 'word-translator' && userRole === 'student' && (
                 <WordTranslator
@@ -613,6 +626,7 @@ function AuthenticatedShell({
                   submissions={data.submissions}
                   role={userRole}
                   userId={session.user.id}
+                  students={data.users.filter((u) => u.role === 'student').map((u) => ({ id: u.id, name: u.fullName }))}
                   onCreateAssignment={onCreateAssignment}
                   onSubmitAssignment={onSubmitAssignment}
                   onGradeSubmission={onGradeSubmission}
@@ -640,6 +654,12 @@ function AuthenticatedShell({
                   onUploadProfileImage={onUploadProfileImage}
                 />
               )}
+
+              {currentView === 'analytics' && userRole === 'admin' && <Analytics />}
+
+              {currentView === 'audit-logs' && userRole === 'admin' && <AuditLogs />}
+
+              {currentView === 'meeting-history' && userRole === 'admin' && <MeetingHistory />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -882,7 +902,7 @@ export default function App() {
     upsertSchedule(updated);
   };
 
-  const createAssignment = async (payload: { title: string; description: string; dueDate: string; attachmentFile?: File | null }) => {
+  const createAssignment = async (payload: { title: string; description: string; dueDate: string; attachmentFile?: File | null; rubricFile?: File | null; assignedStudentIds?: string[] }) => {
     const created = await apiClient.createAssignment(payload);
     setData((prev) => ({ ...prev, assignments: [created, ...prev.assignments] }));
   };
@@ -941,6 +961,7 @@ export default function App() {
 
   const navigateView = (view: string) => {
     if (view === 'chats') setChatUnreadTotal(0);
+    if (view === 'notifications') setNotificationUnreadCount(0);
     navigate(`/app/${view}`);
   };
 
@@ -969,6 +990,23 @@ export default function App() {
   }, [session]);
 
   // ── Chat unread total polling ──────────────────────────────────────────────
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!session) return;
+    const fetchNotifUnread = async () => {
+      try {
+        const items = await apiClient.listNotificationsDb(50);
+        setNotificationUnreadCount(items.filter((n) => !n.isRead).length);
+      } catch (_e) {
+        // ignore
+      }
+    };
+    fetchNotifUnread();
+    const poll = setInterval(fetchNotifUnread, 15000);
+    return () => clearInterval(poll);
+  }, [session]);
+
   useEffect(() => {
     if (!session) return;
     const fetchUnread = async () => {
@@ -1068,6 +1106,7 @@ export default function App() {
                 onUpdateMyProfile={updateMyProfile}
                 onStartMeeting={handleStartMeeting}
                 chatUnreadTotal={chatUnreadTotal}
+                notificationUnreadCount={notificationUnreadCount}
               />
             ) : (
               <Navigate to="/login" replace />
