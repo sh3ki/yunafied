@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, promises as fs } from "node:fs";
 import bcrypt from "bcryptjs";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { v2 as cloudinary } from "cloudinary";
 import compression from "compression";
 import cors from "cors";
@@ -81,19 +81,9 @@ function clearBootstrapCache(): void {
 }
 
 // ---------------------------------------------------------------------------
-// SMTP / Email (Nodemailer) — family:4 forces IPv4 (required on Render free tier)
+// Email (Resend HTTP API — works on Render free tier, no SMTP port blocking)
 // ---------------------------------------------------------------------------
-const smtpTransporter = nodemailer.createTransport({
-  host:   process.env.SMTP_HOST   || "smtp.gmail.com",
-  port:   Number(process.env.SMTP_PORT || 587),
-  secure: process.env.SMTP_SECURE === "true",
-  family: 4, // Force IPv4 — Render free tier cannot reach IPv6 SMTP addresses
-  auth: {
-    user: process.env.SMTP_USER || "",
-    pass: process.env.SMTP_PASS || "",
-  },
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any);
+const resend = new Resend(process.env.RESEND_API_KEY || "");
 
 function generateOtp(): string {
   // Cryptographically random 6-digit code
@@ -102,7 +92,7 @@ function generateOtp(): string {
 }
 
 async function sendOtpEmail(toEmail: string, otpCode: string, firstName: string, isReset = false): Promise<void> {
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@yunafied.edu";
+  const from = process.env.RESEND_FROM || "onboarding@resend.dev";
   const subject = isReset ? "Your YUNAFied Password Reset Code" : "Your YUNAFied Verification Code";
   const heading = isReset ? `Password Reset Request` : `Welcome to YUNAFied, ${firstName}!`;
   const description = isReset
@@ -111,7 +101,7 @@ async function sendOtpEmail(toEmail: string, otpCode: string, firstName: string,
   const footer = isReset
     ? "If you did not request a password reset, you can safely ignore this email."
     : "If you did not create a YUNAFied account, you can safely ignore this email.";
-  await smtpTransporter.sendMail({
+  await resend.emails.send({
     from: `YUNAFied <${from}>`,
     to: toEmail,
     subject,
