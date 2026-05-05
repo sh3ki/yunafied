@@ -67,6 +67,8 @@ export interface AssignmentItem {
   createdAt: string;
   attachmentFileName?: string | null;
   attachmentUrl?: string | null;
+  rubricFileName?: string | null;
+  rubricUrl?: string | null;
   isClosed?: boolean;
 }
 
@@ -95,9 +97,23 @@ export interface AnnouncementItem {
 }
 
 export interface VideoSummaryResponse {
+  id?: string;
   title: string;
   summary: string[];
   takeaways: string[];
+  createdAt?: string;
+}
+
+export interface VideoSummaryItem {
+  id: string;
+  userId: string;
+  sourceType: "youtube" | "upload";
+  sourceReference: string | null;
+  contextNote: string | null;
+  generatedTitle: string | null;
+  summary: string[];
+  takeaways: string[];
+  createdAt: string;
 }
 
 export interface NotificationItem {
@@ -271,4 +287,113 @@ export interface GamifiedLeaderboardItem {
   bestCorrectAnswers: number;
   totalQuestions: number;
   completedAt: string;
+}
+
+export interface AuditLogItem {
+  id: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  payload: Record<string, unknown> | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export interface TeacherAvailabilityItem {
+  id: string;
+  teacherId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface VocabItem {
+  id: string;
+  userId: string;
+  sourceText: string;
+  translatedText: string;
+  sourceLanguage: string;
+  targetLanguage: string;
+  createdAt: string;
+}
+
+export interface CallHistoryItem {
+  id: string;
+  roomToken: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string | null;
+  studentName: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  endedBy: string | null;
+}
+
+export interface StudentTaskItem {
+  id: string;
+  studentId: string;
+  title: string;
+  dueDate: string | null;
+  isCompleted: boolean;
+  source: string;
+  assignmentId: string | null;
+  createdAt: string;
+}
+
+export interface MilestoneItem {
+  id: string;
+  studentId: string;
+  type: string;
+  title: string;
+  description: string;
+  isUnlocked: boolean;
+  unlockedAt: string | null;
+  createdAt: string;
+}
+
+export interface BadgeItem {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  icon: string;
+  earnedAt?: string;
+  createdAt?: string;
+}
+
+export interface StudentXpItem {
+  studentId: string;
+  totalXp: number;
+  level: string;
+  updatedAt: string;
+}
+
+export interface AdminAnalyticsItem {
+  totalStudents: number;
+  totalTeachers: number;
+  totalSessions: number;
+  totalSubmissions: number;
+  totalAnnouncements: number;
+  totalEnrollments: number;
+  gradeDistribution: { grade: string; count: number }[];
+  monthlySessionCounts: { month: string; count: number }[];
+  topStudents: { studentId: string; studentName: string; avgGrade: number; submissionCount: number }[];
+}
+
+export interface NotificationDbItem {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  actionView: string | null;
+  priority: string;
+  isRead: boolean;
+  createdAt: string;
 }
