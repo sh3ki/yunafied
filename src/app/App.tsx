@@ -70,7 +70,9 @@ interface AuthenticatedShellProps {
   onNavigateView: (view: string) => void;
   onLogout: () => void;
   onAddUser: (input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     role: UserRole;
     status: UserStatus;
@@ -81,7 +83,9 @@ interface AuthenticatedShellProps {
   onEditUser: (
     id: string,
     input: {
-      fullName: string;
+      firstName: string;
+      middleName?: string;
+      lastName: string;
       email: string;
       role: UserRole;
       status: UserStatus;
@@ -146,7 +150,9 @@ interface AuthenticatedShellProps {
   onCreateAnnouncement: (input: { title: string; content: string }) => Promise<void>;
   onUploadProfileImage: (file: File) => Promise<{ secureUrl: string; publicId: string }>;
   onUpdateMyProfile: (input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     profileImageUrl?: string | null;
     profileImagePublicId?: string | null;
@@ -720,9 +726,17 @@ export default function App() {
     navigate('/app/dashboard', { replace: true });
   };
 
-  const handleSignup = async (fullName: string, email: string, pass: string): Promise<string> => {
-    const result = await apiClient.register({ fullName, email, password: pass });
+  const handleSignup = async (firstName: string, middleName: string, lastName: string, email: string, pass: string): Promise<string> => {
+    const result = await apiClient.register({ firstName, middleName: middleName || undefined, lastName, email, password: pass });
     return result.email;
+  };
+
+  const handleForgotPassword = async (email: string) => {
+    await apiClient.forgotPassword(email);
+  };
+
+  const handleResetPassword = async (email: string, otp: string, newPassword: string) => {
+    await apiClient.resetPassword(email, otp, newPassword);
   };
 
   const handleVerifyOtp = async (email: string, otp: string) => {
@@ -747,7 +761,9 @@ export default function App() {
   };
 
   const addUser = async (input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     role: UserRole;
     status: UserStatus;
@@ -762,7 +778,9 @@ export default function App() {
   const editUser = async (
     id: string,
     input: {
-      fullName: string;
+      firstName: string;
+      middleName?: string;
+      lastName: string;
       email: string;
       role: UserRole;
       status: UserStatus;
@@ -903,7 +921,9 @@ export default function App() {
   };
 
   const updateMyProfile = async (input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     profileImageUrl?: string | null;
     profileImagePublicId?: string | null;
@@ -1005,7 +1025,7 @@ export default function App() {
             session ? (
               <Navigate to="/app/dashboard" replace />
             ) : (
-              <Login onLogin={handleLogin} onSignup={handleSignup} onVerifyOtp={handleVerifyOtp} onResendOtp={handleResendOtp} />
+              <Login onLogin={handleLogin} onSignup={handleSignup} onForgotPassword={handleForgotPassword} onResetPassword={handleResetPassword} onVerifyOtp={handleVerifyOtp} onResendOtp={handleResendOtp} />
             )
           }
         />
