@@ -576,6 +576,8 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
       {
         folder: "yunafied/documents",
         resource_type: "auto",
+        type: "upload",
+        access_mode: "public",
         public_id: `${Date.now()}_${safeName}`,
         use_filename: false,
       },
