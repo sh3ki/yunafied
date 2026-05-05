@@ -594,7 +594,17 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
   });
 }
 
-app.use(helmet({ crossOriginResourcePolicy: false }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "img-src": ["'self'", "data:", "https://res.cloudinary.com"],
+      },
+    },
+  }),
+);
 app.use(cors());
 app.use(compression());
 app.use(express.json());
