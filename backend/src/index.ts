@@ -99,20 +99,28 @@ function generateOtp(): string {
   return String(num).padStart(6, "0");
 }
 
-async function sendOtpEmail(toEmail: string, otpCode: string, fullName: string): Promise<void> {
+async function sendOtpEmail(toEmail: string, otpCode: string, firstName: string, isReset = false): Promise<void> {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@yunafied.edu";
+  const subject = isReset ? "Your YUNAFied Password Reset Code" : "Your YUNAFied Verification Code";
+  const heading = isReset ? `Password Reset Request` : `Welcome to YUNAFied, ${firstName}!`;
+  const description = isReset
+    ? `Use the code below to reset your password. It expires in <strong>10 minutes</strong>.`
+    : `Use the verification code below to activate your account. It expires in <strong>10 minutes</strong>.`;
+  const footer = isReset
+    ? "If you did not request a password reset, you can safely ignore this email."
+    : "If you did not create a YUNAFied account, you can safely ignore this email.";
   await smtpTransporter.sendMail({
     from: `"YUNAFied" <${from}>`,
     to: toEmail,
-    subject: "Your YUNAFied Verification Code",
+    subject,
     html: `
       <div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#f8f9ff;padding:32px;border-radius:12px">
-        <h2 style="color:#4f46e5;margin:0 0 8px">Welcome to YUNAFied, ${fullName}!</h2>
-        <p style="color:#374151;margin:0 0 24px">Use the verification code below to activate your account. It expires in <strong>10 minutes</strong>.</p>
+        <h2 style="color:#4f46e5;margin:0 0 8px">${heading}</h2>
+        <p style="color:#374151;margin:0 0 24px">${description}</p>
         <div style="background:#fff;border:2px solid #e0e7ff;border-radius:8px;padding:24px;text-align:center;margin-bottom:24px">
           <span style="font-size:36px;font-weight:900;letter-spacing:10px;color:#4f46e5">${otpCode}</span>
         </div>
-        <p style="color:#6b7280;font-size:13px;margin:0">If you did not create a YUNAFied account, you can safely ignore this email.</p>
+        <p style="color:#6b7280;font-size:13px;margin:0">${footer}</p>
       </div>
     `,
   });
@@ -584,7 +592,9 @@ app.use("/uploads", express.static(uploadsDir));
 const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
-  fullName: z.string().min(2),
+  firstName: z.string().min(2),
+  middleName: z.string().optional(),
+  lastName: z.string().min(2),
 });
 
 const loginSchema = z.object({
@@ -667,7 +677,9 @@ const materialLinkSchema = z.object({
 
 const updateProfileSchema = z
   .object({
-    fullName: z.string().min(2),
+    firstName: z.string().min(2),
+    middleName: z.string().optional(),
+    lastName: z.string().min(2),
     email: z.string().email(),
     profileImageUrl: z.string().url().nullable().optional(),
     profileImagePublicId: z.string().nullable().optional(),
@@ -710,7 +722,9 @@ app.post("/api/auth/register", async (req: Request, res: Response, next: NextFun
     // Create user as unverified — OTP must be confirmed before they can log in
     const user = await service.createUser({
       email: payload.email,
-      fullName: payload.fullName,
+      firstName: payload.firstName,
+      middleName: payload.middleName,
+      lastName: payload.lastName,
       role: "student",
       status: "active",
       profileImageUrl: null,
@@ -726,7 +740,7 @@ app.post("/api/auth/register", async (req: Request, res: Response, next: NextFun
 
     // Send verification email (non-blocking — don't fail registration if SMTP is misconfigured)
     try {
-      await sendOtpEmail(user.email, otpCode, user.fullName);
+      await sendOtpEmail(user.email, otpCode, user.firstName);
     } catch (emailErr) {
       console.error("[SMTP] Failed to send OTP email:", emailErr);
     }
@@ -781,12 +795,60 @@ app.post("/api/auth/resend-otp", async (req: Request, res: Response, next: NextF
     await service.saveOtp(row.id, otpCode, expiresAt);
 
     try {
-      await sendOtpEmail(row.email, otpCode, row.full_name);
+      await sendOtpEmail(row.email, otpCode, row.first_name);
     } catch (emailErr) {
       console.error("[SMTP] Failed to resend OTP email:", emailErr);
     }
 
     res.json({ message: "A new verification code has been sent to your email." });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/forgot-password", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+
+    const row = await service.findUserWithPasswordByEmail(email);
+    if (row) {
+      const otpCode = generateOtp();
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      await service.saveOtp(row.id, otpCode, expiresAt);
+
+      try {
+        await sendOtpEmail(row.email, otpCode, row.first_name, true);
+      } catch (emailErr) {
+        console.error("[SMTP] Failed to send password reset OTP email:", emailErr);
+      }
+    }
+
+    // Always respond the same to avoid user enumeration
+    res.json({ message: "If that email exists, a password reset code has been sent." });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/auth/reset-password", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email, otp, newPassword } = z
+      .object({ email: z.string().email(), otp: z.string().length(6), newPassword: z.string().min(6) })
+      .parse(req.body);
+
+    const row = await service.findUserWithPasswordByEmail(email);
+    if (!row || !row.otp_code || row.otp_code !== otp || !row.otp_expires_at || new Date(row.otp_expires_at) < new Date()) {
+      res.status(400).json({ message: "Invalid or expired reset code." });
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await pool.query(
+      "UPDATE users SET password_hash = $1, otp_code = NULL, otp_expires_at = NULL WHERE id = $2",
+      [passwordHash, row.id],
+    );
+
+    res.json({ message: "Password reset successfully." });
   } catch (error) {
     next(error);
   }
@@ -820,7 +882,7 @@ app.post("/api/auth/login", async (req: Request, res: Response, next: NextFuncti
       const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
       await service.saveOtp(user.id, otpCode, expiresAt);
       try {
-        await sendOtpEmail(user.email, otpCode, user.full_name);
+        await sendOtpEmail(user.email, otpCode, user.first_name);
       } catch (emailErr) {
         console.error("[SMTP] Failed to send OTP on login attempt:", emailErr);
       }
@@ -890,7 +952,9 @@ app.patch("/api/profile", requireAuth, async (req: AuthenticatedRequest, res: Re
 
     const updated = await service.updateUser(userId, {
       email: payload.email,
-      fullName: payload.fullName,
+      firstName: payload.firstName,
+      middleName: payload.middleName,
+      lastName: payload.lastName,
       role: currentUser.role,
       status: currentUser.status,
       profileImageUrl:
@@ -1234,7 +1298,9 @@ app.get("/api/users", requireAuth, requireRole("admin"), async (_req, res, next)
 
 const createUserSchema = z.object({
   email: z.string().email(),
-  fullName: z.string().min(2),
+  firstName: z.string().min(2),
+  middleName: z.string().optional(),
+  lastName: z.string().min(2),
   role: z.enum(["admin", "teacher", "student"]),
   status: z.enum(["active", "inactive"]).default("active"),
   profileImageUrl: z.string().url().nullable().optional(),
@@ -1254,7 +1320,9 @@ app.post("/api/users", requireAuth, requireRole("admin"), async (req, res, next)
     const passwordHash = await bcrypt.hash(payload.password, 10);
     const user = await service.createUser({
       email: payload.email,
-      fullName: payload.fullName,
+      firstName: payload.firstName,
+      middleName: payload.middleName,
+      lastName: payload.lastName,
       role: payload.role,
       status: payload.status,
       profileImageUrl: payload.profileImageUrl || null,
@@ -1271,7 +1339,9 @@ app.post("/api/users", requireAuth, requireRole("admin"), async (req, res, next)
 
 const updateUserSchema = z.object({
   email: z.string().email(),
-  fullName: z.string().min(2),
+  firstName: z.string().min(2),
+  middleName: z.string().optional(),
+  lastName: z.string().min(2),
   role: z.enum(["admin", "teacher", "student"]),
   status: z.enum(["active", "inactive"]),
   profileImageUrl: z.string().url().nullable().optional(),
@@ -1286,7 +1356,9 @@ app.put("/api/users/:id", requireAuth, requireRole("admin"), async (req: Authent
 
     const updated = await service.updateUser(req.params.id, {
       email: payload.email,
-      fullName: payload.fullName,
+      firstName: payload.firstName,
+      middleName: payload.middleName,
+      lastName: payload.lastName,
       role: payload.role,
       status: payload.status,
       profileImageUrl: payload.profileImageUrl || null,
