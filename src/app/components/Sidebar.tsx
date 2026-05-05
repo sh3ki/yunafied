@@ -11,6 +11,7 @@ import {
   LogOut,
   Flag,
   Megaphone,
+  ShieldCheck,
   Sparkles,
   UserRound,
   Video
@@ -28,6 +29,8 @@ interface SidebarProps {
   schedulePendingCount?: number;
   assignmentPendingCount?: number;
   meetingsTodayCount?: number;
+  notificationUnreadCount?: number;
+  gradingPendingCount?: number;
   user: {
     fullName: string;
     email: string;
@@ -35,27 +38,30 @@ interface SidebarProps {
   };
 }
 
-export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, user, chatUnreadTotal = 0, schedulePendingCount = 0, assignmentPendingCount = 0, meetingsTodayCount = 0 }: SidebarProps) {
+export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, user, chatUnreadTotal = 0, schedulePendingCount = 0, assignmentPendingCount = 0, meetingsTodayCount = 0, notificationUnreadCount = 0, gradingPendingCount = 0 }: SidebarProps) {
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'teacher', 'student'] },
+    { id: 'performance', label: 'Performance', icon: BarChart, roles: ['admin', 'teacher'] },
+    { id: 'analytics', label: 'Analytics', icon: BarChart, roles: ['admin'] },
     { id: 'schedule', label: 'Scheduling', icon: Calendar, roles: ['teacher', 'student'] },
     { id: 'meetings', label: 'Video Meetings', icon: Video, roles: ['teacher'] },
     { id: 'materials', label: 'Learning Materials', icon: Library, roles: ['admin', 'teacher', 'student'] },
     { id: 'assignments', label: 'Assignments', icon: BookOpen, roles: ['teacher', 'student'] },
-    { id: 'grades', label: 'Grades & Feedback', icon: BookOpen, roles: ['teacher', 'student'] },
-    { id: 'enrollments', label: 'Enrollments', icon: Users, roles: ['admin', 'teacher', 'student'] },
+    { id: 'grades', label: 'Grades/Feedback', icon: BookOpen, roles: ['teacher', 'student'] },
+    { id: 'enrollments', label: 'Enrollments', icon: Users, roles: ['admin'] },
     { id: 'ai-guide', label: 'AI Guide Bot', icon: Sparkles, roles: ['student'] },
     { id: 'gamified-learning', label: 'Gamified Learning', icon: Sparkles, roles: ['admin', 'teacher', 'student'] },
     { id: 'milestones', label: 'Milestones', icon: Flag, roles: ['student'] },
-    { id: 'video-summarizer', label: 'Video Summarizer', icon: Sparkles, roles: ['student'] },
+    { id: 'video-summarizer', label: 'Video Summarizer', icon: Video, roles: ['student', 'teacher'] },
     { id: 'word-translator', label: 'Word Translator', icon: BookOpen, roles: ['student'] },
     { id: 'chats', label: 'Chats', icon: MessageCircle, roles: ['admin', 'teacher', 'student'] },
     { id: 'announcements', label: 'Announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student'] },
     { id: 'notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'teacher', 'student'] },
-    { id: 'performance', label: 'Performance', icon: BarChart, roles: ['admin', 'teacher'] },
     { id: 'users', label: 'Users', icon: Users, roles: ['admin'] },
+    { id: 'audit-logs', label: 'Audit Logs', icon: ShieldCheck, roles: ['admin'] },
+    { id: 'meeting-history', label: 'Meeting History', icon: Video, roles: ['admin'] },
     { id: 'profile', label: 'Profile Settings', icon: UserRound, roles: ['admin', 'teacher', 'student'] },
   ];
 
@@ -123,6 +129,16 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
               {item.id === 'meetings' && meetingsTodayCount > 0 && (
                 <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
                   {meetingsTodayCount > 99 ? '99+' : meetingsTodayCount}
+                </span>
+              )}
+              {item.id === 'notifications' && notificationUnreadCount > 0 && (
+                <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                  {notificationUnreadCount > 99 ? '99+' : notificationUnreadCount}
+                </span>
+              )}
+              {item.id === 'grades' && gradingPendingCount > 0 && (
+                <span className="ml-auto inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                  {gradingPendingCount > 99 ? '99+' : gradingPendingCount}
                 </span>
               )}
             </button>
