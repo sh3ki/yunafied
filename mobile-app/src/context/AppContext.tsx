@@ -21,23 +21,25 @@ interface AppContextValue {
   data: BootstrapResponse;
   dashboardStats: { upcoming: number; assignments: number; users: number; pending: number };
   login: (email: string, password: string) => Promise<void>;
-  signup: (fullName: string, email: string, password: string) => Promise<{ needsVerification: boolean; email: string }>;
+  signup: (firstName: string, middleName: string, lastName: string, email: string, password: string) => Promise<{ needsVerification: boolean; email: string }>;
   verifyOtp: (email: string, otp: string) => Promise<void>;
   resendOtp: (email: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   updateProfile: (input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     profileImageUrl?: string | null;
     profileImagePublicId?: string | null;
     currentPassword?: string;
     newPassword?: string;
   }) => Promise<AuthUser>;
-  addUser: (input: { fullName: string; email: string; role: UserRole; status: UserStatus; password: string }) => Promise<void>;
+  addUser: (input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; password: string }) => Promise<void>;
   editUser: (
     id: string,
-    input: { fullName: string; email: string; role: UserRole; status: UserStatus; password?: string },
+    input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; password?: string },
   ) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   createSchedule: (input: {
@@ -97,6 +99,9 @@ interface AppContextValue {
   dismissIncomingCall: () => void;
   acceptCall: (roomToken: string) => Promise<void>;
   declineCall: (roomToken: string) => Promise<void>;
+  activeCallToken: string | null;
+  startVideoCall: (roomToken: string) => void;
+  endVideoCall: () => void;
 }
 
 const initialData: BootstrapResponse = {
@@ -114,7 +119,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session>(null);
   const [data, setData] = useState<BootstrapResponse>(initialData);
   const [incomingCall, setIncomingCall] = useState<MeetingRoom | null>(null);
+  const [activeCallToken, setActiveCallToken] = useState<string | null>(null);
   const incomingCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startVideoCall = (roomToken: string) => setActiveCallToken(roomToken);
+  const endVideoCall = () => setActiveCallToken(null);
 
   const dashboardStats = useMemo(() => {
     const pending = data.submissions.filter((s) => !s.grade).length;
@@ -165,8 +174,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setData(bootstrap);
   };
 
-  const signup = async (fullName: string, email: string, password: string): Promise<{ needsVerification: boolean; email: string }> => {
-    return mobileApiClient.register({ fullName, email, password });
+  const signup = async (firstName: string, middleName: string, lastName: string, email: string, password: string): Promise<{ needsVerification: boolean; email: string }> => {
+    return mobileApiClient.register({ firstName, middleName: middleName || undefined, lastName, email, password });
   };
 
   const verifyOtp = async (email: string, otp: string) => {
@@ -190,7 +199,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateProfile = async (input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     profileImageUrl?: string | null;
     profileImagePublicId?: string | null;
@@ -206,14 +217,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return response.user;
   };
 
-  const addUser = async (input: { fullName: string; email: string; role: UserRole; status: UserStatus; password: string }) => {
+  const addUser = async (input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; password: string }) => {
     const user = await mobileApiClient.createUser(input);
     setData((prev) => ({ ...prev, users: [user, ...prev.users] }));
   };
 
   const editUser = async (
     id: string,
-    input: { fullName: string; email: string; role: UserRole; status: UserStatus; password?: string },
+    input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; password?: string },
   ) => {
     const user = await mobileApiClient.updateUser(id, input);
     setData((prev) => ({ ...prev, users: prev.users.map((u) => (u.id === id ? user : u)) }));
@@ -344,6 +355,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const acceptCall = async (roomToken: string) => {
     await mobileApiClient.updateMeetingStatus(roomToken, 'active');
     setIncomingCall(null);
+    setActiveCallToken(roomToken);
   };
 
   const declineCall = async (roomToken: string) => {
@@ -412,6 +424,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dismissIncomingCall,
     acceptCall,
     declineCall,
+    activeCallToken,
+    startVideoCall,
+    endVideoCall,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
