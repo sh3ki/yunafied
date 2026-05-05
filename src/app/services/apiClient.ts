@@ -1,7 +1,11 @@
 import {
+  AdminAnalyticsItem,
   AnnouncementItem,
   AssignmentItem,
+  AuditLogItem,
   AuthUser,
+  BadgeItem,
+  CallHistoryItem,
   ChatMessageItem,
   ChatSummaryItem,
   EnrollmentRecordItem,
@@ -16,12 +20,19 @@ import {
   MeetingRoomStatus,
   MessageItem,
   MessageUserItem,
+  MilestoneItem,
+  NotificationDbItem,
   NotificationItem,
   ScheduleItem,
+  StudentTaskItem,
+  StudentXpItem,
   SubmissionItem,
+  TeacherAvailabilityItem,
   TranslationHistoryItem,
   UserRole,
   UserStatus,
+  VocabItem,
+  VideoSummaryItem,
   VideoSummaryResponse,
 } from "@/app/types/models";
 
@@ -450,6 +461,8 @@ class YunafiedApiClient {
     description: string;
     dueDate: string;
     attachmentFile?: File | null;
+    rubricFile?: File | null;
+    assignedStudentIds?: string[];
   }): Promise<AssignmentItem> {
     const formData = new FormData();
     formData.append("title", payload.title);
@@ -457,6 +470,12 @@ class YunafiedApiClient {
     formData.append("dueDate", payload.dueDate);
     if (payload.attachmentFile) {
       formData.append("attachmentFile", payload.attachmentFile);
+    }
+    if (payload.rubricFile) {
+      formData.append("rubricFile", payload.rubricFile);
+    }
+    if (payload.assignedStudentIds && payload.assignedStudentIds.length > 0) {
+      formData.append("assignedStudentIds", JSON.stringify(payload.assignedStudentIds));
     }
     return this.request<AssignmentItem>("/api/assignments", {
       method: "POST",
@@ -579,6 +598,17 @@ class YunafiedApiClient {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  }
+
+  async listVideoSummaries(params?: { page?: number; pageSize?: number }): Promise<{ rows: VideoSummaryItem[]; total: number; page: number; pageSize: number; totalPages: number }> {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set("page", String(params.page));
+    if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
+    return this.request(`/api/ai/video-summaries?${qs.toString()}`);
+  }
+
+  async deleteVideoSummary(id: string): Promise<void> {
+    await this.request(`/api/ai/video-summaries/${id}`, { method: "DELETE" });
   }
 
   async listNotifications(limit = 20): Promise<NotificationItem[]> {
@@ -759,6 +789,148 @@ class YunafiedApiClient {
     return this.request<MeetingRoom>(`/api/meetings/${roomToken}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
+    });
+  }
+
+  // ─── Notifications ──────────────────────────────────────────────────────────
+
+  async markNotificationRead(id: string): Promise<void> {
+    await this.request<void>(`/api/notifications/${id}/read`, { method: "PATCH" });
+  }
+
+  async markAllNotificationsRead(): Promise<void> {
+    await this.request<void>("/api/notifications/read-all", { method: "PATCH" });
+  }
+
+  async deleteNotification(id: string): Promise<void> {
+    await this.request<void>(`/api/notifications/${id}`, { method: "DELETE" });
+  }
+
+  async listNotificationsDb(limit = 30): Promise<NotificationDbItem[]> {
+    return this.request<NotificationDbItem[]>(`/api/notifications?limit=${limit}`);
+  }
+
+  // ─── Teacher Availability ────────────────────────────────────────────────────
+
+  async listTeacherAvailability(teacherId?: string): Promise<TeacherAvailabilityItem[]> {
+    const qs = teacherId ? `?teacherId=${teacherId}` : "";
+    return this.request<TeacherAvailabilityItem[]>(`/api/teacher/availability${qs}`);
+  }
+
+  async createTeacherAvailability(payload: { dayOfWeek: number; startTime: string; endTime: string }): Promise<TeacherAvailabilityItem> {
+    return this.request<TeacherAvailabilityItem>("/api/teacher/availability", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteTeacherAvailability(id: string): Promise<void> {
+    await this.request<void>(`/api/teacher/availability/${id}`, { method: "DELETE" });
+  }
+
+  // ─── Milestones ──────────────────────────────────────────────────────────────
+
+  async listMilestones(studentId?: string): Promise<MilestoneItem[]> {
+    const qs = studentId ? `?studentId=${studentId}` : "";
+    return this.request<MilestoneItem[]>(`/api/milestones${qs}`);
+  }
+
+  // ─── Student Tasks ───────────────────────────────────────────────────────────
+
+  async listStudentTasks(): Promise<StudentTaskItem[]> {
+    return this.request<StudentTaskItem[]>("/api/student/tasks");
+  }
+
+  async createStudentTask(payload: { title: string; dueDate?: string | null; source?: string; assignmentId?: string | null }): Promise<StudentTaskItem> {
+    return this.request<StudentTaskItem>("/api/student/tasks", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateStudentTask(id: string, payload: { title?: string; dueDate?: string | null; isCompleted?: boolean }): Promise<StudentTaskItem> {
+    return this.request<StudentTaskItem>(`/api/student/tasks/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteStudentTask(id: string): Promise<void> {
+    await this.request<void>(`/api/student/tasks/${id}`, { method: "DELETE" });
+  }
+
+  // ─── Badges & XP ─────────────────────────────────────────────────────────────
+
+  async listBadges(): Promise<BadgeItem[]> {
+    return this.request<BadgeItem[]>("/api/badges");
+  }
+
+  async listStudentBadges(): Promise<BadgeItem[]> {
+    return this.request<BadgeItem[]>("/api/student/badges");
+  }
+
+  async getStudentXp(): Promise<StudentXpItem> {
+    return this.request<StudentXpItem>("/api/student/xp");
+  }
+
+  // ─── Vocabulary ───────────────────────────────────────────────────────────────
+
+  async saveVocabItem(payload: { sourceText: string; translatedText: string; sourceLanguage: string; targetLanguage: string }): Promise<VocabItem> {
+    return this.request<VocabItem>("/api/translations/vocab", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async listVocabItems(): Promise<VocabItem[]> {
+    return this.request<VocabItem[]>("/api/translations/vocab");
+  }
+
+  async deleteVocabItem(id: string): Promise<void> {
+    await this.request<void>(`/api/translations/vocab/${id}`, { method: "DELETE" });
+  }
+
+  // ─── Announcements Edit / Delete ─────────────────────────────────────────────
+
+  async updateAnnouncement(id: string, payload: { title: string; content: string }): Promise<AnnouncementItem> {
+    return this.request<AnnouncementItem>(`/api/announcements/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteAnnouncement(id: string): Promise<void> {
+    await this.request<void>(`/api/announcements/${id}`, { method: "DELETE" });
+  }
+
+  // ─── Admin ────────────────────────────────────────────────────────────────────
+
+  async listAuditLogs(params: { actorId?: string; action?: string; entityType?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }): Promise<{ rows: AuditLogItem[]; total: number; page: number; pageSize: number; totalPages: number }> {
+    const qs = new URLSearchParams();
+    if (params.actorId) qs.set("actorId", params.actorId);
+    if (params.action) qs.set("action", params.action);
+    if (params.entityType) qs.set("entityType", params.entityType);
+    if (params.dateFrom) qs.set("dateFrom", params.dateFrom);
+    if (params.dateTo) qs.set("dateTo", params.dateTo);
+    qs.set("page", String(params.page || 1));
+    qs.set("pageSize", String(params.pageSize || 20));
+    return this.request(`/api/admin/audit-logs?${qs.toString()}`);
+  }
+
+  async listMeetingHistory(): Promise<CallHistoryItem[]> {
+    return this.request<CallHistoryItem[]>("/api/admin/meeting-history");
+  }
+
+  async getAdminAnalytics(): Promise<AdminAnalyticsItem> {
+    return this.request<AdminAnalyticsItem>("/api/admin/analytics");
+  }
+
+  async importUsersFromCsv(file: File): Promise<{ success: number; failed: number; errors: { row: number; reason: string }[] }> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return this.request("/api/admin/users/import-csv", {
+      method: "POST",
+      body: formData,
     });
   }
 }
