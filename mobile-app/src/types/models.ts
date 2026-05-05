@@ -241,6 +241,32 @@ export interface MessageUserItem {
   profileImageUrl: string | null;
 }
 
+export interface AuditLogItem {
+  id: string;
+  actorId: string;
+  actorName: string;
+  actorRole: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  payload: Record<string, unknown> | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export interface CallHistoryItem {
+  id: string;
+  roomToken: string;
+  teacherId: string;
+  teacherName: string;
+  studentId: string | null;
+  studentName: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  endedBy: string | null;
+}
+
 export interface ChatSummaryItem {
   id: string;
   name: string | null;
