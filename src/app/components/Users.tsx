@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ImagePlus, Mail, Pencil, Search, Shield, Trash2, UserPlus } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ImagePlus, Mail, Pencil, Search, Shield, Trash2, Upload, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthUser, UserRole, UserStatus } from '@/app/types/models';
+import { apiClient } from '@/app/services/apiClient';
 
 interface ProfileUploadResult {
   secureUrl: string;
@@ -53,6 +54,27 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | UserStatus>('all');
   const [page, setPage] = useState(1);
+
+  // CSV import
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvResult, setCsvResult] = useState<{ imported: number; failed: number; errors: string[] } | null>(null);
+
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setCsvImporting(true);
+      const result = await apiClient.importUsersFromCsv(file);
+      setCsvResult(result);
+      toast.success(`Imported ${result.imported} users.`);
+    } catch (err: any) {
+      toast.error(err.message || 'CSV import failed.');
+    } finally {
+      setCsvImporting(false);
+      if (csvInputRef.current) csvInputRef.current.value = '';
+    }
+  };
 
   const [newUser, setNewUser] = useState<CreateUserInput>({
     firstName: '',
@@ -231,13 +253,24 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
           <h2 className="text-2xl font-bold text-gray-800">User Management</h2>
           <p className="text-gray-500">Administrator Module</p>
         </div>
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition"
-        >
-          <UserPlus className="h-4 w-4" />
-          Add User
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
+          <button
+            onClick={() => csvInputRef.current?.click()}
+            disabled={csvImporting}
+            className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition disabled:opacity-60"
+          >
+            <Upload className="h-4 w-4" />
+            {csvImporting ? 'Importing…' : 'Import CSV'}
+          </button>
+          <button
+            onClick={() => setIsCreateOpen(true)}
+            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition"
+          >
+            <UserPlus className="h-4 w-4" />
+            Add User
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -581,6 +614,35 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
               </button>
               <button disabled={saving || uploadingImage} onClick={handleEdit} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-60">
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Result Modal */}
+      {csvResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <h3 className="text-lg font-bold text-gray-800">CSV Import Result</h3>
+            <div className="flex gap-4">
+              <div className="bg-emerald-50 text-emerald-700 rounded-xl px-4 py-3 flex-1 text-center">
+                <div className="text-2xl font-bold">{csvResult.imported}</div>
+                <div className="text-sm">Imported</div>
+              </div>
+              <div className="bg-rose-50 text-rose-700 rounded-xl px-4 py-3 flex-1 text-center">
+                <div className="text-2xl font-bold">{csvResult.failed}</div>
+                <div className="text-sm">Failed</div>
+              </div>
+            </div>
+            {csvResult.errors.length > 0 && (
+              <div className="border border-rose-100 rounded-lg p-3 bg-rose-50 max-h-48 overflow-y-auto text-xs text-rose-700 space-y-1">
+                {csvResult.errors.map((e, i) => <p key={i}>{e}</p>)}
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button onClick={() => setCsvResult(null)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                Close
               </button>
             </div>
           </div>
