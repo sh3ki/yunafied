@@ -3,6 +3,12 @@ import { Award, BookOpen, CheckCircle, Clock, Download, MessageSquare, Star } fr
 import { clsx } from 'clsx';
 import { AssignmentItem, SubmissionItem } from '@/app/types/models';
 
+/** Force download from Cloudinary by injecting fl_attachment transformation flag. */
+function toDownloadUrl(url: string): string {
+  if (!url || !url.includes('res.cloudinary.com')) return url;
+  return url.replace(/\/upload\/(?!fl_attachment)/, '/upload/fl_attachment/');
+}
+
 interface GradesFeedbackProps {
   assignments: AssignmentItem[];
   submissions: SubmissionItem[];
@@ -139,7 +145,7 @@ export function GradesFeedback({ assignments, submissions, role, userId, onGrade
                     )}
                     {assignment?.rubricFileName && assignment?.rubricUrl && (
                       <a
-                        href={assignment.rubricUrl}
+                        href={toDownloadUrl(assignment.rubricUrl)}
                         target="_blank"
                         rel="noopener noreferrer"
                         download={assignment.rubricFileName}
@@ -259,7 +265,7 @@ export function GradesFeedback({ assignments, submissions, role, userId, onGrade
                   )}
                   {assignment?.rubricFileName && assignment?.rubricUrl && (
                     <a
-                      href={assignment.rubricUrl}
+                      href={toDownloadUrl(assignment.rubricUrl)}
                       target="_blank"
                       rel="noopener noreferrer"
                       download={assignment.rubricFileName}
