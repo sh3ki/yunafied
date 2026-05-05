@@ -27,6 +27,9 @@ import {
 interface DbUserRow {
   id: string;
   email: string;
+  first_name: string;
+  middle_name: string | null;
+  last_name: string;
   full_name: string;
   role: UserRole;
   status: UserStatus;
@@ -203,7 +206,7 @@ export class YunafiedService {
 
   async findUserWithPasswordByEmail(email: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users WHERE email = $1",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users WHERE email = $1",
       [email],
     );
 
@@ -212,7 +215,7 @@ export class YunafiedService {
 
   async findUserWithPasswordById(userId: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users WHERE id = $1",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users WHERE id = $1",
       [userId],
     );
 
@@ -254,6 +257,9 @@ export class YunafiedService {
     return {
       id: row.id,
       email: row.email,
+      firstName: row.first_name,
+      middleName: row.middle_name,
+      lastName: row.last_name,
       fullName: row.full_name,
       role: row.role,
       status: row.status,
@@ -265,7 +271,7 @@ export class YunafiedService {
 
   async listUsers(): Promise<AuthUser[]> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users ORDER BY created_at DESC",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users ORDER BY created_at DESC",
     );
 
     return result.rows.map((row) => this.toAuthUser(row));
@@ -273,10 +279,10 @@ export class YunafiedService {
 
   async listUsersByRoles(roles: UserRole[]): Promise<AuthUser[]> {
     const result = await pool.query<DbUserRow>(
-      `SELECT id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at
+      `SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at
          FROM users
         WHERE role = ANY($1::user_role[])
-        ORDER BY full_name ASC`,
+        ORDER BY last_name ASC, first_name ASC`,
       [roles],
     );
 
@@ -285,7 +291,9 @@ export class YunafiedService {
 
   async createUser(input: {
     email: string;
-    fullName: string;
+    firstName: string;
+    middleName?: string | null;
+    lastName: string;
     role: UserRole;
     status: UserStatus;
     profileImageUrl?: string | null;
@@ -294,11 +302,15 @@ export class YunafiedService {
     isVerified?: boolean;
   }): Promise<AuthUser> {
     const isVerified = input.isVerified ?? true;
+    const fullName = [input.firstName, input.middleName, input.lastName].filter(Boolean).join(' ');
     const result = await pool.query<DbUserRow>(
-      "INSERT INTO users (email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, is_verified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at",
+      "INSERT INTO users (email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, is_verified) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at",
       [
         input.email,
-        input.fullName,
+        input.firstName,
+        input.middleName || null,
+        input.lastName,
+        fullName,
         input.role,
         input.status,
         input.profileImageUrl || null,
@@ -314,7 +326,9 @@ export class YunafiedService {
   async updateUser(
     userId: string,
     input: {
-      fullName: string;
+      firstName: string;
+      middleName?: string | null;
+      lastName: string;
       role: UserRole;
       status: UserStatus;
       email: string;
@@ -323,9 +337,13 @@ export class YunafiedService {
       passwordHash?: string;
     },
   ): Promise<AuthUser | null> {
+    const fullName = [input.firstName, input.middleName, input.lastName].filter(Boolean).join(' ');
     const values: Array<string | null> = [
       input.email,
-      input.fullName,
+      input.firstName,
+      input.middleName || null,
+      input.lastName,
+      fullName,
       input.role,
       input.status,
       input.profileImageUrl || null,
@@ -335,7 +353,7 @@ export class YunafiedService {
 
     if (input.passwordHash) {
       values.push(input.passwordHash);
-      passwordSetSql = ",\n              password_hash = $7";
+      passwordSetSql = ",\n              password_hash = $10";
     }
 
     values.push(userId);
@@ -344,14 +362,17 @@ export class YunafiedService {
     const result = await pool.query<DbUserRow>(
       `UPDATE users
           SET email = $1,
-              full_name = $2,
-              role = $3,
-              status = $4,
-              profile_image_url = $5,
-              profile_image_public_id = $6${passwordSetSql},
+              first_name = $2,
+              middle_name = $3,
+              last_name = $4,
+              full_name = $5,
+              role = $6,
+              status = $7,
+              profile_image_url = $8,
+              profile_image_public_id = $9${passwordSetSql},
               updated_at = NOW()
         WHERE id = $${userIdParam}
-      RETURNING id, email, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at`,
+      RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at`,
       values,
     );
 
