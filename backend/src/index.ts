@@ -92,7 +92,8 @@ const smtpTransporter = nodemailer.createTransport({
     user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASS || "",
   },
-});
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any);
 
 function generateOtp(): string {
   // Cryptographically random 6-digit code
