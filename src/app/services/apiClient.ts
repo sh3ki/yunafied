@@ -33,12 +33,16 @@ interface LoginResponse {
 interface RegisterPayload {
   email: string;
   password: string;
-  fullName: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
 }
 
 interface CreateUserPayload {
   email: string;
-  fullName: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   role: UserRole;
   status: UserStatus;
   profileImageUrl?: string | null;
@@ -48,7 +52,9 @@ interface CreateUserPayload {
 
 interface UpdateUserPayload {
   email: string;
-  fullName: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   role: UserRole;
   status: UserStatus;
   profileImageUrl?: string | null;
@@ -62,7 +68,9 @@ interface ProfileUploadResponse {
 }
 
 interface UpdateProfilePayload {
-  fullName: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   email: string;
   profileImageUrl?: string | null;
   profileImagePublicId?: string | null;
@@ -186,6 +194,20 @@ class YunafiedApiClient {
     return this.request<{ message: string }>("/api/auth/resend-otp", {
       method: "POST",
       body: JSON.stringify({ email }),
+    });
+  }
+
+  async forgotPassword(email: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(email: string, otp: string, newPassword: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ email, otp, newPassword }),
     });
   }
 
