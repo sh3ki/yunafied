@@ -185,7 +185,7 @@ export class YunafiedService {
     submissions: SubmissionItem[];
     announcements: AnnouncementItem[];
   }> {
-    const usersPromise = requester.role === "admin" ? this.listUsers() : this.listUsersByRoles(["teacher"]);
+    const usersPromise = requester.role === "admin" ? this.listUsers() : this.listUsersByRoles(["teacher", "student"]);
 
     const [users, schedules, assignments, submissions, announcements] = await Promise.all([
       usersPromise,
@@ -384,7 +384,11 @@ export class YunafiedService {
   }
 
   async deleteUser(userId: string): Promise<boolean> {
-    const result = await pool.query("DELETE FROM users WHERE id = $1", [userId]);
+    // Soft delete — preserves referential integrity, required for Render Free Tier safety
+    const result = await pool.query(
+      "UPDATE users SET deleted_at = NOW(), status = 'inactive' WHERE id = $1 AND deleted_at IS NULL",
+      [userId],
+    );
     return (result.rowCount || 0) > 0;
   }
 
@@ -916,6 +920,8 @@ export class YunafiedService {
               a.created_at AS "createdAt",
               a.attachment_file_name AS "attachmentFileName",
               a.attachment_url AS "attachmentUrl",
+              a.rubric_file_name AS "rubricFileName",
+              a.rubric_url AS "rubricUrl",
               COALESCE(a.is_closed, false) AS "isClosed"
          FROM assignments a
          JOIN users t ON t.id = a.teacher_id
@@ -932,10 +938,12 @@ export class YunafiedService {
     teacherId: string;
     attachmentFileName?: string | null;
     attachmentUrl?: string | null;
+    rubricFileName?: string | null;
+    rubricUrl?: string | null;
   }): Promise<AssignmentItem> {
     const result = await pool.query(
-      `INSERT INTO assignments (title, description, due_at, teacher_id, attachment_file_name, attachment_url)
-       VALUES ($1, $2, $3::date, $4, $5, $6)
+      `INSERT INTO assignments (title, description, due_at, teacher_id, attachment_file_name, attachment_url, rubric_file_name, rubric_url)
+       VALUES ($1, $2, $3::date, $4, $5, $6, $7, $8)
        RETURNING id,
                  title,
                  description,
@@ -944,8 +952,10 @@ export class YunafiedService {
                  created_at AS "createdAt",
                  attachment_file_name AS "attachmentFileName",
                  attachment_url AS "attachmentUrl",
+                 rubric_file_name AS "rubricFileName",
+                 rubric_url AS "rubricUrl",
                  COALESCE(is_closed, false) AS "isClosed"`,
-      [input.title, input.description, input.dueDate, input.teacherId, input.attachmentFileName || null, input.attachmentUrl || null],
+      [input.title, input.description, input.dueDate, input.teacherId, input.attachmentFileName || null, input.attachmentUrl || null, input.rubricFileName || null, input.rubricUrl || null],
     );
 
     const assignment = result.rows[0] as Omit<AssignmentItem, "teacherName">;
@@ -967,6 +977,8 @@ export class YunafiedService {
                  created_at AS "createdAt",
                  attachment_file_name AS "attachmentFileName",
                  attachment_url AS "attachmentUrl",
+                 rubric_file_name AS "rubricFileName",
+                 rubric_url AS "rubricUrl",
                  COALESCE(is_closed, false) AS "isClosed"`,
       [isClosed, assignmentId],
     );
@@ -2676,5 +2688,677 @@ export class YunafiedService {
     );
 
     return (result.rows[0] as import("../types/models.js").MeetingRoom) || null;
+  }
+
+  // ─── Video Summaries ────────────────────────────────────────────────────────
+
+  async createVideoSummary(input: {
+    userId: string;
+    sourceType: "youtube" | "upload";
+    sourceReference: string | null;
+    contextNote: string | null;
+    generatedTitle: string | null;
+    summary: string[];
+    takeaways: string[];
+  }): Promise<import("../types/models.js").VideoSummaryItem> {
+    const result = await pool.query(
+      `INSERT INTO video_summaries (user_id, source_type, source_reference, context_note, generated_title, summary, takeaways)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id,
+                 user_id AS "userId",
+                 source_type AS "sourceType",
+                 source_reference AS "sourceReference",
+                 context_note AS "contextNote",
+                 generated_title AS "generatedTitle",
+                 summary,
+                 takeaways,
+                 created_at AS "createdAt"`,
+      [
+        input.userId,
+        input.sourceType,
+        input.sourceReference,
+        input.contextNote,
+        input.generatedTitle,
+        JSON.stringify(input.summary),
+        JSON.stringify(input.takeaways),
+      ],
+    );
+
+    return result.rows[0] as import("../types/models.js").VideoSummaryItem;
+  }
+
+  async listVideoSummaries(input: {
+    userId: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ rows: import("../types/models.js").VideoSummaryItem[]; total: number; page: number; pageSize: number; totalPages: number }> {
+    const offset = (input.page - 1) * input.pageSize;
+
+    const [totalResult, rowsResult] = await Promise.all([
+      pool.query<{ count: string }>(
+        "SELECT COUNT(*)::text AS count FROM video_summaries WHERE user_id = $1",
+        [input.userId],
+      ),
+      pool.query(
+        `SELECT id,
+                user_id AS "userId",
+                source_type AS "sourceType",
+                source_reference AS "sourceReference",
+                context_note AS "contextNote",
+                generated_title AS "generatedTitle",
+                summary,
+                takeaways,
+                created_at AS "createdAt"
+           FROM video_summaries
+          WHERE user_id = $1
+          ORDER BY created_at DESC
+          LIMIT $2 OFFSET $3`,
+        [input.userId, input.pageSize, offset],
+      ),
+    ]);
+
+    const total = Number(totalResult.rows[0]?.count || "0");
+    return {
+      rows: rowsResult.rows as import("../types/models.js").VideoSummaryItem[],
+      total,
+      page: input.page,
+      pageSize: input.pageSize,
+      totalPages: Math.max(1, Math.ceil(total / input.pageSize)),
+    };
+  }
+
+  async deleteVideoSummary(id: string, userId: string): Promise<boolean> {
+    const result = await pool.query(
+      "DELETE FROM video_summaries WHERE id = $1 AND user_id = $2",
+      [id, userId],
+    );
+    return (result.rowCount || 0) > 0;
+  }
+
+  // ─── Audit Logs ─────────────────────────────────────────────────────────────
+
+  createAuditLog(input: {
+    actorId: string;
+    actorName: string;
+    actorRole: string;
+    action: string;
+    entityType: string;
+    entityId?: string | null;
+    payload?: Record<string, unknown> | null;
+    ipAddress?: string | null;
+  }): void {
+    pool
+      .query(
+        `INSERT INTO audit_logs (actor_id, actor_name, actor_role, action, entity_type, entity_id, payload, ip_address)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          input.actorId,
+          input.actorName,
+          input.actorRole,
+          input.action,
+          input.entityType,
+          input.entityId ?? null,
+          input.payload ? JSON.stringify(input.payload) : null,
+          input.ipAddress ?? null,
+        ],
+      )
+      .catch((err) => console.error("[audit_log] insert failed:", err));
+  }
+
+  async listAuditLogs(filters: {
+    actorId?: string;
+    action?: string;
+    entityType?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page: number;
+    pageSize: number;
+  }): Promise<{ rows: import("../types/models.js").AuditLogItem[]; total: number; page: number; pageSize: number; totalPages: number }> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (filters.actorId) { params.push(filters.actorId); conditions.push(`actor_id = $${params.length}`); }
+    if (filters.action) { params.push(filters.action); conditions.push(`action = $${params.length}`); }
+    if (filters.entityType) { params.push(filters.entityType); conditions.push(`entity_type = $${params.length}`); }
+    if (filters.dateFrom) { params.push(filters.dateFrom); conditions.push(`created_at >= $${params.length}`); }
+    if (filters.dateTo) { params.push(filters.dateTo); conditions.push(`created_at <= $${params.length}`); }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const offset = (filters.page - 1) * filters.pageSize;
+
+    const [totalRes, rowsRes] = await Promise.all([
+      pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM audit_logs ${where}`, params),
+      pool.query(
+        `SELECT id, actor_id AS "actorId", actor_name AS "actorName", actor_role AS "actorRole",
+                action, entity_type AS "entityType", entity_id AS "entityId",
+                payload, ip_address AS "ipAddress", created_at AS "createdAt"
+           FROM audit_logs ${where}
+           ORDER BY created_at DESC
+           LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+        [...params, filters.pageSize, offset],
+      ),
+    ]);
+
+    const total = Number(totalRes.rows[0]?.count || "0");
+    return {
+      rows: rowsRes.rows as import("../types/models.js").AuditLogItem[],
+      total,
+      page: filters.page,
+      pageSize: filters.pageSize,
+      totalPages: Math.max(1, Math.ceil(total / filters.pageSize)),
+    };
+  }
+
+  // ─── Notifications ──────────────────────────────────────────────────────────
+
+  async createNotification(input: {
+    userId: string;
+    type: string;
+    title: string;
+    message: string;
+    actionView?: string | null;
+    priority?: string;
+  }): Promise<void> {
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, message, action_view, priority)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [input.userId, input.type, input.title, input.message, input.actionView ?? null, input.priority ?? "low"],
+    );
+  }
+
+  async createNotificationsBulk(
+    inputs: { userId: string; type: string; title: string; message: string; actionView?: string | null; priority?: string }[],
+  ): Promise<void> {
+    if (inputs.length === 0) return;
+    const values = inputs
+      .map((_, i) => `($${i * 6 + 1}, $${i * 6 + 2}, $${i * 6 + 3}, $${i * 6 + 4}, $${i * 6 + 5}, $${i * 6 + 6})`)
+      .join(", ");
+    const params = inputs.flatMap((n) => [
+      n.userId, n.type, n.title, n.message, n.actionView ?? null, n.priority ?? "low",
+    ]);
+    await pool.query(
+      `INSERT INTO notifications (user_id, type, title, message, action_view, priority) VALUES ${values}`,
+      params,
+    );
+  }
+
+  async listNotificationsForUser(userId: string, limit = 30): Promise<import("../types/models.js").NotificationDbItem[]> {
+    const result = await pool.query(
+      `SELECT id, user_id AS "userId", type, title, message,
+              action_view AS "actionView", priority, is_read AS "isRead", created_at AS "createdAt"
+         FROM notifications
+        WHERE user_id = $1
+        ORDER BY created_at DESC
+        LIMIT $2`,
+      [userId, limit],
+    );
+    return result.rows as import("../types/models.js").NotificationDbItem[];
+  }
+
+  async markNotificationRead(notificationId: string, userId: string): Promise<boolean> {
+    await pool.query(
+      "INSERT INTO notification_read_refs (user_id, ref) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+      [userId, notificationId],
+    );
+    return true;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await pool.query(
+      "UPDATE users SET notifications_all_read_at = NOW() WHERE id = $1",
+      [userId],
+    );
+  }
+
+  async getNotificationReadState(userId: string): Promise<{ allReadAt: Date | null; readRefs: Set<string> }> {
+    const [allReadResult, refsResult] = await Promise.all([
+      pool.query<{ notifications_all_read_at: Date | null }>(
+        "SELECT notifications_all_read_at FROM users WHERE id = $1",
+        [userId],
+      ),
+      pool.query<{ ref: string }>(
+        "SELECT ref FROM notification_read_refs WHERE user_id = $1",
+        [userId],
+      ),
+    ]);
+    return {
+      allReadAt: allReadResult.rows[0]?.notifications_all_read_at ?? null,
+      readRefs: new Set(refsResult.rows.map((r) => r.ref)),
+    };
+  }
+
+  async deleteNotification(notificationId: string, userId: string): Promise<boolean> {
+    const result = await pool.query(
+      "DELETE FROM notifications WHERE id = $1 AND user_id = $2",
+      [notificationId, userId],
+    );
+    return (result.rowCount || 0) > 0;
+  }
+
+  async countUnreadNotifications(userId: string): Promise<number> {
+    const result = await pool.query<{ count: string }>(
+      "SELECT COUNT(*)::text AS count FROM notifications WHERE user_id = $1 AND is_read = FALSE",
+      [userId],
+    );
+    return Number(result.rows[0]?.count || "0");
+  }
+
+  // ─── Teacher Availability ───────────────────────────────────────────────────
+
+  async createAvailabilityBlock(
+    teacherId: string,
+    input: { dayOfWeek: number; startTime: string; endTime: string },
+  ): Promise<import("../types/models.js").TeacherAvailabilityItem> {
+    const result = await pool.query(
+      `INSERT INTO teacher_availability (teacher_id, day_of_week, start_time, end_time)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek",
+                 start_time AS "startTime", end_time AS "endTime",
+                 is_active AS "isActive", created_at AS "createdAt"`,
+      [teacherId, input.dayOfWeek, input.startTime, input.endTime],
+    );
+    return result.rows[0] as import("../types/models.js").TeacherAvailabilityItem;
+  }
+
+  async listAvailabilityByTeacher(teacherId: string): Promise<import("../types/models.js").TeacherAvailabilityItem[]> {
+    const result = await pool.query(
+      `SELECT id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek",
+              start_time AS "startTime", end_time AS "endTime",
+              is_active AS "isActive", created_at AS "createdAt"
+         FROM teacher_availability
+        WHERE teacher_id = $1 AND is_active = TRUE
+        ORDER BY day_of_week, start_time`,
+      [teacherId],
+    );
+    return result.rows as import("../types/models.js").TeacherAvailabilityItem[];
+  }
+
+  async deleteAvailabilityBlock(id: string, teacherId: string): Promise<boolean> {
+    const result = await pool.query(
+      "DELETE FROM teacher_availability WHERE id = $1 AND teacher_id = $2",
+      [id, teacherId],
+    );
+    return (result.rowCount || 0) > 0;
+  }
+
+  // ─── Milestones ─────────────────────────────────────────────────────────────
+
+  async initStudentMilestones(studentId: string): Promise<void> {
+    const defaults = [
+      { type: "FIRST_SUBMISSION", title: "First Submission", description: "Submit your first assignment" },
+      { type: "FIRST_QUIZ", title: "Quiz Starter", description: "Complete your first quiz" },
+      { type: "QUIZ_SCORE_80", title: "High Achiever", description: "Score 80% or above on a quiz" },
+      { type: "ALL_ASSIGNMENTS", title: "Complete Course", description: "Submit all assignments for a subject" },
+      { type: "FIRST_SESSION", title: "First Session", description: "Attend your first tutorial session" },
+      { type: "FIRST_CHAT", title: "Social Learner", description: "Send your first chat message" },
+    ];
+    const values = defaults
+      .map((_, i) => `($${i * 4 + 1}, $${i * 4 + 2}, $${i * 4 + 3}, $${i * 4 + 4})`)
+      .join(", ");
+    const params = defaults.flatMap((d) => [studentId, d.type, d.title, d.description]);
+    await pool.query(
+      `INSERT INTO student_milestones (student_id, type, title, description)
+       VALUES ${values}
+       ON CONFLICT (student_id, type) DO NOTHING`,
+      params,
+    );
+  }
+
+  async listMilestones(studentId: string): Promise<import("../types/models.js").MilestoneItem[]> {
+    const result = await pool.query(
+      `SELECT id, student_id AS "studentId", type, title, description,
+              is_unlocked AS "isUnlocked", unlocked_at AS "unlockedAt", created_at AS "createdAt"
+         FROM student_milestones
+        WHERE student_id = $1
+        ORDER BY created_at`,
+      [studentId],
+    );
+    return result.rows as import("../types/models.js").MilestoneItem[];
+  }
+
+  async unlockMilestone(studentId: string, type: string): Promise<boolean> {
+    const result = await pool.query(
+      `UPDATE student_milestones
+          SET is_unlocked = TRUE, unlocked_at = NOW()
+        WHERE student_id = $1 AND type = $2 AND is_unlocked = FALSE`,
+      [studentId, type],
+    );
+    return (result.rowCount || 0) > 0;
+  }
+
+  // ─── Student Tasks ──────────────────────────────────────────────────────────
+
+  async listStudentTasks(studentId: string): Promise<import("../types/models.js").StudentTaskItem[]> {
+    const result = await pool.query(
+      `SELECT id, student_id AS "studentId", title, due_date AS "dueDate",
+              is_completed AS "isCompleted", source, assignment_id AS "assignmentId",
+              created_at AS "createdAt"
+         FROM student_tasks
+        WHERE student_id = $1
+        ORDER BY is_completed, due_date NULLS LAST, created_at DESC`,
+      [studentId],
+    );
+    return result.rows as import("../types/models.js").StudentTaskItem[];
+  }
+
+  async createStudentTask(
+    studentId: string,
+    input: { title: string; dueDate?: string | null; source?: string; assignmentId?: string | null },
+  ): Promise<import("../types/models.js").StudentTaskItem> {
+    const result = await pool.query(
+      `INSERT INTO student_tasks (student_id, title, due_date, source, assignment_id)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, student_id AS "studentId", title, due_date AS "dueDate",
+                 is_completed AS "isCompleted", source, assignment_id AS "assignmentId",
+                 created_at AS "createdAt"`,
+      [studentId, input.title, input.dueDate ?? null, input.source ?? "manual", input.assignmentId ?? null],
+    );
+    return result.rows[0] as import("../types/models.js").StudentTaskItem;
+  }
+
+  async updateStudentTask(
+    id: string,
+    studentId: string,
+    input: { title?: string; dueDate?: string | null; isCompleted?: boolean },
+  ): Promise<import("../types/models.js").StudentTaskItem | null> {
+    const setParts: string[] = [];
+    const params: unknown[] = [id, studentId];
+
+    if (input.title !== undefined) { params.push(input.title); setParts.push(`title = $${params.length}`); }
+    if (input.dueDate !== undefined) { params.push(input.dueDate); setParts.push(`due_date = $${params.length}`); }
+    if (input.isCompleted !== undefined) { params.push(input.isCompleted); setParts.push(`is_completed = $${params.length}`); }
+
+    if (setParts.length === 0) return null;
+
+    const result = await pool.query(
+      `UPDATE student_tasks SET ${setParts.join(", ")}
+        WHERE id = $1 AND student_id = $2
+       RETURNING id, student_id AS "studentId", title, due_date AS "dueDate",
+                 is_completed AS "isCompleted", source, assignment_id AS "assignmentId",
+                 created_at AS "createdAt"`,
+      params,
+    );
+    return (result.rows[0] as import("../types/models.js").StudentTaskItem) || null;
+  }
+
+  async deleteStudentTask(id: string, studentId: string): Promise<boolean> {
+    const result = await pool.query(
+      "DELETE FROM student_tasks WHERE id = $1 AND student_id = $2",
+      [id, studentId],
+    );
+    return (result.rowCount || 0) > 0;
+  }
+
+  // ─── XP & Badges ────────────────────────────────────────────────────────────
+
+  async getStudentXp(studentId: string): Promise<import("../types/models.js").StudentXpItem> {
+    const existing = await pool.query(
+      `SELECT student_id AS "studentId", total_xp AS "totalXp", level, updated_at AS "updatedAt"
+         FROM student_xp WHERE student_id = $1`,
+      [studentId],
+    );
+    if (existing.rows[0]) return existing.rows[0] as import("../types/models.js").StudentXpItem;
+    const created = await pool.query(
+      `INSERT INTO student_xp (student_id, total_xp, level) VALUES ($1, 0, 'Learner')
+       ON CONFLICT (student_id) DO NOTHING
+       RETURNING student_id AS "studentId", total_xp AS "totalXp", level, updated_at AS "updatedAt"`,
+      [studentId],
+    );
+    return (created.rows[0] as import("../types/models.js").StudentXpItem) ?? { studentId, totalXp: 0, level: "Learner", updatedAt: new Date().toISOString() };
+  }
+
+  async addXp(studentId: string, amount: number): Promise<import("../types/models.js").StudentXpItem> {
+    const computeLevel = (xp: number): string => {
+      if (xp >= 3000) return "Master";
+      if (xp >= 1500) return "Expert";
+      if (xp >= 500) return "Scholar";
+      return "Learner";
+    };
+
+    const result = await pool.query(
+      `INSERT INTO student_xp (student_id, total_xp, level) VALUES ($1, $2, $3)
+       ON CONFLICT (student_id) DO UPDATE
+         SET total_xp = student_xp.total_xp + $2,
+             level = $3,
+             updated_at = NOW()
+       RETURNING student_id AS "studentId", total_xp AS "totalXp", level, updated_at AS "updatedAt"`,
+      [studentId, amount, "Learner"],
+    );
+    const row = result.rows[0] as { studentId: string; totalXp: number; level: string; updatedAt: string };
+    const newLevel = computeLevel(row.totalXp);
+    if (newLevel !== row.level) {
+      await pool.query("UPDATE student_xp SET level = $1, updated_at = NOW() WHERE student_id = $2", [newLevel, studentId]);
+      row.level = newLevel;
+    }
+    return row as import("../types/models.js").StudentXpItem;
+  }
+
+  async listAllBadges(): Promise<import("../types/models.js").BadgeItem[]> {
+    const result = await pool.query(
+      `SELECT id, code, name, description, icon, created_at AS "createdAt" FROM badges ORDER BY name`,
+    );
+    return result.rows as import("../types/models.js").BadgeItem[];
+  }
+
+  async getStudentBadges(studentId: string): Promise<import("../types/models.js").BadgeItem[]> {
+    const result = await pool.query(
+      `SELECT b.id, b.code, b.name, b.description, b.icon, sb.earned_at AS "earnedAt"
+         FROM student_badges sb
+         JOIN badges b ON b.id = sb.badge_id
+        WHERE sb.student_id = $1
+        ORDER BY sb.earned_at DESC`,
+      [studentId],
+    );
+    return result.rows as import("../types/models.js").BadgeItem[];
+  }
+
+  async awardBadge(studentId: string, badgeCode: string): Promise<import("../types/models.js").BadgeItem | null> {
+    const badge = await pool.query<{ id: string }>("SELECT id FROM badges WHERE code = $1", [badgeCode]);
+    if (!badge.rows[0]) return null;
+    const badgeId = badge.rows[0].id;
+
+    const insert = await pool.query(
+      `INSERT INTO student_badges (student_id, badge_id)
+       VALUES ($1, $2)
+       ON CONFLICT (student_id, badge_id) DO NOTHING
+       RETURNING id`,
+      [studentId, badgeId],
+    );
+    if (!insert.rows[0]) return null;
+
+    const result = await pool.query(
+      `SELECT b.id, b.code, b.name, b.description, b.icon, sb.earned_at AS "earnedAt"
+         FROM student_badges sb JOIN badges b ON b.id = sb.badge_id
+        WHERE sb.student_id = $1 AND sb.badge_id = $2`,
+      [studentId, badgeId],
+    );
+    return (result.rows[0] as import("../types/models.js").BadgeItem) || null;
+  }
+
+  // ─── Vocabulary ─────────────────────────────────────────────────────────────
+
+  async saveVocabItem(
+    userId: string,
+    input: { sourceText: string; translatedText: string; sourceLanguage: string; targetLanguage: string },
+  ): Promise<import("../types/models.js").VocabItem> {
+    const result = await pool.query(
+      `INSERT INTO user_vocabulary (user_id, source_text, translated_text, source_language, target_language)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, source_text, target_language) DO UPDATE
+         SET translated_text = EXCLUDED.translated_text, created_at = NOW()
+       RETURNING id, user_id AS "userId", source_text AS "sourceText",
+                 translated_text AS "translatedText", source_language AS "sourceLanguage",
+                 target_language AS "targetLanguage", created_at AS "createdAt"`,
+      [userId, input.sourceText, input.translatedText, input.sourceLanguage, input.targetLanguage],
+    );
+    return result.rows[0] as import("../types/models.js").VocabItem;
+  }
+
+  async listVocabItems(userId: string): Promise<import("../types/models.js").VocabItem[]> {
+    const result = await pool.query(
+      `SELECT id, user_id AS "userId", source_text AS "sourceText",
+              translated_text AS "translatedText", source_language AS "sourceLanguage",
+              target_language AS "targetLanguage", created_at AS "createdAt"
+         FROM user_vocabulary
+        WHERE user_id = $1
+        ORDER BY created_at DESC`,
+      [userId],
+    );
+    return result.rows as import("../types/models.js").VocabItem[];
+  }
+
+  async deleteVocabItem(id: string, userId: string): Promise<boolean> {
+    const result = await pool.query(
+      "DELETE FROM user_vocabulary WHERE id = $1 AND user_id = $2",
+      [id, userId],
+    );
+    return (result.rowCount || 0) > 0;
+  }
+
+  // ─── Announcements Edit / Soft Delete ──────────────────────────────────────
+
+  async updateAnnouncement(
+    id: string,
+    actorId: string,
+    actorRole: UserRole,
+    input: { title: string; content: string },
+  ): Promise<import("../types/models.js").AnnouncementItem | null> {
+    const where = actorRole === "admin" ? "WHERE id = $1" : "WHERE id = $1 AND posted_by_id = $2";
+    const params = actorRole === "admin" ? [id] : [id, actorId];
+
+    const existing = await pool.query(`SELECT id FROM announcements ${where}`, params);
+    if (!existing.rows[0]) return null;
+
+    const result = await pool.query(
+      `UPDATE announcements
+          SET title = $${params.length + 1}, content = $${params.length + 2}, edited_at = NOW()
+        WHERE id = $1
+       RETURNING id, title, content,
+                 posted_by_id AS "postedById",
+                 posted_by_name AS "postedByName",
+                 created_at AS "createdAt"`,
+      [...params, input.title, input.content],
+    );
+    return (result.rows[0] as import("../types/models.js").AnnouncementItem) || null;
+  }
+
+  async softDeleteAnnouncement(id: string, actorId: string, actorRole: UserRole): Promise<boolean> {
+    const where = actorRole === "admin" ? "WHERE id = $1" : "WHERE id = $1 AND posted_by_id = $2";
+    const params = actorRole === "admin" ? [id] : [id, actorId];
+    const result = await pool.query(
+      `UPDATE announcements SET is_deleted = TRUE, edited_at = NOW() ${where}`,
+      params,
+    );
+    return (result.rowCount || 0) > 0;
+  }
+
+  // ─── Admin Operations ───────────────────────────────────────────────────────
+
+  async listAllMeetingRoomsAdmin(): Promise<import("../types/models.js").CallHistoryItem[]> {
+    const result = await pool.query(
+      `SELECT id, room_token AS "roomToken",
+              teacher_id AS "teacherId", teacher_name AS "teacherName",
+              student_id AS "studentId", student_name AS "studentName",
+              created_at AS "startedAt", updated_at AS "endedAt",
+              NULL::int AS "durationSeconds", NULL AS "endedBy"
+         FROM meeting_rooms
+         ORDER BY created_at DESC
+         LIMIT 200`,
+    );
+    return result.rows as import("../types/models.js").CallHistoryItem[];
+  }
+
+  async getAdminAnalytics(): Promise<import("../types/models.js").AdminAnalyticsItem> {
+    const [
+      studentsRes,
+      teachersRes,
+      sessionsRes,
+      submissionsRes,
+      announcementsRes,
+      enrollmentsRes,
+      gradesRes,
+      monthlyRes,
+      topStudentsRes,
+    ] = await Promise.all([
+      pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM users WHERE role = 'student'"),
+      pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM users WHERE role = 'teacher'"),
+      pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM schedules WHERE status = 'accepted'"),
+      pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM submissions"),
+      pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM announcements"),
+      pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM enrollment_records"),
+      pool.query<{ grade: string; count: string }>(
+        `SELECT grade_value AS grade, COUNT(*)::text AS count FROM submissions WHERE grade_value IS NOT NULL GROUP BY grade_value ORDER BY grade_value`,
+      ),
+      pool.query<{ month: string; count: string }>(
+        `SELECT TO_CHAR(date_trunc('month', created_at), 'Mon YYYY') AS month,
+                COUNT(*)::text AS count
+           FROM schedules
+          WHERE status = 'accepted'
+            AND created_at >= NOW() - INTERVAL '6 months'
+          GROUP BY 1 ORDER BY MIN(created_at)`,
+      ),
+      pool.query<{ studentId: string; studentName: string; avgGrade: string; submissionCount: string }>(
+        `SELECT s.student_id AS "studentId", u.full_name AS "studentName",
+                ROUND(AVG(CASE WHEN s.grade_value ~ '^[0-9]+(\.[0-9]+)?$' THEN s.grade_value::numeric ELSE NULL END), 1)::text AS "avgGrade",
+                COUNT(*)::text AS "submissionCount"
+           FROM submissions s JOIN users u ON u.id = s.student_id
+          WHERE s.grade_value IS NOT NULL
+          GROUP BY s.student_id, u.full_name
+          ORDER BY "avgGrade" DESC NULLS LAST
+          LIMIT 5`,
+      ),
+    ]);
+
+    return {
+      totalStudents: Number(studentsRes.rows[0]?.count || 0),
+      totalTeachers: Number(teachersRes.rows[0]?.count || 0),
+      totalSessions: Number(sessionsRes.rows[0]?.count || 0),
+      totalSubmissions: Number(submissionsRes.rows[0]?.count || 0),
+      totalAnnouncements: Number(announcementsRes.rows[0]?.count || 0),
+      totalEnrollments: Number(enrollmentsRes.rows[0]?.count || 0),
+      gradeDistribution: gradesRes.rows.map((r) => ({ grade: r.grade, count: Number(r.count) })),
+      monthlySessionCounts: monthlyRes.rows.map((r) => ({ month: r.month, count: Number(r.count) })),
+      topStudents: topStudentsRes.rows.map((r) => ({
+        studentId: r.studentId,
+        studentName: r.studentName,
+        avgGrade: Number(r.avgGrade) || 0,
+        submissionCount: Number(r.submissionCount),
+      })),
+    };
+  }
+
+  async importUsersFromCsv(
+    rows: { firstName: string; lastName: string; email: string; role: string; password: string }[],
+    createdById: string,
+  ): Promise<{ success: number; failed: number; errors: { row: number; reason: string }[] }> {
+    let success = 0;
+    const errors: { row: number; reason: string }[] = [];
+    const bcrypt = await import("bcryptjs");
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        if (!row.email || !row.firstName || !row.lastName || !row.password || !row.role) {
+          errors.push({ row: i + 1, reason: "Missing required fields" });
+          continue;
+        }
+        if (!["admin", "teacher", "student"].includes(row.role)) {
+          errors.push({ row: i + 1, reason: `Invalid role: ${row.role}` });
+          continue;
+        }
+        const hash = await bcrypt.hash(row.password, 10);
+        await pool.query(
+          `INSERT INTO users (email, first_name, last_name, full_name, role, status, password_hash, is_verified)
+           VALUES ($1, $2, $3, $4, $5, 'active', $6, TRUE)`,
+          [row.email.trim().toLowerCase(), row.firstName.trim(), row.lastName.trim(),
+           `${row.firstName.trim()} ${row.lastName.trim()}`, row.role, hash],
+        );
+        success++;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push({ row: i + 1, reason: msg.includes("unique") ? "Email already exists" : msg });
+      }
+    }
+    return { success, failed: errors.length, errors };
   }
 }
