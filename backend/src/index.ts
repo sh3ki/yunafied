@@ -81,12 +81,13 @@ function clearBootstrapCache(): void {
 }
 
 // ---------------------------------------------------------------------------
-// SMTP / Email (Nodemailer)
+// SMTP / Email (Nodemailer) — family:4 forces IPv4 (required on Render free tier)
 // ---------------------------------------------------------------------------
 const smtpTransporter = nodemailer.createTransport({
   host:   process.env.SMTP_HOST   || "smtp.gmail.com",
   port:   Number(process.env.SMTP_PORT || 587),
-  secure: process.env.SMTP_SECURE === "true", // true for port 465
+  secure: process.env.SMTP_SECURE === "true",
+  family: 4, // Force IPv4 — Render free tier cannot reach IPv6 SMTP addresses
   auth: {
     user: process.env.SMTP_USER || "",
     pass: process.env.SMTP_PASS || "",
@@ -110,7 +111,7 @@ async function sendOtpEmail(toEmail: string, otpCode: string, firstName: string,
     ? "If you did not request a password reset, you can safely ignore this email."
     : "If you did not create a YUNAFied account, you can safely ignore this email.";
   await smtpTransporter.sendMail({
-    from: `"YUNAFied" <${from}>`,
+    from: `YUNAFied <${from}>`,
     to: toEmail,
     subject,
     html: `
