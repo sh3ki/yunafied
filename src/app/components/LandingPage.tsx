@@ -24,7 +24,7 @@ export function LandingPage() {
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
           <div>
             <p className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-cyan-200 bg-cyan-400/10 border border-cyan-300/20 px-3 py-1 rounded-full">
-              Built for the 40% System Implementation
+              Built for the Students and Teachers
             </p>
             <h2 className="text-4xl md:text-6xl font-black mt-4 leading-[1.02]">
               Smarter Tutorials,
