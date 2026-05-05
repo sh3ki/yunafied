@@ -23,6 +23,9 @@ export interface MeetingRoom {
 export interface AuthUser {
   id: string;
   email: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
   fullName: string;
   role: UserRole;
   status: UserStatus;
