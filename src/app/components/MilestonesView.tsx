@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Flag, CheckCircle, Lock, Trophy, Star, Zap, Target, BookOpen, Award, Brain } from 'lucide-react';
 import { motion } from 'motion/react';
 import { apiClient } from '@/app/services/apiClient';
-import { AssignmentItem, GamifiedLeaderboardItem, SubmissionItem } from '@/app/types/models';
+import { AssignmentItem, BadgeItem, GamifiedLeaderboardItem, MilestoneItem, StudentXpItem, SubmissionItem } from '@/app/types/models';
 
 interface MilestonesViewProps {
   assignments: AssignmentItem[];
@@ -122,33 +122,55 @@ const colorClasses: Record<string, { bg: string; text: string; border: string; r
   red:     { bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-200',     ring: 'ring-red-400' },
 };
 
+const XP_LEVEL_COLORS: Record<string, string> = {
+  Learner: 'text-gray-600 bg-gray-100',
+  Scholar: 'text-blue-700 bg-blue-100',
+  Expert: 'text-purple-700 bg-purple-100',
+  Master: 'text-yellow-700 bg-yellow-100',
+};
+
 export function MilestonesView({ assignments, submissions, userId }: MilestonesViewProps) {
   const [leaderboard, setLeaderboard] = useState<GamifiedLeaderboardItem[]>([]);
+  const [dbMilestones, setDbMilestones] = useState<MilestoneItem[]>([]);
+  const [dbBadges, setDbBadges] = useState<BadgeItem[]>([]);
+  const [xp, setXp] = useState<StudentXpItem | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadGamified = async () => {
+    const loadAll = async () => {
       try {
-        const categories = await apiClient.listGamifiedCategories();
-        const allLeaderboard: GamifiedLeaderboardItem[] = [];
-        await Promise.allSettled(
-          categories.map(async (cat) => {
-            try {
-              const rows = await apiClient.listGamifiedLeaderboard({ categoryId: cat.id, limit: 50 });
-              allLeaderboard.push(...rows);
-            } catch {
-              // skip categories that fail
-            }
-          }),
-        );
-        setLeaderboard(allLeaderboard);
+        const [categories, milestonesRes, badgesRes, xpRes] = await Promise.allSettled([
+          apiClient.listGamifiedCategories(),
+          apiClient.listMilestones(),
+          apiClient.listStudentBadges(),
+          apiClient.getStudentXp(),
+        ]);
+
+        if (badgesRes.status === 'fulfilled') setDbBadges(badgesRes.value);
+        if (xpRes.status === 'fulfilled') setXp(xpRes.value);
+        if (milestonesRes.status === 'fulfilled') setDbMilestones(milestonesRes.value);
+
+        if (categories.status === 'fulfilled') {
+          const allLeaderboard: GamifiedLeaderboardItem[] = [];
+          await Promise.allSettled(
+            categories.value.map(async (cat) => {
+              try {
+                const rows = await apiClient.listGamifiedLeaderboard({ categoryId: cat.id, limit: 50 });
+                allLeaderboard.push(...rows);
+              } catch {
+                // skip
+              }
+            }),
+          );
+          setLeaderboard(allLeaderboard);
+        }
       } catch {
-        // silently continue - badges derived from assignments still work
+        // silently continue
       } finally {
         setLoading(false);
       }
     };
-    loadGamified();
+    loadAll();
   }, []);
 
   const mySubmissions = useMemo(() => submissions.filter((s) => s.studentId === userId), [submissions, userId]);
@@ -168,8 +190,18 @@ export function MilestonesView({ assignments, submissions, userId }: MilestonesV
   const unlockedCount = badges.filter((b) => b.unlocked).length;
   const progressPct = totalAssignments > 0 ? Math.round((submittedCount / totalAssignments) * 100) : 0;
 
-  // Milestones path derived from assignments + gamified
+  // Use DB milestones if loaded, otherwise fall back to computed path
   const milestones = useMemo(() => {
+    if (dbMilestones.length > 0) {
+      return dbMilestones.map((m) => ({
+        id: m.id,
+        title: m.title,
+        description: m.description,
+        status: m.isUnlocked ? ('completed' as const) : ('locked' as const),
+        date: m.isUnlocked && m.unlockedAt ? new Date(m.unlockedAt).toLocaleDateString() : 'Locked',
+      }));
+    }
+
     const path = [
       {
         id: 'enroll',
@@ -197,9 +229,7 @@ export function MilestonesView({ assignments, submissions, userId }: MilestonesV
       },
     ];
     return path;
-  }, [assignments, mySubmissions, totalQuizAttempts]);
-
-  const completedMilestones = milestones.filter((m) => m.status === 'completed').length;
+  }, [dbMilestones, assignments, mySubmissions, totalQuizAttempts]);
 
   if (loading) {
     return (
@@ -217,11 +247,36 @@ export function MilestonesView({ assignments, submissions, userId }: MilestonesV
           </h1>
           <p className="text-gray-500 mt-1">Track your progress and unlock rewards</p>
         </div>
-        <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full font-bold flex items-center gap-2">
-          <Star className="h-5 w-5 fill-yellow-500 text-yellow-500" />
-          {unlockedCount} / {badges.length} Badges Earned
+        <div className="flex items-center gap-3">
+          {xp && (
+            <div className={`px-3 py-1.5 rounded-full text-sm font-bold flex items-center gap-1.5 ${XP_LEVEL_COLORS[xp.level] ?? 'bg-gray-100 text-gray-600'}`}>
+              <Zap className="h-4 w-4" />
+              {xp.totalXp} XP · {xp.level}
+            </div>
+          )}
+          <div className="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full font-bold flex items-center gap-2">
+            <Star className="h-5 w-5 fill-yellow-500 text-yellow-500" />
+            {unlockedCount} / {badges.length} Badges Earned
+          </div>
         </div>
       </div>
+
+      {/* DB Badges row */}
+      {dbBadges.length > 0 && (
+        <div className="mb-6 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <h2 className="text-base font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <Award className="h-5 w-5 text-amber-500" /> Earned Badges
+          </h2>
+          <div className="flex flex-wrap gap-3">
+            {dbBadges.map((b) => (
+              <div key={b.id} title={b.description} className="flex items-center gap-2 bg-amber-50 border border-amber-200 px-3 py-2 rounded-xl text-sm font-medium text-amber-800">
+                <span className="text-lg">{b.icon}</span>
+                {b.name}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Milestones Path */}
