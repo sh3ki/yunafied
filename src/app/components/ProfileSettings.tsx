@@ -9,7 +9,9 @@ interface ProfileUploadResult {
 }
 
 interface UpdateProfileInput {
-  fullName: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
   email: string;
   profileImageUrl?: string | null;
   profileImagePublicId?: string | null;
@@ -24,7 +26,9 @@ interface ProfileSettingsProps {
 }
 
 export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }: ProfileSettingsProps) {
-  const [fullName, setFullName] = useState(user.fullName);
+  const [firstName, setFirstName] = useState(user.firstName);
+  const [middleName, setMiddleName] = useState(user.middleName || '');
+  const [lastName, setLastName] = useState(user.lastName);
   const [email, setEmail] = useState(user.email);
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(user.profileImageUrl || null);
   const [profileImagePublicId, setProfileImagePublicId] = useState<string | null>(user.profileImagePublicId || null);
@@ -36,7 +40,9 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    setFullName(user.fullName);
+    setFirstName(user.firstName);
+    setMiddleName(user.middleName || '');
+    setLastName(user.lastName);
     setEmail(user.email);
     setProfileImageUrl(user.profileImageUrl || null);
     setProfileImagePublicId(user.profileImagePublicId || null);
@@ -68,8 +74,8 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
   };
 
   const handleSave = async () => {
-    if (!fullName.trim() || !email.trim()) {
-      toast.error('Full name and email are required.');
+    if (!firstName.trim() || !lastName.trim() || !email.trim()) {
+      toast.error('First name, last name, and email are required.');
       return;
     }
 
@@ -86,7 +92,9 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
       }
 
       await onUpdateProfile({
-        fullName: fullName.trim(),
+        firstName: firstName.trim(),
+        middleName: middleName.trim() || undefined,
+        lastName: lastName.trim(),
         email: email.trim(),
         profileImageUrl: nextProfileImageUrl,
         profileImagePublicId: nextProfileImagePublicId,
@@ -126,7 +134,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex items-center gap-4">
           <img
-            src={previewImageUrl || profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || 'User')}&background=ede9fe&color=5b21b6`}
+            src={previewImageUrl || profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((firstName || 'User') + ' ' + (lastName || ''))}&background=ede9fe&color=5b21b6`}
             alt="Profile"
             className="h-20 w-20 rounded-full object-cover border border-violet-100"
           />
@@ -149,14 +157,40 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-2 block">Full Name</label>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">First Name</label>
             <div className="relative">
               <UserRound className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2.5"
-                placeholder="Your full name"
+                placeholder="First name"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Middle Name <span className="text-gray-400 font-normal">(optional)</span></label>
+            <div className="relative">
+              <UserRound className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={middleName}
+                onChange={(e) => setMiddleName(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2.5"
+                placeholder="Middle name"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Last Name</label>
+            <div className="relative">
+              <UserRound className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2.5"
+                placeholder="Last name"
               />
             </div>
           </div>
