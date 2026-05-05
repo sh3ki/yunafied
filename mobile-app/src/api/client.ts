@@ -106,6 +106,9 @@ class MobileApiClient {
       headers.set('Authorization', `Bearer ${this.token}`);
     }
 
+    // Bypass localtunnel's splash page for API requests
+    headers.set('bypass-tunnel-reminder', 'true');
+
     const response = await fetch(`${API_URL}${path}`, {
       ...init,
       headers,
@@ -151,7 +154,7 @@ class MobileApiClient {
     });
   }
 
-  register(input: { fullName: string; email: string; password: string }): Promise<{ needsVerification: boolean; email: string }> {
+  register(input: { firstName: string; middleName?: string; lastName: string; email: string; password: string }): Promise<{ needsVerification: boolean; email: string }> {
     return this.request<{ needsVerification: boolean; email: string }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),
@@ -172,6 +175,20 @@ class MobileApiClient {
     });
   }
 
+  forgotPassword(email: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/api/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  resetPassword(email: string, otp: string, newPassword: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>('/api/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp, newPassword }),
+    });
+  }
+
   async me() {
     const data = await this.request<{ user: AuthUser }>('/api/auth/me');
     return data.user;
@@ -182,7 +199,9 @@ class MobileApiClient {
   }
 
   updateProfile(input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     profileImageUrl?: string | null;
     profileImagePublicId?: string | null;
@@ -200,7 +219,9 @@ class MobileApiClient {
   }
 
   createUser(input: {
-    fullName: string;
+    firstName: string;
+    middleName?: string;
+    lastName: string;
     email: string;
     role: UserRole;
     status: UserStatus;
@@ -215,7 +236,9 @@ class MobileApiClient {
   updateUser(
     id: string,
     input: {
-      fullName: string;
+      firstName: string;
+      middleName?: string;
+      lastName: string;
       email: string;
       role: UserRole;
       status: UserStatus;
@@ -551,6 +574,49 @@ class MobileApiClient {
     return this.request<MeetingRoom>(`/api/meetings/${roomToken}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    });
+  }
+
+  createMeeting(input: { scheduleId?: string; studentId?: string }) {
+    return this.request<MeetingRoom>('/api/meetings', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  createLearningMaterialLink(input: { title: string; subject: string; description?: string; url: string }) {
+    return this.request<LearningMaterialItem>('/api/materials/link', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteLearningMaterial(id: string) {
+    return this.request<void>(`/api/materials/${id}`, { method: 'DELETE' });
+  }
+
+  createEnrollment(input: { studentId: string; teacherId: string; subject: string; tutorialGroup?: string; note?: string; status?: string }) {
+    return this.request<EnrollmentRecordItem>('/api/enrollments', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  updateEnrollment(id: string, input: { status: string; subject?: string; tutorialGroup?: string; note?: string }) {
+    return this.request<EnrollmentRecordItem>(`/api/enrollments/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  }
+
+  deleteEnrollment(id: string) {
+    return this.request<void>(`/api/enrollments/${id}`, { method: 'DELETE' });
+  }
+
+  createGroupChat(input: { name: string; memberIds: string[] }) {
+    return this.request<ChatSummaryItem>('/api/chats/group', {
+      method: 'POST',
+      body: JSON.stringify(input),
     });
   }
 }
