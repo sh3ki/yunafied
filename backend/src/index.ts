@@ -630,11 +630,19 @@ app.use("/uploads", express.static(uploadsDir));
 
 // Rate limiting — Render Free Tier: single instance, MemoryStore is acceptable
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  // Allow more throughput for common polling patterns by using a 1-minute
+  // window with a generous max. Polling endpoints (chat, notifications)
+  // can easily exceed small 15-minute buckets when clients poll every few
+  // seconds. Set `max` high enough and return a `Retry-After` header on 429.
+  windowMs: 60 * 1000,
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: "Too many requests. Please try again later." },
+  handler: (req, res) => {
+    const retryAfter = Math.ceil((60 * 1000) / 1000); // seconds
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({ message: "Too many requests. Please try again later." });
+  },
 });
 
 const authLimiter = rateLimit({
