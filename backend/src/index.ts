@@ -603,7 +603,7 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
         directives: {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
           "img-src": ["'self'", "data:", "https://res.cloudinary.com"],
-          "connect-src": ["'self'", "https://yunafied.online", "https://www.yunafied.online"],
+          "connect-src": ["'self'", "https://www.yunafied.online"],
           "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           "font-src": ["'self'", "https://fonts.gstatic.com"],
         },
@@ -611,10 +611,10 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
     }),
   );
 
-  // CORS: allow both apex and www origins used by the frontend
+  // CORS: allow www origin (DNS redirects www→apex, so preflight must not be redirected)
   app.use(
     cors({
-      origin: ["https://yunafied.online", "https://www.yunafied.online"],
+      origin: "https://www.yunafied.online",
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
       credentials: true,
