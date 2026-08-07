@@ -105,7 +105,7 @@ function PillButton({ label, onPress, disabled }: { label: string; onPress: () =
 }
 
 function LandingScreen({ navigation }: any) {
-  const logoUri = 'https://yunafied.online/yunafied%20logo.png';
+  const logoUri = 'https://www.yunafied.online/yunafied%20logo.png';
   const features = [
     { icon: '👥', title: 'Role-Based Access', text: 'Dedicated modules for admin, teacher, and student.' },
     { icon: '📅', title: 'Smart Scheduling', text: 'Conflict-free timetable with request workflows.' },
@@ -341,7 +341,7 @@ function LoginScreen() {
     }
   };
 
-  const logoUri = 'https://yunafied.online/yunafied%20logo.png';
+  const logoUri = 'https://www.yunafied.online/yunafied%20logo.png';
 
   if (mode === 'forgot') {
     return (
@@ -2621,7 +2621,7 @@ function VideoSummarizerScreen() {
 }
 
 function VideoCallWebScreen({ roomToken, token, onClose }: { roomToken: string; token: string; onClose: () => void }) {
-  const webUrl = `https://yunafied.online/app/video-call/${roomToken}`;
+  const webUrl = `https://www.yunafied.online/app/video-call/${roomToken}`;
 
   // Inject auth token into localStorage BEFORE the web app script loads so it can read the session.
   const injectedJs = `
@@ -2636,7 +2636,7 @@ function VideoCallWebScreen({ roomToken, token, onClose }: { roomToken: string; 
       <SafeAreaView style={{ flex: 1, backgroundColor: '#0f172a' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#1e1b4b', paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(109,40,217,0.4)' }}>
           <View style={styles.logoWrap}>
-            <Image source={{ uri: 'https://yunafied.online/yunafied%20logo.png' }} style={styles.logoImg} resizeMode="contain" />
+            <Image source={{ uri: 'https://www.yunafied.online/yunafied%20logo.png' }} style={styles.logoImg} resizeMode="contain" />
           </View>
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16, flex: 1, marginLeft: 10 }}>Video Call</Text>
           <Pressable
@@ -3450,7 +3450,7 @@ function AllStudentMilestonesScreen() {  const { data } = useAppContext();
 
 function CustomDrawerContent(props: any) {
   const { session, logout } = useAppContext();
-  const logoUri = 'https://yunafied.online/yunafied%20logo.png';
+  const logoUri = 'https://www.yunafied.online/yunafied%20logo.png';
   const user = session?.user;
   const roleColors: Record<string, string> = {
     admin: '#f59e0b',
@@ -3589,7 +3589,7 @@ export function AppNavigator() {
       <SafeAreaView style={[styles.loadingScreen, styles.center]}>
         <StatusBar style="light" />
         <View style={styles.loadingLogoWrap}>
-          <Image source={{ uri: 'https://yunafied.online/yunafied%20logo.png' }} style={styles.loadingLogo} resizeMode="contain" />
+          <Image source={{ uri: 'https://www.yunafied.online/yunafied%20logo.png' }} style={styles.loadingLogo} resizeMode="contain" />
         </View>
         <Text style={styles.loadingBrand}>YUNAFied</Text>
         <ActivityIndicator size="large" color="#a78bfa" style={{ marginTop: 24 }} />
