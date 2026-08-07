@@ -603,6 +603,7 @@ app.use(
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         "img-src": ["'self'", "data:", "https://res.cloudinary.com"],
+        "connect-src": ["'self'", "https://yunafied.online"],
       },
     },
   }),
