@@ -596,19 +596,32 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
   });
 }
 
-app.use(
-  helmet({
-    crossOriginResourcePolicy: false,
-    contentSecurityPolicy: {
-      directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "img-src": ["'self'", "data:", "https://res.cloudinary.com"],
-        "connect-src": ["'self'", "https://yunafied.online"],
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          "img-src": ["'self'", "data:", "https://res.cloudinary.com"],
+          "connect-src": ["'self'", "https://yunafied.online", "https://www.yunafied.online"],
+          "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          "font-src": ["'self'", "https://fonts.gstatic.com"],
+        },
       },
-    },
-  }),
-);
-app.use(cors());
+    }),
+  );
+
+  // CORS: allow both apex and www origins used by the frontend
+  app.use(
+    cors({
+      origin: ["https://yunafied.online", "https://www.yunafied.online"],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+      credentials: true,
+    }),
+  );
+  // Ensure preflight requests are handled
+  app.options("*", cors());
 app.use(compression());
 app.use(express.json());
 app.use(morgan("dev"));
