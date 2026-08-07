@@ -642,7 +642,15 @@ const authLimiter = rateLimit({
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: "Too many authentication attempts. Please try again later." },
+  // Only count failed authentication attempts — successful logins should not
+  // contribute to throttling. Also provide a clearer 429 handler that sets
+  // a `Retry-After` header so clients know when to try again.
+  skipSuccessfulRequests: true,
+  handler: (req, res) => {
+    const retryAfter = Math.ceil((15 * 60 * 1000) / 1000); // seconds
+    res.setHeader("Retry-After", String(retryAfter));
+    res.status(429).json({ message: "Too many authentication attempts. Please try again later." });
+  },
 });
 
 const aiLimiter = rateLimit({
