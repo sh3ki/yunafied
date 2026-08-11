@@ -2623,13 +2623,16 @@ function VideoSummarizerScreen() {
 function VideoCallWebScreen({ roomToken, token, onClose }: { roomToken: string; token: string; onClose: () => void }) {
   const webUrl = `https://www.yunafied.online/app/video-call/${roomToken}`;
 
-  // Inject auth token into localStorage BEFORE the web app script loads so it can read the session.
-  const injectedJs = `
-    (function() {
-      try { localStorage.setItem('yunafied_token', ${JSON.stringify(token)}); } catch(e) {}
+  useEffect(() => {
+    // Open the call URL in the external browser where getUserMedia / WebRTC works reliably
+    (async () => {
+      try {
+        await Linking.openURL(webUrl);
+      } catch (_e) {
+        // ignore
+      }
     })();
-    true;
-  `;
+  }, [webUrl]);
 
   return (
     <Modal visible animationType="slide" statusBarTranslucent onRequestClose={onClose}>
@@ -2646,21 +2649,16 @@ function VideoCallWebScreen({ roomToken, token, onClose }: { roomToken: string; 
             <Text style={{ color: '#f87171', fontWeight: '700', fontSize: 13 }}>✕ Leave</Text>
           </Pressable>
         </View>
-        <WebView
-          source={{ uri: webUrl }}
-          injectedJavaScriptBeforeContentLoaded={injectedJs}
-          javaScriptEnabled
-          domStorageEnabled
-          mediaPlaybackRequiresUserAction={false}
-          allowsInlineMediaPlayback
-          allowsFullscreenVideo
-          // Grant camera/microphone permission requests from the WebView (Android)
-          onPermissionRequest={(request: { grant: (resources: string[]) => void; resources: string[] }) => request.grant(request.resources)}
-          // Auto-grant media capture for iOS
-          mediaCapturePermissionGrantType="grant"
-          originWhitelist={['*']}
-          style={{ flex: 1 }}
-        />
+
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <Text style={{ color: '#fff', fontSize: 16, marginBottom: 12, textAlign: 'center' }}>Opening the video call in your device browser for full camera and microphone access.</Text>
+          <Pressable onPress={() => Linking.openURL(webUrl)} style={{ paddingHorizontal: 18, paddingVertical: 10, backgroundColor: '#6d28d9', borderRadius: 8 }}>
+            <Text style={{ color: '#fff', fontWeight: '700' }}>Open in Browser</Text>
+          </Pressable>
+          <Pressable onPress={onClose} style={{ marginTop: 12 }}>
+            <Text style={{ color: '#f87171', fontWeight: '700' }}>Close</Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     </Modal>
   );
@@ -3709,7 +3707,7 @@ const styles = StyleSheet.create({
   drawerEmail: { color: '#94a3b8', marginTop: 4 },
   drawerRole: { marginTop: 8, color: '#a78bfa', fontWeight: '700', fontSize: 12 },
   // ─── CONTAINERS / LAYOUT ──────────────────────────────────────────────
-  container: { padding: 16, gap: 12, paddingBottom: 24 },
+  container: { paddingHorizontal: 16, paddingTop: 0, gap: 12, paddingBottom: 24 },
   header: { gap: 4, marginBottom: 2 },
   title: { fontSize: 28, fontWeight: '800', color: '#fff' },
   subtitle: { color: '#c4b5fd', fontSize: 14 },
