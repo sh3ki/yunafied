@@ -3,6 +3,8 @@
     "name": "YUNAFied Mobile",
     "slug": "yunafied-mobile",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
+    "projectId": "fcf9065f-5d16-4e2d-a144-5b3c44220639",
     "orientation": "portrait",
     "icon": "./assets/logo.png",
     "splash": {
@@ -40,10 +42,7 @@
       ]
     },
     "extra": {
-      "apiUrl": "https://www.yunafied.online",
-      "eas": {
-        "projectId": "fcf9065f-5d16-4e2d-a144-5b3c44220639"
-      }
+      "apiUrl": "https://www.yunafied.online"
     },
     "owner": "yunafied"
   }
