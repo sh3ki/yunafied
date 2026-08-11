@@ -24,6 +24,11 @@ jobs:
           distribution: temurin
           java-version: '11'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
       - name: Install helper packages
         run: |
           sudo apt-get update
@@ -38,6 +43,11 @@ jobs:
           mv /tmp/cmdline/cmdline-tools/* "$ANDROID_SDK_ROOT/cmdline-tools/latest/"
           export PATH="$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin"
           yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --install "platform-tools" "platforms;android-33" "build-tools;33.0.2" "ndk;23.1.7779620" "cmake;3.22.1"
+
+      - name: Install JS dependencies (mobile-app)
+        working-directory: mobile-app
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
       - name: Show Java and SDK info
         run: |
