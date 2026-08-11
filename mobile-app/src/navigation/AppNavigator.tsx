@@ -18,6 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   NavigationContainer,
   DefaultTheme,
+  useNavigation,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import {
@@ -28,6 +29,7 @@ import {
 } from '@react-navigation/drawer';
 import { StatusBar } from 'expo-status-bar';
 import { mobileApiClient } from '../api/client';
+import VideoCallNative from '../screens/VideoCallNative';
 import { useAppContext } from '../context/AppContext';
 import {
   AssignmentItem,
@@ -67,11 +69,18 @@ const navTheme = {
 };
 
 function Shell({ children, title, subtitle }: { children: React.ReactNode; title: string; subtitle?: string }) {
+  const navigation = useNavigation<any>();
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.screenHeader}>
-        <Text style={styles.title}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        <Pressable onPress={() => navigation.toggleDrawer()} style={{ marginRight: 12 }}>
+          <Text style={styles.hamburger}>☰</Text>
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>{title}</Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </View>
       </View>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         {children}
@@ -3526,6 +3535,7 @@ function DrawerArea() {
   return (
     <Drawer.Navigator
       screenOptions={{
+        headerShown: false,
         headerStyle: { backgroundColor: '#1e1b4b' },
         headerTintColor: '#fff',
         headerTitleStyle: { fontWeight: '700', fontSize: 17 },
@@ -3623,10 +3633,10 @@ export function AppNavigator() {
         />
       ) : null}
       {activeCallToken && session ? (
-        <VideoCallWebScreen
+        <VideoCallNative
           roomToken={activeCallToken}
-          token={session.token}
           onClose={endVideoCall}
+          role={session.user.role}
         />
       ) : null}
     </>
@@ -3686,7 +3696,7 @@ const styles = StyleSheet.create({
   loginCardTitle: { fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 2 },
   loginCardSub: { fontSize: 13, color: '#6b7280', marginBottom: 8 },
   // ─── SHELL / SCREEN HEADER ────────────────────────────────────────────
-  screenHeader: { backgroundColor: '#1e1b4b', paddingHorizontal: 18, paddingTop: 16, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(109,40,217,0.3)' },
+  screenHeader: { backgroundColor: '#1e1b4b', paddingHorizontal: 18, paddingTop: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(109,40,217,0.3)', flexDirection: 'row', alignItems: 'center', gap: 8 },
   // ─── DRAWER ───────────────────────────────────────────────────────────
   drawerLogoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.08)' },
   drawerBrandName: { color: '#fff', fontWeight: '800', fontSize: 16 },
@@ -3707,10 +3717,12 @@ const styles = StyleSheet.create({
   drawerEmail: { color: '#94a3b8', marginTop: 4 },
   drawerRole: { marginTop: 8, color: '#a78bfa', fontWeight: '700', fontSize: 12 },
   // ─── CONTAINERS / LAYOUT ──────────────────────────────────────────────
-  container: { paddingHorizontal: 16, paddingTop: 0, gap: 12, paddingBottom: 24 },
+  container: { padding: 16, gap: 12, paddingBottom: 24 },
   header: { gap: 4, marginBottom: 2 },
-  title: { fontSize: 28, fontWeight: '800', color: '#fff' },
-  subtitle: { color: '#c4b5fd', fontSize: 14 },
+  title: { fontSize: 18, fontWeight: '800', color: '#fff' },
+  subtitle: { color: '#c4b5fd', fontSize: 12 },
+
+  hamburger: { color: '#fff', fontSize: 20, fontWeight: '700' },
   card: {
     backgroundColor: '#fff',
     borderRadius: 14,
