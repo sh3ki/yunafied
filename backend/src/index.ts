@@ -2810,6 +2810,13 @@ app.post("/api/meetings/:roomToken/signal", requireAuth, async (req: Authenticat
     }
 
     const payload = meetingSignalSchema.parse(req.body);
+
+    // Log incoming signaling payloads for debugging (offer/answer/ice)
+    try {
+      console.info('[meeting:signal] user=%s role=%s room=%s payloadKeys=%s', userId, userRole, req.params.roomToken, Object.keys(payload).join(','));
+    } catch (_e) {
+      // ignore logging errors
+    }
     const callerRole = room.teacherId === userId ? "teacher" : "student";
 
     const updated = await service.updateMeetingSignal(req.params.roomToken, callerRole, {
