@@ -2741,6 +2741,11 @@ app.get("/api/meetings/incoming", requireAuth, requireRole("student"), async (re
       return;
     }
 
+    // Disable caching for polling clients so they always receive the latest signal state
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
     const room = await service.getIncomingCallForStudent(userId);
     res.json(room || null);
   } catch (error) {
@@ -2767,6 +2772,11 @@ app.get("/api/meetings/:roomToken", requireAuth, async (req: AuthenticatedReques
       res.status(403).json({ message: "Access denied." });
       return;
     }
+
+    // Disable caching for polling clients so they always receive the latest signal state
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
 
     res.json(room);
   } catch (error) {
