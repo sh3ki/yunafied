@@ -18,14 +18,7 @@ allprojects {
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
   }
-  
-  configurations.all {
-    resolutionStrategy {
-      // Prefer project modules first
-      preferProjectModules()
-    }
-  }
 }
 
+// Only apply Expo plugin - let it handle React plugin application
 apply plugin: "expo-root-project"
-apply plugin: "com.facebook.react.rootproject"

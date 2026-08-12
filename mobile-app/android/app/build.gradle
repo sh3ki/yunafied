@@ -180,12 +180,3 @@ dependencies {
         implementation jscFlavor
     }
 }
-
-// Handle attribute resolution for BuildTypeAttr conflicts
-afterEvaluate {
-  configurations.all {
-    resolutionStrategy {
-      preferProjectModules()
-    }
-  }
-}
