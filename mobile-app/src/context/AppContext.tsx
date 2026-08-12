@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mobileApiClient } from '../api/client';
+import Constants from 'expo-constants';
 import {
   AnnouncementItem,
   AssignmentItem,
@@ -120,7 +121,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<BootstrapResponse>(initialData);
   const [incomingCall, setIncomingCall] = useState<MeetingRoom | null>(null);
   const [activeCallToken, setActiveCallToken] = useState<string | null>(null);
+  const browserOpenedRef = useRef(false);
   const incomingCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeCallPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const startVideoCall = (roomToken: string) => setActiveCallToken(roomToken);
   const endVideoCall = () => setActiveCallToken(null);
@@ -356,6 +359,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await mobileApiClient.updateMeetingStatus(roomToken, 'active');
     setIncomingCall(null);
     setActiveCallToken(roomToken);
+
+    // Try to open the web video call in the device browser or in-app browser
+    // Prefer expo web browser if available (allows programmatic dismissal), fallback to Linking via client code.
+    try {
+      // Build web URL from config
+      const webBase = (Constants.expoConfig?.extra as any | undefined)?.apiUrl || 'https://www.yunafied.online';
+      const url = `${webBase.replace(/\/$/, '')}/app/video-call/${roomToken}`;
+      try {
+        // dynamic require so app doesn't crash if module not installed
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const WebBrowser = require('expo-web-browser');
+        if (WebBrowser && WebBrowser.openBrowserAsync) {
+          await WebBrowser.openBrowserAsync(url);
+          browserOpenedRef.current = true;
+        } else {
+          // fallback: the navigator will open a WebView/modal which itself opens Linking
+        }
+      } catch (_e) {
+        // expo-web-browser not available; UI will trigger Linking/open externally when modal shows
+      }
+    } catch (_e) {
+      // ignore open errors
+    }
   };
 
   const declineCall = async (roomToken: string) => {
@@ -394,6 +420,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, [session]);
+
+  // When an active call is set (we opened the web call), poll the meeting
+  // status and automatically clear the active call + dismiss in-app browser
+  useEffect(() => {
+    if (!activeCallToken) {
+      if (activeCallPollRef.current) {
+        clearInterval(activeCallPollRef.current);
+        activeCallPollRef.current = null;
+      }
+      return;
+    }
+
+    activeCallPollRef.current = setInterval(async () => {
+      try {
+        const room = await mobileApiClient.getMeeting(activeCallToken);
+        if (!room) return;
+        if (room.status === 'ended' || room.status === 'declined') {
+          // try dismissing expo web browser if it was used
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const WebBrowser = require('expo-web-browser');
+            if (WebBrowser && (WebBrowser.dismissBrowser || WebBrowser.dismissBrowserAsync)) {
+              // prefer async if available
+              if (WebBrowser.dismissBrowserAsync) await WebBrowser.dismissBrowserAsync();
+              else WebBrowser.dismissBrowser();
+            }
+          } catch (_e) {
+            // ignore
+          }
+
+          setActiveCallToken(null);
+        }
+      } catch (_e) {
+        // ignore
+      }
+    }, 3000);
+
+    return () => {
+      if (activeCallPollRef.current) {
+        clearInterval(activeCallPollRef.current);
+        activeCallPollRef.current = null;
+      }
+    };
+  }, [activeCallToken]);
 
   const value: AppContextValue = {
     loading,

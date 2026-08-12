@@ -3633,10 +3633,10 @@ export function AppNavigator() {
         />
       ) : null}
       {activeCallToken && session ? (
-        <VideoCallNative
+        <VideoCallWebScreen
           roomToken={activeCallToken}
+          token={session.token}
           onClose={endVideoCall}
-          role={session.user.role}
         />
       ) : null}
     </>
