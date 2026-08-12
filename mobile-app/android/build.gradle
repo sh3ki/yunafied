@@ -18,18 +18,14 @@ allprojects {
     mavenCentral()
     maven { url 'https://www.jitpack.io' }
   }
+  
+  configurations.all {
+    resolutionStrategy {
+      // Prefer project modules first
+      preferProjectModules()
+    }
+  }
 }
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
-
-// Handle attribute matching for duplicate BuildTypeAttr
-subprojects { subProject ->
-  subProject.afterEvaluate {
-    subProject.configurations.all { config ->
-      config.resolutionStrategy {
-        preferProjectModules()
-      }
-    }
-  }
-}
