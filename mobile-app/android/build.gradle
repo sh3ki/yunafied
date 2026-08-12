@@ -20,5 +20,4 @@ allprojects {
   }
 }
 
-// Only apply Expo plugin - let it handle React plugin application
 apply plugin: "expo-root-project"
