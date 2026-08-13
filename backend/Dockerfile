@@ -8,6 +8,9 @@ RUN apt-get update \
     python3-venv \
     ffmpeg \
     build-essential \
+    pkg-config \
+    libvips-dev \
+    libvips-tools \
     libsndfile1 \
   && rm -rf /var/lib/apt/lists/*
 
