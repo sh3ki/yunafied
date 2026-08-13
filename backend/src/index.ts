@@ -3023,6 +3023,70 @@ app.get("/api/student/xp", requireAuth, requireRole("student"), async (req: Auth
   } catch (error) { next(error); }
 });
 
+app.get("/api/student/quests", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const rows = await service.listStudentQuests(userId);
+    if (!rows.length) {
+      const created = await service.generateDailyQuests(userId);
+      res.json(created);
+      return;
+    }
+    res.json(rows);
+  } catch (error) { next(error); }
+});
+
+app.post("/api/student/quests/:id/claim", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const updated = await service.claimStudentQuest(userId, req.params.id);
+    if (!updated) { res.status(404).json({ message: 'Quest not found.' }); return; }
+    res.json(updated);
+  } catch (error) { next(error); }
+});
+
+app.get("/api/store/items", requireAuth, async (_req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const items = await service.listStoreItems();
+    res.json(items);
+  } catch (error) { next(error); }
+});
+
+app.post("/api/store/purchase", requireAuth, requireRole("student"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+    const code = typeof body.code === 'string' ? body.code : null;
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    if (!code) { res.status(400).json({ message: 'Missing item code.' }); return; }
+    const purchase = await service.purchaseStoreItem(userId, code);
+    res.status(201).json(purchase);
+  } catch (error) { if (error instanceof Error) { res.status(400).json({ message: error.message }); return; } next(error); }
+});
+
+app.get('/api/student/store/purchases', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
+    const rows = await service.listStudentStorePurchases(userId);
+    res.json(rows);
+  } catch (error) { next(error); }
+});
+
+app.post('/api/store/use', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: 'Unauthorized' }); return; }
+    const body = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {};
+    const code = typeof body.code === 'string' ? body.code : null;
+    if (!code) { res.status(400).json({ message: 'Missing code' }); return; }
+    const used = await service.useStoreItem(userId, code);
+    res.status(201).json(used);
+  } catch (error) { if (error instanceof Error) { res.status(400).json({ message: error.message }); return; } next(error); }
+});
+
 // ─── Vocabulary ───────────────────────────────────────────────────────────────
 
 app.post("/api/translations/vocab", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
