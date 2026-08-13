@@ -798,6 +798,13 @@ class YunafiedApiClient {
     return this.request<MeetingRoom>(`/api/meetings/${roomToken}`);
   }
 
+  async getMeetingsBySchedules(scheduleIds: string[]): Promise<Record<string, MeetingRoom | null>> {
+    return this.request<Record<string, MeetingRoom | null>>(`/api/meetings/by-schedules`, {
+      method: 'POST',
+      body: JSON.stringify({ scheduleIds }),
+    });
+  }
+
   async sendMeetingSignal(
     roomToken: string,
     payload: {
