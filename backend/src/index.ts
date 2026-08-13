@@ -1193,6 +1193,8 @@ app.post(
     const videoUrl = typeof req.body?.videoUrl === "string" ? req.body.videoUrl : undefined;
     const userId = req.auth?.sub;
 
+    console.log(`[video-summary] incoming request: user=${userId || 'anonymous'} videoUrl=${videoUrl ? 'yes' : 'no'} file=${req.file ? req.file.originalname : 'none'} size=${req.file ? req.file.size : 0}`);
+
     if (!userId) {
       res.status(401).json({ message: "Unauthorized" });
       return;
@@ -3347,4 +3349,13 @@ async function start(): Promise<void> {
 start().catch((error) => {
   console.error("Failed to start backend:", error);
   process.exit(1);
+});
+
+// Global handlers to log unexpected crashes and promise rejections
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err instanceof Error ? err.stack || err.message : err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason instanceof Error ? reason.stack || reason.message : reason);
 });
