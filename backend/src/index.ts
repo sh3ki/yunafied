@@ -1238,9 +1238,11 @@ app.post(
           transcript = await transcribeYoutubeWithWhisper(videoUrl);
         } catch (error) {
           const fallbackError = error instanceof Error ? error.message : "YouTube transcription fallback failed.";
-          throw new Error(
-            `Unable to process this YouTube video. Transcript fetch failed: ${transcriptFetchError || "Unknown error"}. Fallback transcription failed: ${fallbackError}`,
-          );
+          const message = `Unable to process this YouTube video. Transcript fetch failed: ${transcriptFetchError || "Unknown error"}. Fallback transcription failed: ${fallbackError}`;
+          console.error('[video-summary] YouTube transcription failed:', message);
+          // Return a 502 Bad Gateway with actionable guidance instead of letting this become a 500
+          res.status(502).json({ message });
+          return;
         }
       }
     } else {
