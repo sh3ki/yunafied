@@ -169,6 +169,9 @@ export interface GamifiedAttemptResultItem {
   totalScore: number;
   completedAt: string;
   answers: GamifiedAttemptAnswerResultItem[];
+  xpGained?: number;
+  newXp?: StudentXpItem;
+  awardedBadges?: BadgeItem[];
 }
 
 export interface GamifiedLeaderboardItem {
