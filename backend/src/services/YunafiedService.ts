@@ -2129,13 +2129,7 @@ export class YunafiedService {
   ): Promise<GamifiedQuizDetailItem> {
     this.validateGamifiedQuestions(input.questions);
 
-    // capture previous attempt count and XP so we can award badges based on transitions
-    const prevAttemptCountResult = await pool.query<{ cnt: string }>(
-      `SELECT COUNT(*)::text AS cnt FROM gamified_attempts WHERE student_id = $1`,
-      [studentId],
-    );
-    const prevAttemptCount = Number(prevAttemptCountResult.rows[0]?.cnt || 0);
-    const prevXpItem = await this.getStudentXp(studentId).catch(() => ({ studentId, totalXp: 0, level: 'Learner', updatedAt: new Date().toISOString() }));
+    // (No student context needed when creating a quiz)
 
     const client = await pool.connect();
     try {
@@ -2411,6 +2405,14 @@ export class YunafiedService {
     });
 
     const totalQuestions = evaluatedAnswers.length;
+
+    // capture previous attempt count and XP so we can award badges based on transitions
+    const prevAttemptCountResult = await pool.query<{ cnt: string }>(
+      `SELECT COUNT(*)::text AS cnt FROM gamified_attempts WHERE student_id = $1`,
+      [studentId],
+    );
+    const prevAttemptCount = Number(prevAttemptCountResult.rows[0]?.cnt || 0);
+    const prevXpItem = await this.getStudentXp(studentId).catch(() => ({ studentId, totalXp: 0, level: 'Learner', updatedAt: new Date().toISOString() }));
 
     const client = await pool.connect();
     try {
