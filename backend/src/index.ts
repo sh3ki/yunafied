@@ -126,6 +126,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const workspaceRoot = path.resolve(projectRoot, "..");
 const pythonVideoToolPath = path.join(projectRoot, "python", "video_pipeline.py");
 const workspaceVenvPython = path.join(workspaceRoot, ".venv", "Scripts", "python.exe");
+const workspaceVenvPythonUnix = path.join(workspaceRoot, ".venv", "bin", "python");
 
 function extractYoutubeVideoId(input: string): string | null {
   try {
@@ -156,7 +157,10 @@ type PythonRunner = { bin: string; prefix: string[] };
 const pythonRunners: PythonRunner[] = [
   ...(process.env.PYTHON_BIN ? [{ bin: process.env.PYTHON_BIN, prefix: [] }] : []),
   { bin: workspaceVenvPython, prefix: [] },
+  { bin: workspaceVenvPythonUnix, prefix: [] },
+  { bin: "python3", prefix: [] },
   { bin: "python", prefix: [] },
+  { bin: "/usr/bin/python3", prefix: [] },
   { bin: "py", prefix: ["-3"] },
 ];
 
@@ -203,17 +207,28 @@ function parseFirstJsonObject(raw: string): unknown {
 async function runPythonVideoTool(command: string, args: string[]): Promise<PythonVideoToolResult> {
   const runner = await getPythonRunner();
 
-  const { stdout, stderr } = await execFileAsync(
-    runner.bin,
-    [...runner.prefix, pythonVideoToolPath, command, ...args],
-    {
-      maxBuffer: 20 * 1024 * 1024,
-      env: {
-        ...process.env,
-        FFMPEG_BINARY: (ffmpegPath as unknown as string | undefined) || process.env.FFMPEG_BINARY || "ffmpeg",
+  let stdout: string;
+  let stderr: string;
+  try {
+    const res = await execFileAsync(
+      runner.bin,
+      [...runner.prefix, pythonVideoToolPath, command, ...args],
+      {
+        maxBuffer: 20 * 1024 * 1024,
+        env: {
+          ...process.env,
+          FFMPEG_BINARY: (ffmpegPath as unknown as string | undefined) || process.env.FFMPEG_BINARY || "ffmpeg",
+        },
       },
-    },
-  );
+    );
+    stdout = res.stdout;
+    stderr = res.stderr;
+  } catch (err: any) {
+    // Provide clearer error details including stderr when available
+    const errStdout = err.stdout ? String(err.stdout) : "";
+    const errStderr = err.stderr ? String(err.stderr) : err.message || "";
+    throw new Error(`Python transcription failed: ${errStderr || errStdout}`);
+  }
 
   const parsed = parseFirstJsonObject(stdout) as PythonVideoToolResult;
   if (parsed.error) {
