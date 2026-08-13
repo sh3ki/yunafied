@@ -427,6 +427,27 @@ class MobileApiClient {
     return this.request<GamifiedLeaderboardItem[]>(`/api/gamified/leaderboard?${query}`);
   }
 
+  // Student quests and store
+  listStudentQuests(): Promise<any[]> {
+    return this.request<any[]>('/api/student/quests');
+  }
+
+  claimStudentQuest(id: string) {
+    return this.request<any>(`/api/student/quests/${encodeURIComponent(id)}/claim`, { method: 'POST' });
+  }
+
+  listStoreItems(): Promise<any[]> {
+    return this.request<any[]>('/api/store/items');
+  }
+
+  purchaseStoreItem(code: string) {
+    return this.request<any>('/api/store/purchase', { method: 'POST', body: JSON.stringify({ code }) });
+  }
+
+  listStudentStorePurchases(): Promise<any[]> {
+    return this.request<any[]>('/api/student/store/purchases');
+  }
+
   listAssignments() {
     return this.request<AssignmentItem[]>('/api/assignments');
   }
