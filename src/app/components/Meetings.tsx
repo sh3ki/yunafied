@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Video, VideoOff, Clock, User, Calendar, ChevronRight, History } from 'lucide-react';
 import { toast } from 'sonner';
-import { ScheduleItem } from '@/app/types/models';
+import { ScheduleItem, MeetingRoom } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
 
 interface MeetingsProps {
@@ -76,9 +76,10 @@ interface CardProps {
   showDate?: boolean;
   startingId: string | null;
   onStart: (item: ScheduleItem) => void;
+  isDone?: boolean;
 }
 
-function MeetingCard({ item, isActive, isPast, showDate, startingId, onStart }: CardProps) {
+function MeetingCard({ item, isActive, isPast, showDate, startingId, onStart, isDone }: CardProps) {
   return (
     <div
       className={[
@@ -100,6 +101,11 @@ function MeetingCard({ item, isActive, isPast, showDate, startingId, onStart }: 
           <p className={['font-semibold truncate', isPast ? 'text-gray-500' : 'text-gray-900'].join(' ')}>
             {item.title}
           </p>
+          {isDone ? (
+            <span className="ml-auto inline-flex items-center text-xs font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+              Done
+            </span>
+          ) : null}
         </div>
         {item.description && (
           <p className="text-sm text-gray-500 truncate mt-0.5">{item.description}</p>
@@ -172,6 +178,7 @@ export function Meetings({ schedules, userId, onStartMeeting }: MeetingsProps) {
   const [startingId, setStartingId] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('today');
   const [now, setNow] = useState(() => new Date());
+  const [meetingMap, setMeetingMap] = useState<Record<string, MeetingRoom | null>>({});
 
   // Re-evaluate every 30 seconds
   useEffect(() => {
@@ -223,6 +230,21 @@ export function Meetings({ schedules, userId, onStartMeeting }: MeetingsProps) {
       setStartingId(null);
     }
   };
+
+  // Fetch latest meeting rooms for today's and past schedules to know if already ended
+  useEffect(() => {
+    (async () => {
+      try {
+        const ids = [...todayAll.map((s) => s.id), ...past.map((s) => s.id)];
+        if (ids.length === 0) return;
+        const map = await apiClient.getMeetingsBySchedules(ids);
+        setMeetingMap(map as Record<string, MeetingRoom | null>);
+      } catch (_e) {
+        // ignore
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(todayAll.map((s) => s.id)), JSON.stringify(past.map((s) => s.id))]);
 
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: 'today',    label: 'Today',         count: todayAll.length },
@@ -294,7 +316,7 @@ export function Meetings({ schedules, userId, onStartMeeting }: MeetingsProps) {
                   <h2 className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-3">● Active Now</h2>
                   <div className="space-y-3">
                     {activeNow.map((item) => (
-                      <MeetingCard key={item.id} item={item} isActive startingId={startingId} onStart={startMeeting} />
+                      <MeetingCard key={item.id} item={item} isActive startingId={startingId} onStart={startMeeting} isDone={meetingMap[item.id]?.status === 'ended'} />
                     ))}
                   </div>
                 </section>
@@ -305,7 +327,7 @@ export function Meetings({ schedules, userId, onStartMeeting }: MeetingsProps) {
                   <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Later Today</h2>
                   <div className="space-y-3">
                     {laterToday.map((item) => (
-                      <MeetingCard key={item.id} item={item} startingId={startingId} onStart={startMeeting} />
+                      <MeetingCard key={item.id} item={item} startingId={startingId} onStart={startMeeting} isDone={meetingMap[item.id]?.status === 'ended'} />
                     ))}
                   </div>
                 </section>
@@ -316,7 +338,7 @@ export function Meetings({ schedules, userId, onStartMeeting }: MeetingsProps) {
                   <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Earlier Today</h2>
                   <div className="space-y-3">
                     {passedToday.map((item) => (
-                      <MeetingCard key={item.id} item={item} isPast startingId={startingId} onStart={startMeeting} />
+                      <MeetingCard key={item.id} item={item} isPast startingId={startingId} onStart={startMeeting} isDone={meetingMap[item.id]?.status === 'ended'} />
                     ))}
                   </div>
                 </section>
@@ -346,7 +368,7 @@ export function Meetings({ schedules, userId, onStartMeeting }: MeetingsProps) {
             <EmptyState message="No past schedules yet." />
           ) : (
             past.map((item) => (
-              <MeetingCard key={item.id} item={item} isPast showDate startingId={startingId} onStart={startMeeting} />
+              <MeetingCard key={item.id} item={item} isPast showDate startingId={startingId} onStart={startMeeting} isDone={meetingMap[item.id]?.status === 'ended'} />
             ))
           )}
         </div>
