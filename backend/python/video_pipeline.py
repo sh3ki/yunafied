@@ -100,7 +100,8 @@ def download_youtube_audio(video_url: str, output_dir: str) -> str:
     # - YTDLP_JS_RUNTIMES: comma-separated JS runtimes to pass to yt-dlp (e.g. "node")
     # - YTDLP_PROXY: proxy URL (e.g. "http://user:pass@host:port")
     cookies_path = os.getenv("YTDLP_COOKIES")
-    js_runtimes = os.getenv("YTDLP_JS_RUNTIMES")
+    # Default to 'node' since most servers have Node.js available; override with env var if needed
+    js_runtimes = os.getenv("YTDLP_JS_RUNTIMES", "node")
     proxy = os.getenv("YTDLP_PROXY")
     # Prefer the yt_dlp Python API when available (more reliable in some environments)
     try:
