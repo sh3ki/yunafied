@@ -98,7 +98,7 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PillButton({ label, onPress, disabled, modalChildren, style }: { label: string; onPress?: () => void; disabled?: boolean; modalChildren?: React.ReactNode; style?: any }) {
+function PillButton({ label, onPress, disabled, modalChildren, style, textStyle }: { label: string; onPress?: () => void; disabled?: boolean; modalChildren?: React.ReactNode | ((close: () => void) => React.ReactNode); style?: any; textStyle?: any }) {
   const [visible, setVisible] = useState(false);
 
   const handlePress = () => {
@@ -121,14 +121,14 @@ function PillButton({ label, onPress, disabled, modalChildren, style }: { label:
           style,
         ]}
       >
-        <Text style={styles.buttonText}>{label}</Text>
+        <Text style={[styles.buttonText, textStyle]}>{label}</Text>
       </Pressable>
       {modalChildren ? (
         <Modal visible={visible} transparent animationType="slide" onRequestClose={() => setVisible(false)}>
           <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}>
             <View style={{ flex: 1, padding: 20 }}>
               <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 12, maxHeight: '90%' }}>
-                {modalChildren}
+                {typeof modalChildren === 'function' ? modalChildren(() => setVisible(false)) : modalChildren}
                 <Pressable onPress={() => setVisible(false)} style={{ alignSelf: 'flex-end', marginTop: 12 }}>
                   <Text style={{ color: '#6d28d9', fontWeight: '700' }}>Close</Text>
                 </Pressable>
@@ -162,7 +162,7 @@ function LandingScreen({ navigation }: any) {
             <Text style={styles.landingBrandName}>YUNAFied</Text>
             <Text style={styles.landingBrandSub}>AI-Powered Tutorial System</Text>
           </View>
-          <PillButton label="Login" style={styles.landingLoginBtn} modalChildren={<LoginScreen />} />
+          <PillButton label="Login" style={styles.landingLoginBtn} textStyle={{ color: '#000' }} onPress={() => navigation.navigate('Login')} />
         </View>
 
         {/* Hero */}
@@ -178,7 +178,7 @@ function LandingScreen({ navigation }: any) {
             Manage schedules, assignments, grading, AI learning support, and more in one unified platform for admins, teachers, and students.
           </Text>
           <View style={styles.landingActions}>
-            <PillButton label="Get Started" style={styles.landingGetStartedBtn} modalChildren={<LoginScreen />} />
+            <PillButton label="Get Started" style={styles.landingGetStartedBtn} onPress={() => navigation.navigate('Login')} />
           </View>
         </View>
 
@@ -666,6 +666,223 @@ function ScheduleScreen() {
   const teachers = data.users.filter((u) => u.role === 'teacher' && u.status === 'active');
   const students = data.users.filter((u) => u.role === 'student' && u.status === 'active');
 
+  function ManilaTodayDate() {
+    // Use timezone-aware locale date to ensure Manila date is correct on device
+    try {
+      return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+    } catch (e) {
+      const now = new Date();
+      const utc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
+      const manila = new Date(utc.getTime() + 8 * 60 * 60000);
+      return manila.toISOString().slice(0, 10);
+    }
+  }
+
+  function minutesFromHHMM(hhmm: string) {
+    const [h, m] = hhmm.split(':').map((s) => parseInt(s || '0', 10));
+    return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
+  }
+
+  const ENGLISH_LEVELS = [
+    'Beginner (Basic English)',
+    'Pre-Intermediate',
+    'Intermediate',
+    'Upper Intermediate',
+    'Advanced',
+    'Business English',
+    'Conversational English',
+    'Kids English',
+  ];
+
+  function manilaNowHHMM() {
+    const now = new Date();
+    const utc = new Date(now.getTime() + now.getTimezoneOffset() * 60000);
+    const manila = new Date(utc.getTime() + 8 * 60 * 60000);
+    const hh = String(manila.getHours()).padStart(2, '0');
+    const mm = String(manila.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
+  function to12Hour(hhmm24: string) {
+    const [hh, mm] = hhmm24.split(':').map((s) => parseInt(s || '0', 10));
+    const period = hh >= 12 ? 'PM' : 'AM';
+    const h12 = ((hh + 11) % 12) + 1;
+    return { time: `${String(h12).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, period };
+  }
+
+  function convertTo24(hhmm12: string, period: string) {
+    let [hh, mm] = hhmm12.split(':').map((s) => parseInt(s || '0', 10));
+    const p = (period || '').toUpperCase();
+    if (p === 'PM' && hh < 12) hh = hh + 12;
+    if (p === 'AM' && hh === 12) hh = 0;
+    return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  }
+
+  function addMinutes24(hhmm24: string, delta: number) {
+    const [hh, mm] = hhmm24.split(':').map((s) => parseInt(s || '0', 10));
+    const d = (hh * 60 + mm + delta + 24 * 60) % (24 * 60);
+    const nh = Math.floor(d / 60);
+    const nm = d % 60;
+    return `${String(nh).padStart(2, '0')}:${String(nm).padStart(2, '0')}`;
+  }
+
+  function StudentRequestModal({ onClose }: { onClose?: () => void }) {
+    const now24 = manilaNowHHMM();
+    const start12 = to12Hour(now24);
+    const defaultEnd24 = addMinutes24(now24, 60);
+    const end12 = to12Hour(defaultEnd24);
+
+    const [mDate, setMDate] = useState(ManilaTodayDate());
+    const [mStart, setMStart] = useState(start12.time);
+    const [mStartPeriod, setMStartPeriod] = useState(start12.period);
+    const [mEnd, setMEnd] = useState(end12.time);
+    const [mEndPeriod, setMEndPeriod] = useState(end12.period);
+    const [mTeacher, setMTeacher] = useState(teachers.length ? teachers[0].id : '');
+    const [busyReq, setBusyReq] = useState(false);
+    const [openTeachers, setOpenTeachers] = useState(false);
+    const [openLevels, setOpenLevels] = useState(false);
+    const [mNote, setMNote] = useState('');
+    const [mSubject, setMSubject] = useState('English');
+    const [mLevel, setMLevel] = useState(ENGLISH_LEVELS[0]);
+
+    const submit = async () => {
+      try {
+        if (!mTeacher) {
+          Alert.alert('Validation', 'Please choose a teacher.');
+          return;
+        }
+
+        // date not in past (Manila)
+        const manilaToday = ManilaTodayDate();
+        if (mDate < manilaToday) {
+          Alert.alert('Validation', 'Please select today or a future date (Manila time).');
+          return;
+        }
+
+        const start24 = convertTo24(mStart, mStartPeriod);
+        const end24 = convertTo24(mEnd, mEndPeriod);
+
+        const startMin = minutesFromHHMM(start24);
+        const endMin = minutesFromHHMM(end24);
+        if (endMin <= startMin) {
+          Alert.alert('Validation', 'End time must be after start time.');
+          return;
+        }
+        if (endMin - startMin > 6 * 60) {
+          Alert.alert('Validation', 'Schedule duration cannot exceed 6 hours.');
+          return;
+        }
+
+        setBusyReq(true);
+        await createSchedule({
+          title: mSubject || 'English',
+          description: mLevel || ENGLISH_LEVELS[0],
+          date: mDate,
+          startTime: start24,
+          endTime: end24,
+          teacherId: mTeacher,
+          requestNote: mNote.trim() || undefined,
+        });
+        Alert.alert('Success', 'Schedule request sent to teacher.');
+        setMDate(ManilaTodayDate());
+        const now24b = manilaNowHHMM();
+        const s12 = to12Hour(now24b);
+        const e12 = to12Hour(addMinutes24(now24b, 60));
+        setMStart(s12.time);
+        setMStartPeriod(s12.period);
+        setMEnd(e12.time);
+        setMEndPeriod(e12.period);
+        setMNote('');
+        setBusyReq(false);
+        onClose && onClose();
+      } catch (err: any) {
+        setBusyReq(false);
+        Alert.alert('Error', err.message || 'Failed to send request.');
+      }
+    };
+
+    return (
+      <View>
+        <Text style={styles.sectionTitle}>Request Teacher Schedule</Text>
+
+        <Text style={styles.label}>Subject</Text>
+        <View style={styles.input}>
+          <Text>{mSubject}</Text>
+        </View>
+
+        <Text style={styles.label}>Level / Module</Text>
+        <Pressable onPress={() => setOpenLevels((s) => !s)} style={styles.input}>
+          <Text>{mLevel}</Text>
+        </Pressable>
+        {openLevels ? (
+          <View style={[styles.card, { marginTop: 8 }]}> 
+            {ENGLISH_LEVELS.map((lvl) => (
+              <Pressable key={lvl} onPress={() => { setMLevel(lvl); setOpenLevels(false); }} style={[styles.chip, mLevel === lvl ? styles.chipActive : null]}>
+                <Text style={mLevel === lvl ? styles.chipActiveText : styles.chipText}>{lvl}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        <Text style={styles.label}>Choose Teacher</Text>
+        <Pressable onPress={() => setOpenTeachers((s) => !s)} style={styles.input}>
+          <Text>{teachers.find((t) => t.id === mTeacher)?.fullName || 'Select teacher'}</Text>
+        </Pressable>
+        {openTeachers ? (
+          <View style={[styles.card, { marginTop: 8 }]}> 
+            {teachers.map((t) => (
+              <Pressable key={t.id} onPress={() => { setMTeacher(t.id); setOpenTeachers(false); }} style={[styles.chip, mTeacher === t.id ? styles.chipActive : null]}>
+                <Text style={mTeacher === t.id ? styles.chipActiveText : styles.chipText}>{t.fullName}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+
+        <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
+        <TextInput value={mDate} onChangeText={setMDate} style={styles.input} placeholder="YYYY-MM-DD" />
+
+        <View style={styles.rowWrap}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Start</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TextInput value={mStart} onChangeText={setMStart} style={[styles.input, { flex: 1 }]} placeholder="HH:MM" />
+              <View style={{ flexDirection: 'row' }}>
+                <Pressable onPress={() => setMStartPeriod('AM')} style={{ padding: 8 }}>
+                  <Text style={{ color: mStartPeriod === 'AM' ? '#000' : '#6b7280' }}>AM</Text>
+                </Pressable>
+                <Pressable onPress={() => setMStartPeriod('PM')} style={{ padding: 8 }}>
+                  <Text style={{ color: mStartPeriod === 'PM' ? '#000' : '#6b7280' }}>PM</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>End</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <TextInput value={mEnd} onChangeText={setMEnd} style={[styles.input, { flex: 1 }]} placeholder="HH:MM" />
+              <View style={{ flexDirection: 'row' }}>
+                <Pressable onPress={() => setMEndPeriod('AM')} style={{ padding: 8 }}>
+                  <Text style={{ color: mEndPeriod === 'AM' ? '#000' : '#6b7280' }}>AM</Text>
+                </Pressable>
+                <Pressable onPress={() => setMEndPeriod('PM')} style={{ padding: 8 }}>
+                  <Text style={{ color: mEndPeriod === 'PM' ? '#000' : '#6b7280' }}>PM</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        <Text style={styles.label}>Note (optional)</Text>
+        <TextInput value={mNote} onChangeText={setMNote} style={[styles.input, styles.textarea]} multiline />
+
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <PillButton label={busyReq ? 'Sending...' : 'Send Request'} onPress={submit} disabled={busyReq} />
+        </View>
+      </View>
+    );
+  }
+
   const getDraft = (id: string, fallback: {
     title: string;
     description: string;
@@ -893,38 +1110,10 @@ function ScheduleScreen() {
 
       {isStudent ? (
         <Card>
-          <Text style={styles.sectionTitle}>Request Teacher Schedule</Text>
-          <TextInput value={title} onChangeText={setTitle} style={styles.input} placeholder="Subject title" />
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            style={[styles.input, styles.textarea]}
-            placeholder="Description"
-            multiline
+          <PillButton
+            label="Request Teacher Schedule"
+            modalChildren={(close: () => void) => <StudentRequestModal onClose={close} />}
           />
-          <TextInput value={date} onChangeText={setDate} style={styles.input} placeholder="YYYY-MM-DD" />
-          <View style={styles.rowWrap}>
-            <TextInput value={startTime} onChangeText={setStartTime} style={[styles.input, styles.half]} placeholder="HH:MM" />
-            <TextInput value={endTime} onChangeText={setEndTime} style={[styles.input, styles.half]} placeholder="HH:MM" />
-          </View>
-
-          <Text style={styles.label}>Choose Teacher</Text>
-          <View style={styles.chipWrap}>
-            {teachers.map((teacher) => (
-              <Pressable key={teacher.id} onPress={() => setTeacherId(teacher.id)} style={[styles.chip, teacherId === teacher.id ? styles.chipActive : null]}>
-                <Text style={teacherId === teacher.id ? styles.chipActiveText : styles.chipText}>{teacher.fullName}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <TextInput
-            value={requestNote}
-            onChangeText={setRequestNote}
-            style={[styles.input, styles.textarea]}
-            placeholder="Optional note to teacher"
-            multiline
-          />
-          <PillButton label="Request Schedule" onPress={onAdd} />
         </Card>
       ) : null}
 
@@ -1106,6 +1295,11 @@ function GamifiedLearningScreen() {
   const canManage = role === 'admin' || role === 'teacher';
 
   const [busy, setBusy] = useState(true);
+  const [quests, setQuests] = useState<any[]>([]);
+  const [storeItems, setStoreItems] = useState<any[]>([]);
+  const [purchases, setPurchases] = useState<any[]>([]);
+  const [questsOpen, setQuestsOpen] = useState(false);
+  const [storeOpen, setStoreOpen] = useState(false);
   const [categories, setCategories] = useState<GamifiedCategoryItem[]>([]);
   const [quizzes, setQuizzes] = useState<GamifiedQuizItem[]>([]);
   const [leaderboard, setLeaderboard] = useState<GamifiedLeaderboardItem[]>([]);
@@ -1158,9 +1352,33 @@ function GamifiedLearningScreen() {
     }
   };
 
+  const loadQuestsAndStore = async () => {
+    try {
+      setBusy(true);
+      const [q, items, p] = await Promise.all([
+        mobileApiClient.listStudentQuests(),
+        mobileApiClient.listStoreItems(),
+        mobileApiClient.listStudentStorePurchases(),
+      ]);
+      setQuests(q || []);
+      setStoreItems(items || []);
+      setPurchases(p || []);
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load quests or store.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   React.useEffect(() => {
     loadData();
   }, []);
+
+  React.useEffect(() => {
+    if ((questsOpen || storeOpen) && session) {
+      loadQuestsAndStore();
+    }
+  }, [questsOpen, storeOpen, session]);
 
   React.useEffect(() => {
     if (!playingQuiz || submittingAttempt) {
@@ -1477,6 +1695,76 @@ function GamifiedLearningScreen() {
         </View>
         {!categories.length ? <Text style={styles.muted}>No categories yet.</Text> : null}
       </Card>
+
+      {role === 'student' ? (
+        <Card>
+          <Text style={styles.sectionTitle}>Daily Quests & Shop</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <PillButton label="Quests" onPress={() => setQuestsOpen((s) => !s)} />
+            <PillButton label="Shop" onPress={() => setStoreOpen((s) => !s)} />
+          </View>
+
+          {questsOpen ? (
+            <View style={{ marginTop: 12 }}>
+              {!quests.length ? <Text style={styles.muted}>No quests available.</Text> : null}
+              {quests.map((quest) => (
+                <View key={quest.id} style={styles.listItemRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.listTitle}>{quest.title}</Text>
+                    <Text style={styles.muted}>{quest.description}</Text>
+                  </View>
+                  <PillButton
+                    label={quest.completed ? 'Claim' : quest.progress && quest.progress >= quest.target ? 'Claim' : 'Go'}
+                    onPress={async () => {
+                      try {
+                        if (quest.progress >= quest.target) {
+                          await mobileApiClient.claimStudentQuest(quest.id);
+                          await loadQuestsAndStore();
+                          Alert.alert('Success', 'Quest claimed.');
+                        } else {
+                          Alert.alert('Keep going', 'Complete the quest to claim your reward.');
+                        }
+                      } catch (err: any) {
+                        Alert.alert('Error', err.message || 'Failed to claim quest.');
+                      }
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {storeOpen ? (
+            <View style={{ marginTop: 12 }}>
+              {!storeItems.length ? <Text style={styles.muted}>Store is empty.</Text> : null}
+              {storeItems.map((item) => (
+                <View key={item.id} style={styles.listItemRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.listTitle}>{item.name}</Text>
+                    <Text style={styles.muted}>{item.description}</Text>
+                  </View>
+                  <PillButton
+                    label={purchases.some((p) => p.storeItemId === item.id) ? 'Owned' : `Buy ${item.cost}`}
+                    onPress={async () => {
+                      try {
+                        if (purchases.some((p) => p.storeItemId === item.id)) {
+                          Alert.alert('Owned', 'You already own this item.');
+                          return;
+                        }
+                        await mobileApiClient.purchaseStoreItem(item.code);
+                        await loadQuestsAndStore();
+                        Alert.alert('Success', 'Item purchased.');
+                      } catch (err: any) {
+                        Alert.alert('Error', err.message || 'Failed to purchase item.');
+                      }
+                    }}
+                  />
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
 
       {canManage ? (
         <Card>
@@ -2819,6 +3107,25 @@ function WordTranslatorScreen() {
     }
   };
 
+  const speak = (toSay: string) => {
+    if (!toSay || !toSay.trim()) return;
+    try {
+      // require dynamically so bundler doesn't fail if package isn't installed
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Speech = require('expo-speech');
+      if (Speech && typeof Speech.speak === 'function') {
+        try {
+          Speech.stop && Speech.stop();
+        } catch (_e) {}
+        Speech.speak(toSay, { rate: 0.95 });
+        return;
+      }
+    } catch (_err) {
+      // fall through
+    }
+    Alert.alert('TTS not available', 'Install expo-speech to enable text-to-speech.');
+  };
+
   return (
     <Shell title="Word Translator" subtitle="AI translation with saved history">
       <Card>
@@ -2838,6 +3145,10 @@ function WordTranslatorScreen() {
           <View style={styles.resultBox}>
             <Text style={styles.listTitle}>Result</Text>
             <Text style={styles.muted}>{translated}</Text>
+            <View style={{ marginTop: 8, flexDirection: 'row', gap: 8 }}>
+              <PillButton label="🔊 Speak" onPress={() => speak(translated)} />
+              <PillButton label="🔈 Source" onPress={() => speak(text)} />
+            </View>
           </View>
         ) : null}
       </Card>
