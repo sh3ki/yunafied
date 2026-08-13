@@ -104,10 +104,71 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
     setTranslatedText(textToTranslate);
   };
 
-  const handleSpeak = () => {
-    if (!translatedText) return;
-    const utter = new SpeechSynthesisUtterance(translatedText);
-    window.speechSynthesis.speak(utter);
+  const languageNameToCode = (name: string): string => {
+    const map: Record<string, string> = {
+      English: 'en-US',
+      Filipino: 'en-PH',
+      Japanese: 'ja-JP',
+      Korean: 'ko-KR',
+      Spanish: 'es-ES',
+      French: 'fr-FR',
+      German: 'de-DE',
+      'Chinese (Simplified)': 'zh-CN',
+      'Chinese (Traditional)': 'zh-TW',
+      Arabic: 'ar-SA',
+      Hindi: 'hi-IN',
+      Portuguese: 'pt-PT',
+      Italian: 'it-IT',
+      Russian: 'ru-RU',
+      Vietnamese: 'vi-VN',
+      Thai: 'th-TH',
+      Indonesian: 'id-ID',
+      Malay: 'ms-MY',
+      Turkish: 'tr-TR',
+      Dutch: 'nl-NL',
+    };
+    return map[name] || 'en-US';
+  };
+
+  const pickMaleLikeVoice = (voices: SpeechSynthesisVoice[], langPrefix: string) => {
+    if (!voices || voices.length === 0) return null;
+    const byLang = voices.filter((v) => v.lang && v.lang.toLowerCase().startsWith(langPrefix));
+    // prefer voices with 'male' or 'man' in the name
+    const maleNamed = (list: SpeechSynthesisVoice[]) => list.find((v) => /male|man/i.test(v.name || ''));
+    let v = maleNamed(byLang || []) || (byLang.length ? byLang[0] : null);
+    if (v) return v;
+    v = maleNamed(voices) || voices[0];
+    return v || null;
+  };
+
+  const speakText = (text: string, languageName?: string) => {
+    if (!text || typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const langCode = languageName ? languageNameToCode(languageName) : 'en-US';
+
+    const doSpeak = () => {
+      const voices = window.speechSynthesis.getVoices();
+      const langPrefix = langCode.split('-')[0].toLowerCase();
+      const voice = pickMaleLikeVoice(voices, langPrefix);
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = langCode;
+      if (voice) utter.voice = voice;
+      // Slightly lower pitch to sound more male-like when voice selection is ambiguous
+      utter.pitch = 0.9;
+      utter.rate = 1;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(utter);
+    };
+
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices || voices.length === 0) {
+      // voices may load asynchronously
+      window.speechSynthesis.onvoiceschanged = () => doSpeak();
+      // also set a small timeout fallback
+      setTimeout(() => doSpeak(), 300);
+      return;
+    }
+
+    doSpeak();
   };
 
   const handleSaveVocab = async () => {
@@ -184,12 +245,23 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                     {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
                   </select>
                 </div>
-                <textarea
-                  className="flex-1 w-full border border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-violet-500 outline-none resize-none bg-gray-50 text-lg"
-                  placeholder="Type text or paste content to translate..."
-                  value={textToTranslate}
-                  onChange={(e) => setTextToTranslate(e.target.value)}
-                />
+                <div className="relative">
+                  <textarea
+                    className="flex-1 w-full border border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-violet-500 outline-none resize-none bg-gray-50 text-lg"
+                    placeholder="Type text or paste content to translate..."
+                    value={textToTranslate}
+                    onChange={(e) => setTextToTranslate(e.target.value)}
+                  />
+                  {textToTranslate.trim() ? (
+                    <button
+                      onClick={() => speakText(textToTranslate, sourceLanguage)}
+                      title={`Listen (source: ${sourceLanguage})`}
+                      className="absolute right-3 bottom-3 p-2 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-violet-50 transition"
+                    >
+                      <Volume2 className="h-4 w-4 text-gray-600" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="flex flex-col relative">
@@ -213,13 +285,22 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                     {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
                   </select>
                 </div>
-                <div className="flex-1 w-full border border-gray-200 rounded-xl p-4 bg-violet-50/40">
+                <div className="flex-1 w-full border border-gray-200 rounded-xl p-4 bg-violet-50/40 relative">
                   {isTranslating ? (
                     <div className="h-full flex items-center justify-center">
                       <div className="h-8 w-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
                     </div>
                   ) : translatedText ? (
-                    <p className="text-gray-800 text-lg leading-relaxed">{translatedText}</p>
+                    <>
+                      <p className="text-gray-800 text-lg leading-relaxed pr-10">{translatedText}</p>
+                      <button
+                        onClick={() => speakText(translatedText, targetLanguage)}
+                        title={`Listen (target: ${targetLanguage})`}
+                        className="absolute right-3 bottom-3 p-2 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-violet-50 transition"
+                      >
+                        <Volume2 className="h-4 w-4 text-gray-600" />
+                      </button>
+                    </>
                   ) : (
                     <p className="text-gray-400 italic mt-2">Translation will appear here...</p>
                   )}
@@ -240,13 +321,6 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
             <div className="mt-6 flex flex-wrap justify-end gap-2">
               {translatedText && (
                 <>
-                  <button
-                    onClick={handleSpeak}
-                    title="Text to speech"
-                    className="flex items-center gap-2 border border-gray-200 px-4 py-2.5 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition"
-                  >
-                    <Volume2 className="h-4 w-4" /> Listen
-                  </button>
                   <button
                     onClick={handleSaveVocab}
                     disabled={savingVocab}
@@ -298,8 +372,35 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                     <div className="text-xs text-gray-500 mb-2">
                       {item.sourceLanguage} <ArrowRight className="h-3 w-3 inline mx-1" /> {item.targetLanguage}
                     </div>
-                    <p className="text-sm text-gray-700"><span className="font-semibold">Source:</span> {item.sourceText}</p>
-                    <p className="text-sm text-gray-800 mt-1"><span className="font-semibold">Translation:</span> {item.translatedText}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-700"><span className="font-semibold">Source:</span> {item.sourceText}</p>
+                      </div>
+                      <div className="shrink-0">
+                        <button
+                          onClick={() => speakText(item.sourceText, item.sourceLanguage)}
+                          title={`Listen source (${item.sourceLanguage})`}
+                          className="p-2 rounded-full bg-white border border-gray-200 text-gray-600 hover:bg-violet-50 transition"
+                        >
+                          <Volume2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3 mt-1">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-800"><span className="font-semibold">Translation:</span> {item.translatedText}</p>
+                      </div>
+                      <div className="shrink-0">
+                        <button
+                          onClick={() => speakText(item.translatedText, item.targetLanguage)}
+                          title={`Listen translation (${item.targetLanguage})`}
+                          className="p-2 rounded-full bg-white border border-gray-200 text-gray-600 hover:bg-violet-50 transition"
+                        >
+                          <Volume2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))
               )}
