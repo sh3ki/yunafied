@@ -638,9 +638,11 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
   // Ensure preflight requests are handled
   app.options("*", cors());
 
-// Enable trust proxy for accurate client IP detection behind Cloudflare/proxies
-// (Required for express-rate-limit to work correctly with X-Forwarded-For)
-app.set("trust proxy", true);
+// Enable trust proxy with explicit hop count (not boolean true) so
+// express-rate-limit can safely derive client IP behind proxies.
+// Render + edge proxy setups typically work with 1 hop.
+const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS || 1);
+app.set("trust proxy", Number.isFinite(trustProxyHops) && trustProxyHops >= 1 ? trustProxyHops : 1);
 
 app.use(compression());
 app.use(express.json());
