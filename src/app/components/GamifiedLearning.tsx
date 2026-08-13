@@ -72,13 +72,8 @@ function createDraftQuestion(): DraftQuestion {
       { id: makeLocalId(), text: '', isCorrect: false },
     ],
   };
-
-  function hasPurchase(code: string) {
-    const item = storeItems.find((s) => s.code === code);
-    if (!item) return false;
-    return studentPurchases.some((p) => p.storeItemId === item.id);
-  }
 }
+
 
 function createDefaultQuizForm(categoryId = ''): DraftQuizForm {
   return {
@@ -194,6 +189,12 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   const bgGainRef = useRef<GainNode | null>(null);
   const [eliminatedChoiceIds, setEliminatedChoiceIds] = useState<string[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<GamifiedQuizDetailItem | null>(null);
+
+  function hasPurchase(code: string) {
+    const item = storeItems.find((s) => s.code === code);
+    if (!item) return false;
+    return studentPurchases.some((p) => p.storeItemId === item.id);
+  }
 
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [selectedQuizId, setSelectedQuizId] = useState('');
@@ -1451,8 +1452,8 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                         <p className="font-semibold">{meta?.name || 'Item'}</p>
                         <p className="text-xs text-gray-500">{meta?.description}</p>
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => void handleUsePowerUp(meta?.code || '')} className="px-3 py-1 bg-white border rounded">Use</button>
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs text-gray-500">Use during quiz via the toolbar</span>
                       </div>
                     </div>
                   );
