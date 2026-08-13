@@ -3135,6 +3135,7 @@ export class YunafiedService {
               action_view AS "actionView", priority, is_read AS "isRead", created_at AS "createdAt"
          FROM notifications
         WHERE user_id = $1
+          AND id NOT IN (SELECT ref FROM notification_delete_refs WHERE user_id = $1)
         ORDER BY created_at DESC
         LIMIT $2`,
       [userId, limit],
@@ -3145,6 +3146,14 @@ export class YunafiedService {
   async markNotificationRead(notificationId: string, userId: string): Promise<boolean> {
     await pool.query(
       "INSERT INTO notification_read_refs (user_id, ref) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+      [userId, notificationId],
+    );
+    return true;
+  }
+
+  async addNotificationDeleteRef(notificationId: string, userId: string): Promise<boolean> {
+    await pool.query(
+      "INSERT INTO notification_delete_refs (user_id, ref) VALUES ($1, $2) ON CONFLICT DO NOTHING",
       [userId, notificationId],
     );
     return true;
@@ -3172,6 +3181,14 @@ export class YunafiedService {
       allReadAt: allReadResult.rows[0]?.notifications_all_read_at ?? null,
       readRefs: new Set(refsResult.rows.map((r) => r.ref)),
     };
+  }
+
+  async getNotificationDeleteRefs(userId: string): Promise<Set<string>> {
+    const result = await pool.query<{ ref: string }>(
+      "SELECT ref FROM notification_delete_refs WHERE user_id = $1",
+      [userId],
+    );
+    return new Set(result.rows.map((r) => r.ref));
   }
 
   async deleteNotification(notificationId: string, userId: string): Promise<boolean> {
