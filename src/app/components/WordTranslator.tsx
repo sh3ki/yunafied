@@ -285,7 +285,7 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                     {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
                   </select>
                 </div>
-                <div className="flex-1 w-full border border-gray-200 rounded-xl p-4 bg-violet-50/40 relative">
+                <div className="flex-1 w-full border border-gray-200 rounded-xl p-4 bg-gray-50 text-lg relative">
                   {isTranslating ? (
                     <div className="h-full flex items-center justify-center">
                       <div className="h-8 w-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
@@ -296,7 +296,7 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                       <button
                         onClick={() => speakText(translatedText, targetLanguage)}
                         title={`Listen (target: ${targetLanguage})`}
-                        className="absolute right-3 bottom-3 p-2 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-violet-50 transition"
+                        className="absolute right-3 bottom-3 p-2 rounded-full bg-white border border-gray-200 shadow-sm hover:bg-gray-50 transition"
                       >
                         <Volume2 className="h-4 w-4 text-gray-600" />
                       </button>
