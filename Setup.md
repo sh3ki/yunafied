@@ -193,3 +193,43 @@ npm run db:seed --prefix backend
 npm run db:seed:gamified --prefix backend
 npm run db:check --prefix backend
 ```
+
+## 8) YouTube transcript env vars (Render / hosted deployments)
+
+Some YouTube videos require a logged-in session or a non-cloud IP to fetch transcripts. On platforms like Render (free tier) you may not have a persistent filesystem or shell access. Use the following approach to provide cookies or a proxy via environment variables.
+
+- Preferred: provide cookies exported from a logged-in browser. This usually fixes the "Sign in to confirm you're not a bot" error.
+- Fallback: provide a residential proxy via `YTDLP_PROXY` (costly, but more robust for many videos).
+
+Steps to export cookies and add to Render as an env var:
+
+1. Export cookies in Netscape `cookies.txt` format from your browser (use a browser extension like "Get cookies.txt" or similar). Save as `cookies.txt` locally.
+2. Base64-encode the file so newlines are safe for the Render dashboard.
+
+  macOS / Linux / WSL / Git Bash:
+  ```bash
+  base64 cookies.txt > cookies.b64
+  ```
+
+  Windows PowerShell:
+  ```powershell
+  [Convert]::ToBase64String([IO.File]::ReadAllBytes('cookies.txt')) > cookies.b64
+  ```
+
+3. Open your Render service dashboard → Environment → Environment Variables and add:
+  - `YTDLP_COOKIES_CONTENT` = (paste contents of `cookies.b64`)
+  - Optionally, `YTDLP_PROXY` = `http://user:pass@host:port` (include scheme)
+  - Optionally, `YTDLP_JS_RUNTIMES` = `node`
+
+4. Redeploy your service on Render.
+
+What the code does (already implemented): the backend will decode `YTDLP_COOKIES_CONTENT` at runtime, write a temporary cookies file on the instance, and set `YTDLP_COOKIES` to that path before calling `yt-dlp`.
+
+How to test without shell (quick):
+- Use the frontend `Video Summarizer` UI in the app and paste the target YouTube URL. If cookies fixed the issue, the transcription will proceed and the summary will be returned. Check your Render logs for yt-dlp stderr when it fails.
+
+Notes / caveats:
+- Cookies may expire or require re-exporting after password changes or 2FA events.
+- Using authenticated cookies or a proxy may violate YouTube Terms of Service — use responsibly.
+- If you continue to see captcha errors, a high-quality residential proxy is the more reliable option.
+
