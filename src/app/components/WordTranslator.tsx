@@ -247,7 +247,7 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                 </div>
                 <div className="relative">
                   <textarea
-                    className="flex-1 w-full border border-gray-200 rounded-xl p-4 focus:ring-2 focus:ring-violet-500 outline-none resize-none bg-gray-50 text-lg"
+                    className="flex-1 w-full border border-gray-200 rounded-xl p-4 bg-gray-50 text-lg placeholder-gray-400 italic min-h-[200px]"
                     placeholder="Type text or paste content to translate..."
                     value={textToTranslate}
                     onChange={(e) => setTextToTranslate(e.target.value)}
@@ -285,7 +285,7 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                     {LANGUAGES.map((l) => <option key={l}>{l}</option>)}
                   </select>
                 </div>
-                <div className="flex-1 w-full border border-gray-200 rounded-xl p-4 bg-gray-50 text-lg relative">
+                <div className="flex-1 w-full border border-gray-200 rounded-xl p-4 bg-gray-50 text-lg relative min-h-[200px]">
                   {isTranslating ? (
                     <div className="h-full flex items-center justify-center">
                       <div className="h-8 w-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
