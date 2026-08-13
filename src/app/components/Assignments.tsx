@@ -50,7 +50,7 @@ export function Assignments({
   const [submissionFile, setSubmissionFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'];
+  const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.jpg', '.jpeg', '.png', '.gif', '.webp'];
   const ALLOWED_ACCEPT = ALLOWED_EXTENSIONS.join(',');
 
   const [gradeInput, setGradeInput] = useState('');
@@ -221,7 +221,7 @@ export function Assignments({
       </div>
 
       <div className="flex gap-6 h-full min-h-[520px]">
-        <div className="w-1/3 border-r border-gray-200 pr-6 overflow-y-auto">
+        <div className="w-1/3 border-r border-gray-200 pr-6 overflow-y-auto h-full">
           <div className="space-y-3">
             {assignments.map((assignment) => {
               const count = submissions.filter((s) => s.assignmentId === assignment.id).length;
@@ -352,9 +352,18 @@ export function Assignments({
                           {mySubmission.fileName}
                         </a>
                       )}
-                      <p className="mt-4 text-xs text-gray-500">
-                        View your grade and feedback in <span className="font-semibold text-indigo-600">Grades &amp; Feedback</span>.
-                      </p>
+                      {(mySubmission.grade || mySubmission.feedback) ? (
+                        <div className="mt-4 text-left">
+                          {mySubmission.grade && (
+                            <div className="text-sm font-semibold">Grade: <span className="text-indigo-600">{mySubmission.grade}</span></div>
+                          )}
+                          {mySubmission.feedback && (
+                            <div className="mt-2 text-sm text-gray-700 bg-white border border-gray-100 rounded-lg p-3">{mySubmission.feedback}</div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="mt-4 text-xs text-gray-500">View your grade and feedback in <span className="font-semibold text-indigo-600">Grades &amp; Feedback</span>.</p>
+                      )}
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -402,7 +411,7 @@ export function Assignments({
                             </button>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-1">Accepted: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX</p>
+                        <p className="text-xs text-gray-400 mt-1">Accepted: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, JPG, JPEG, PNG, GIF, WEBP</p>
                       </div>
                       <button
                         disabled={saving}
