@@ -1293,12 +1293,13 @@ app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res
 
     const query = notificationsQuerySchema.parse(req.query);
     const requester = { id: userId, role };
-    const [assignments, submissions, schedules, announcements, readState] = await Promise.all([
+    const [assignments, submissions, schedules, announcements, readState, deleteRefs] = await Promise.all([
       service.listAssignments(),
       service.listSubmissionsForRole(requester),
       service.listSchedulesForRole(requester),
       service.listAnnouncements(),
       service.getNotificationReadState(userId),
+      service.getNotificationDeleteRefs(userId),
     ]);
 
     const isRefRead = (id: string, createdAt: string): boolean => {
@@ -1408,7 +1409,9 @@ app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res
     }
 
     notificationRows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    res.json(notificationRows.slice(0, query.limit));
+    // Filter out any synthetic/generated notifications the user has dismissed
+    const visible = notificationRows.filter((r) => !deleteRefs.has(r.id));
+    res.json(visible.slice(0, query.limit));
   } catch (error) {
     next(error);
   }
@@ -2894,9 +2897,10 @@ app.delete("/api/notifications/:id", requireAuth, async (req: AuthenticatedReque
     // Synthetic notifications use a composite id like "type:uuid" (eg "grade:...",
     // "announcement:...") and are not stored in the notifications table. Attempting
     // to DELETE them will cause Postgres to try casting the value to UUID and fail.
-    // In that case, treat the delete as a dismiss by recording a read-ref.
+    // Treat deletes for synthetic notifications as a dismiss: record a delete-ref
+    // so they will no longer be generated or shown to the user.
     if (id.includes(':')) {
-      await service.markNotificationRead(id, userId);
+      await service.addNotificationDeleteRef(id, userId);
       res.status(204).end();
       return;
     }
