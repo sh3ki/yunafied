@@ -171,7 +171,7 @@ const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
   admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'grades', 'users', 'analytics', 'audit-logs', 'meeting-history', 'profile'],
-  teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'gamified-learning', 'performance', 'video-summarizer', 'profile'],
+  teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'gamified-learning', 'video-summarizer', 'profile'],
   student: [
     'dashboard',
     'schedule',
@@ -454,6 +454,21 @@ function AuthenticatedShell({
                       </>
                     );
                   })()}
+
+                  {/* Embed Performance into teacher dashboard (retain graphs, hide its header) */}
+                  {userRole === 'teacher' && (
+                    <div className="mt-6">
+                      <Performance
+                        submissions={data.submissions}
+                        assignments={data.assignments}
+                        users={data.users}
+                        schedules={data.schedules}
+                        role={userRole}
+                        userId={session.user.id}
+                        showHeader={false}
+                      />
+                    </div>
+                  )}
 
                   {/* Student Dashboard */}
                   {userRole === 'student' && (() => {
