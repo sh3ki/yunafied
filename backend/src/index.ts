@@ -2890,7 +2890,15 @@ app.delete("/api/notifications/:id", requireAuth, async (req: AuthenticatedReque
     const userId = req.auth?.sub;
     if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
     const deleted = await service.deleteNotification(req.params.id, userId);
-    if (!deleted) { res.status(404).json({ message: "Notification not found." }); return; }
+    if (!deleted) {
+      // Notification may be a synthetic/generated ref (eg "grade:...", "assignment-due:...")
+      // These are not persisted in the notifications table. Marking as read will
+      // hide the notification for the user, so treat that as a successful dismiss.
+      await service.markNotificationRead(req.params.id, userId);
+      res.status(204).end();
+      return;
+    }
+
     res.status(204).end();
   } catch (error) { next(error); }
 });
