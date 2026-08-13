@@ -2756,6 +2756,31 @@ app.get("/api/meetings/incoming", requireAuth, requireRole("student"), async (re
   }
 });
 
+// Return latest meeting rooms for a list of schedule IDs
+app.post("/api/meetings/by-schedules", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+
+    const body = z.object({ scheduleIds: z.array(z.string()).min(1) }).parse(req.body);
+    const rows = await service.getLatestMeetingsForSchedules(body.scheduleIds);
+
+    // Only return rows related to the requesting user for privacy
+    const filtered = rows.filter((r) => r.teacherId === userId || r.studentId === userId);
+
+    // Map by scheduleId
+    const map: Record<string, typeof rows[0] | null> = {};
+    for (const id of body.scheduleIds) map[id] = null;
+    for (const r of filtered) {
+      if (r.scheduleId) map[r.scheduleId] = r;
+    }
+
+    res.json(map);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/meetings/:roomToken", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.auth?.sub;
