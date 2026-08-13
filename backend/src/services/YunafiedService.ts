@@ -13,6 +13,9 @@ import {
   GamifiedQuestionItem,
   GamifiedQuizDetailItem,
   GamifiedQuizItem,
+  StudentQuestItem,
+  StoreItem,
+  StudentStorePurchaseItem,
   LearningMaterialItem,
   MessageItem,
   MessageUserItem,
@@ -2126,6 +2129,14 @@ export class YunafiedService {
   ): Promise<GamifiedQuizDetailItem> {
     this.validateGamifiedQuestions(input.questions);
 
+    // capture previous attempt count and XP so we can award badges based on transitions
+    const prevAttemptCountResult = await pool.query<{ cnt: string }>(
+      `SELECT COUNT(*)::text AS cnt FROM gamified_attempts WHERE student_id = $1`,
+      [studentId],
+    );
+    const prevAttemptCount = Number(prevAttemptCountResult.rows[0]?.cnt || 0);
+    const prevXpItem = await this.getStudentXp(studentId).catch(() => ({ studentId, totalXp: 0, level: 'Learner', updatedAt: new Date().toISOString() }));
+
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -2452,10 +2463,78 @@ export class YunafiedService {
 
       await client.query("COMMIT");
 
+      // Award XP equal to the quiz total score (rounded)
+      const xpGained = Math.max(0, Math.round(totalScore));
+      const newXp = await this.addXp(studentId, xpGained).catch(() => null);
+
+      const awardedBadges: import("../types/models.js").BadgeItem[] = [];
+
+      // FIRST_QUIZ
+      if (prevAttemptCount === 0) {
+        const badge = await this.awardBadge(studentId, 'FIRST_QUIZ').catch(() => null);
+        if (badge) awardedBadges.push(badge);
+      }
+
+      // PERFECT_SCORE
+      if (correctAnswers === totalQuestions) {
+        const badge = await this.awardBadge(studentId, 'PERFECT_SCORE').catch(() => null);
+        if (badge) awardedBadges.push(badge);
+      }
+
+      // SPEED_DEMON: if student left >= 50% of total allowed time
+      const sumTimeRemaining = evaluatedAnswers.reduce((s, a) => s + (a.timeRemainingSeconds || 0), 0);
+      const maxTotalTime = (quiz.time_per_question_seconds || 0) * totalQuestions;
+      if (maxTotalTime > 0 && sumTimeRemaining >= Math.ceil(maxTotalTime * 0.5)) {
+        const badge = await this.awardBadge(studentId, 'SPEED_DEMON').catch(() => null);
+        if (badge) awardedBadges.push(badge);
+      }
+
+      // XP milestones
+      const prevTotalXp = prevXpItem?.totalXp || 0;
+      const newTotalXp = newXp?.totalXp || prevTotalXp;
+      if (prevTotalXp < 1000 && newTotalXp >= 1000) {
+        const badge = await this.awardBadge(studentId, 'SCORE_1000').catch(() => null);
+        if (badge) awardedBadges.push(badge);
+      }
+      if (prevTotalXp < 5000 && newTotalXp >= 5000) {
+        const badge = await this.awardBadge(studentId, 'SCORE_5000').catch(() => null);
+        if (badge) awardedBadges.push(badge);
+      }
+
+      // Update quest progress: increment COMPLETE_ONE_QUIZ and PLAY_3, and mark SCORE_80 if applicable
+      try {
+        // COMPLETE_ONE_QUIZ & PLAY_3
+        await pool.query(
+          `UPDATE student_quests SET progress = LEAST(target, progress + 1), is_completed = (progress + 1) >= target
+             WHERE student_id = $1 AND quest_type IN ('COMPLETE_ONE_QUIZ', 'PLAY_3')`,
+          [studentId],
+        );
+
+        // SCORE_80: if accuracy >= 80%, mark completed
+        const accuracy = totalQuestions > 0 ? (correctAnswers / totalQuestions) * 100 : 0;
+        if (accuracy >= 80) {
+          const completedRes = await pool.query(
+            `UPDATE student_quests SET progress = target, is_completed = TRUE WHERE student_id = $1 AND quest_type = 'SCORE_80' RETURNING id, reward_xp`,
+            [studentId],
+          );
+          if (completedRes.rows[0]) {
+            const rewardXp = Number(completedRes.rows[0].reward_xp || 0);
+            if (rewardXp > 0) {
+              await this.addXp(studentId, rewardXp).catch(() => null);
+            }
+          }
+        }
+      } catch (_e) {
+        // ignore quests update errors
+      }
+
       return {
         ...attempt,
         attemptId: attempt.id,
         answers: evaluatedAnswers,
+        xpGained,
+        newXp: newXp || undefined,
+        awardedBadges: awardedBadges.length ? awardedBadges : undefined,
       };
     } catch (error) {
       await client.query("ROLLBACK");
@@ -2495,6 +2574,172 @@ export class YunafiedService {
     );
 
     return result.rows;
+  }
+
+  // ─── Quests & Store ─────────────────────────────────────────────────────────
+
+  async listStudentQuests(studentId: string): Promise<StudentQuestItem[]> {
+    const result = await pool.query(
+      `SELECT id, student_id AS "studentId", quest_type AS "questType", title, description, target, progress, reward_xp AS "rewardXp", reward_badge_code AS "rewardBadgeCode", is_completed AS "isCompleted", created_at AS "createdAt", expires_at AS "expiresAt"
+         FROM student_quests
+        WHERE student_id = $1
+          AND (expires_at IS NULL OR expires_at > NOW())
+        ORDER BY created_at DESC`,
+      [studentId],
+    );
+    return result.rows as StudentQuestItem[];
+  }
+
+  async generateDailyQuests(studentId: string): Promise<StudentQuestItem[]> {
+    // Create a few simple quests for the student for the next 24 hours
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const quests = [
+        { quest_type: 'COMPLETE_ONE_QUIZ', title: 'Complete 1 quiz today', description: 'Finish any one quiz today', target: 1, reward_xp: 50 },
+        { quest_type: 'SCORE_80', title: 'Get 80%+ accuracy', description: 'Score >= 80% on a quiz', target: 1, reward_xp: 100 },
+        { quest_type: 'PLAY_3', title: 'Play 3 quizzes', description: 'Complete three quizzes this week', target: 3, reward_xp: 150 },
+      ];
+
+      const created: StudentQuestItem[] = [];
+      for (const q of quests) {
+        const res = await client.query(
+          `INSERT INTO student_quests (student_id, quest_type, title, description, target, reward_xp, expires_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7)
+           RETURNING id, student_id AS "studentId", quest_type AS "questType", title, description, target, progress, reward_xp AS "rewardXp", reward_badge_code AS "rewardBadgeCode", is_completed AS "isCompleted", created_at AS "createdAt", expires_at AS "expiresAt"`,
+          [studentId, q.quest_type, q.title, q.description, q.target, q.reward_xp, expiresAt],
+        );
+        created.push(res.rows[0]);
+      }
+      await client.query('COMMIT');
+      return created;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async claimStudentQuest(studentId: string, questId: string): Promise<StudentQuestItem | null> {
+    const questRes = await pool.query(
+      `SELECT id, student_id AS "studentId", quest_type AS "questType", title, description, target, progress, reward_xp AS "rewardXp", reward_badge_code AS "rewardBadgeCode", is_completed AS "isCompleted", created_at AS "createdAt", expires_at AS "expiresAt"
+         FROM student_quests WHERE id = $1 AND student_id = $2`,
+      [questId, studentId],
+    );
+    const quest = questRes.rows[0] as StudentQuestItem | undefined;
+    if (!quest) return null;
+    if (quest.isCompleted) return quest;
+
+    // For simplicity mark completed and award XP and badge
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE student_quests SET is_completed = TRUE, progress = target WHERE id = $1', [questId]);
+      const xp = Number(quest.rewardXp || 0);
+      let newXp = null;
+      if (xp > 0) newXp = await this.addXp(studentId, xp);
+      if (quest.rewardBadgeCode) {
+        await this.awardBadge(studentId, quest.rewardBadgeCode).catch(() => null);
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const updated = await pool.query(
+      `SELECT id, student_id AS "studentId", quest_type AS "questType", title, description, target, progress, reward_xp AS "rewardXp", reward_badge_code AS "rewardBadgeCode", is_completed AS "isCompleted", created_at AS "createdAt", expires_at AS "expiresAt"
+         FROM student_quests WHERE id = $1`,
+      [questId],
+    );
+    return updated.rows[0] as StudentQuestItem;
+  }
+
+  async listStoreItems(): Promise<StoreItem[]> {
+    const result = await pool.query(
+      `SELECT id, code, name, description, xp_cost AS "xpCost", is_consumable AS "isConsumable", created_at AS "createdAt" FROM store_items ORDER BY created_at ASC`,
+    );
+    return result.rows as StoreItem[];
+  }
+
+  async purchaseStoreItem(studentId: string, code: string): Promise<StudentStorePurchaseItem | null> {
+    const itemRes = await pool.query<{ id: string; xp_cost: number }>('SELECT id, xp_cost FROM store_items WHERE code = $1', [code]);
+    const item = itemRes.rows[0];
+    if (!item) throw new Error('Store item not found');
+
+    // verify XP
+    const xp = await this.getStudentXp(studentId);
+    if (xp.totalXp < item.xp_cost) throw new Error('Insufficient XP');
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // deduct XP
+      await client.query('UPDATE student_xp SET total_xp = GREATEST(total_xp - $1, 0), updated_at = NOW() WHERE student_id = $2', [item.xp_cost, studentId]);
+      const inserted = await client.query(
+        `INSERT INTO student_store_purchases (student_id, store_item_id) VALUES ($1, $2) RETURNING id, student_id AS "studentId", store_item_id AS "storeItemId", purchased_at AS "purchasedAt"`,
+        [studentId, item.id],
+      );
+      await client.query('COMMIT');
+      return inserted.rows[0] as StudentStorePurchaseItem;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listStudentStorePurchases(studentId: string): Promise<StudentStorePurchaseItem[]> {
+    const result = await pool.query(
+      `SELECT id, student_id AS "studentId", store_item_id AS "storeItemId", purchased_at AS "purchasedAt"
+         FROM student_store_purchases WHERE student_id = $1 ORDER BY purchased_at DESC`,
+      [studentId],
+    );
+    return result.rows as StudentStorePurchaseItem[];
+  }
+
+  async useStoreItem(studentId: string, code: string): Promise<StudentStorePurchaseItem | null> {
+    // Consume one purchased item with matching code; return the purchase record
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const itemRes = await client.query('SELECT id FROM store_items WHERE code = $1', [code]);
+      const item = itemRes.rows[0];
+      if (!item) {
+        await client.query('ROLLBACK');
+        throw new Error('Store item not found');
+      }
+
+      const purchaseRes = await client.query(
+        `SELECT id FROM student_store_purchases WHERE student_id = $1 AND store_item_id = $2 ORDER BY purchased_at ASC LIMIT 1`,
+        [studentId, item.id],
+      );
+      const purchase = purchaseRes.rows[0];
+      if (!purchase) {
+        await client.query('ROLLBACK');
+        throw new Error('No purchased item available');
+      }
+
+      await client.query('DELETE FROM student_store_purchases WHERE id = $1', [purchase.id]);
+      const inserted = await client.query(
+        `SELECT id, student_id AS "studentId", store_item_id AS "storeItemId", purchased_at AS "purchasedAt" FROM student_store_purchases WHERE id = $1`,
+        [purchase.id],
+      ).catch(() => ({ rows: [] }));
+
+      await client.query('COMMIT');
+      // Return a simple object representing the consumed purchase
+      return { id: purchase.id, studentId, storeItemId: item.id, purchasedAt: new Date().toISOString() } as StudentStorePurchaseItem;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   // ─── Meeting Rooms (WebRTC Video Calls) ─────────────────────────────────────
