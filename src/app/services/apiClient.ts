@@ -34,6 +34,9 @@ import {
   VocabItem,
   VideoSummaryItem,
   VideoSummaryResponse,
+  StudentQuestItem,
+  StoreItem,
+  StudentStorePurchaseItem,
 } from "@/app/types/models";
 
 interface LoginResponse {
@@ -450,6 +453,30 @@ class YunafiedApiClient {
     }
 
     return this.request<GamifiedLeaderboardItem[]>(`/api/gamified/leaderboard?${params.toString()}`);
+  }
+
+  async listStudentQuests(): Promise<StudentQuestItem[]> {
+    return this.request<StudentQuestItem[]>('/api/student/quests');
+  }
+
+  async claimStudentQuest(id: string): Promise<StudentQuestItem> {
+    return this.request<StudentQuestItem>(`/api/student/quests/${id}/claim`, { method: 'POST' });
+  }
+
+  async listStoreItems(): Promise<StoreItem[]> {
+    return this.request<StoreItem[]>('/api/store/items');
+  }
+
+  async purchaseStoreItem(code: string): Promise<StudentStorePurchaseItem> {
+    return this.request<StudentStorePurchaseItem>('/api/store/purchase', { method: 'POST', body: JSON.stringify({ code }) });
+  }
+
+  async listStudentStorePurchases(): Promise<StudentStorePurchaseItem[]> {
+    return this.request<StudentStorePurchaseItem[]>('/api/student/store/purchases');
+  }
+
+  async useStoreItem(code: string): Promise<StudentStorePurchaseItem> {
+    return this.request<StudentStorePurchaseItem>('/api/store/use', { method: 'POST', body: JSON.stringify({ code }) });
   }
 
   async listAssignments(): Promise<AssignmentItem[]> {
