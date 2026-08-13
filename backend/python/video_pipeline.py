@@ -94,29 +94,48 @@ def fetch_youtube_transcript(video_id: str) -> str:
 def download_youtube_audio(video_url: str, output_dir: str) -> str:
     output_template = str(Path(output_dir) / "youtube_audio.%(ext)s")
     ytdlp_bin = shutil.which("yt-dlp")
+    # Prefer the yt_dlp Python API when available (more reliable in some environments)
+    try:
+        import yt_dlp
 
-    if ytdlp_bin:
-        cmd = [
-            ytdlp_bin,
-            "-f",
-            "bestaudio/best",
-            "-o",
-            output_template,
-            video_url,
-        ]
-    else:
-        cmd = [
-            sys.executable,
-            "-m",
-            "yt_dlp",
-            "-f",
-            "bestaudio/best",
-            "-o",
-            output_template,
-            video_url,
-        ]
+        ydl_opts = {
+            "format": "bestaudio/best",
+            "outtmpl": output_template,
+            "quiet": True,
+            "no_warnings": True,
+            "ignoreerrors": False,
+            "noplaylist": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([video_url])
+    except Exception:
+        # Fallback to external binary or module invocation
+        if ytdlp_bin:
+            cmd = [
+                ytdlp_bin,
+                "-f",
+                "bestaudio/best",
+                "-o",
+                output_template,
+                video_url,
+            ]
+        else:
+            cmd = [
+                sys.executable,
+                "-m",
+                "yt_dlp",
+                "-f",
+                "bestaudio/best",
+                "-o",
+                output_template,
+                video_url,
+            ]
 
-    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except subprocess.CalledProcessError as exc:
+            stderr_text = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else str(exc)
+            raise RuntimeError(f"yt-dlp download failed: {stderr_text}")
 
     candidates = sorted(Path(output_dir).glob("youtube_audio.*"))
     if not candidates:
