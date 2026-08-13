@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, Clock, Play, Plus, Sparkles, Target, Trophy, X } from 'lucide-react';
+import { Check, Clock, Play, Plus, Sparkles, Target, Trophy, X, ShoppingCart, List, Music, Gift } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { toast } from 'sonner';
 import { apiClient } from '@/app/services/apiClient';
 import {
@@ -15,6 +16,7 @@ import {
   BadgeItem,
   StudentQuestItem,
   StoreItem,
+  StudentStorePurchaseItem,
 } from '@/app/types/models';
 
 interface GamifiedLearningProps {
@@ -70,6 +72,12 @@ function createDraftQuestion(): DraftQuestion {
       { id: makeLocalId(), text: '', isCorrect: false },
     ],
   };
+
+  function hasPurchase(code: string) {
+    const item = storeItems.find((s) => s.code === code);
+    if (!item) return false;
+    return studentPurchases.some((p) => p.storeItemId === item.id);
+  }
 }
 
 function createDefaultQuizForm(categoryId = ''): DraftQuizForm {
@@ -119,6 +127,56 @@ function playCountdownTone(secondsLeft: number): void {
   };
 }
 
+function fireConfettiBurst() {
+  try {
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+      scalar: 1.2,
+    });
+    setTimeout(() => {
+      confetti({
+        particleCount: 60,
+        spread: 110,
+        origin: { y: 0.8 },
+      });
+    }, 250);
+  } catch (_e) {
+    // ignore if confetti fails
+  }
+}
+
+function startBackgroundMusic(ref: React.MutableRefObject<AudioContext | null>, gainRef: React.MutableRefObject<GainNode | null>) {
+  try {
+    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+    const ctx = new AudioContextCtor();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.value = 220;
+    gain.gain.value = 0.0025; // very low ambient
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    ref.current = ctx;
+    gainRef.current = gain;
+    (window as any).__yunafied_bg_audio = ctx;
+  } catch (_e) {
+    // ignore
+  }
+}
+
+function stopBackgroundMusic() {
+  try {
+    const existingCtx = (window as any).__yunafied_bg_audio as AudioContext | undefined;
+    if (existingCtx) {
+      existingCtx.close().catch(() => undefined);
+      (window as any).__yunafied_bg_audio = undefined;
+    }
+  } catch (_e) {}
+}
+
 export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   const canManage = role === 'admin' || role === 'teacher';
   const canPlay = role === 'student';
@@ -130,6 +188,10 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   const [quests, setQuests] = useState<StudentQuestItem[]>([]);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [studentPurchases, setStudentPurchases] = useState<StudentStorePurchaseItem[]>([]);
+  const [storeOpen, setStoreOpen] = useState(false);
+  const [questsOpen, setQuestsOpen] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const bgGainRef = useRef<GainNode | null>(null);
   const [eliminatedChoiceIds, setEliminatedChoiceIds] = useState<string[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<GamifiedQuizDetailItem | null>(null);
 
@@ -229,7 +291,22 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
     try {
       if (canPlay) {
         const q = await apiClient.listStudentQuests();
-        setQuests(q);
+          setQuests(q);
+          // auto-claim completed daily quests (no claim button UX)
+          void (async () => {
+            for (const quest of q) {
+              const isDaily = ['COMPLETE_ONE_QUIZ', 'SCORE_80', 'PLAY_3'].includes(quest.questType);
+              if (isDaily && !quest.isCompleted && quest.progress >= quest.target) {
+                try {
+                  await apiClient.claimStudentQuest(quest.id);
+                } catch (_e) {
+                  // ignore
+                }
+              }
+            }
+            const refreshed = await apiClient.listStudentQuests();
+            setQuests(refreshed);
+          })();
         const items = await apiClient.listStoreItems();
         setStoreItems(items);
       }
@@ -350,6 +427,9 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
     setLastAnswerFeedback(null);
     setTimeLeft(activeQuiz.timePerQuestionSeconds);
     setTimerActive(true);
+    // start low-volume background ambient during quiz
+    startBackgroundMusic(audioContextRef, bgGainRef);
+    (window as any).__yunafied_bg_audio = audioContextRef.current;
   };
 
   const finishQuiz = async (
@@ -385,6 +465,17 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
         if (canPlay) {
           const q = await apiClient.listStudentQuests();
           setQuests(q);
+          // auto-claim completed daily quests
+          for (const quest of q) {
+            const isDaily = ['COMPLETE_ONE_QUIZ', 'SCORE_80', 'PLAY_3'].includes(quest.questType);
+            if (isDaily && !quest.isCompleted && quest.progress >= quest.target) {
+              try {
+                await apiClient.claimStudentQuest(quest.id);
+              } catch (_e) {}
+            }
+          }
+          const refreshed = await apiClient.listStudentQuests();
+          setQuests(refreshed);
         }
       } catch (_e) {}
       // update XP & badges if returned
@@ -397,6 +488,9 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
         setBadgePopup(result.awardedBadges[0]);
         window.setTimeout(() => setBadgePopup(null), 3500);
       }
+      // launch confetti and stop background audio
+      fireConfettiBurst();
+      stopBackgroundMusic();
       toast.success('Score saved to leaderboard.');
     } catch (error: any) {
       setIsSubmittingAttempt(false);
@@ -676,6 +770,24 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
           <Target className="h-7 w-7 text-green-600" />
           Gamified Learning
         </h1>
+        <div className="ml-auto flex items-center gap-2">
+          <button title="Daily quests" onClick={() => setQuestsOpen(true)} className="p-2 rounded-full hover:bg-gray-100">
+            <List className="h-5 w-5 text-gray-600" />
+          </button>
+          <button title="Store" onClick={() => setStoreOpen(true)} className="p-2 rounded-full hover:bg-gray-100">
+            <ShoppingCart className="h-5 w-5 text-gray-600" />
+          </button>
+          <button title="Toggle music" onClick={() => {
+            if ((window as any).__yunafied_bg_audio) {
+              stopBackgroundMusic();
+            } else {
+              startBackgroundMusic(audioContextRef, bgGainRef);
+              (window as any).__yunafied_bg_audio = audioContextRef.current;
+            }
+          }} className="p-2 rounded-full hover:bg-gray-100">
+            <Music className="h-5 w-5 text-gray-600" />
+          </button>
+        </div>
         <p className="text-gray-500 mt-1">
           {canManage
             ? 'Create and manage category-based quiz challenges for your learners.'
@@ -1090,6 +1202,20 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                     <Clock className="h-4 w-4" />
                     {timeLeft}s
                   </div>
+                  <div className="flex items-center gap-2">
+                    {/* power-up buttons */}
+                    {hasPurchase('50_50') ? (
+                      <button onClick={() => void handleUsePowerUp('50_50')} title="50/50" className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm">
+                        50/50
+                      </button>
+                    ) : null}
+                    {hasPurchase('skip_q') ? (
+                      <button onClick={() => void handleUsePowerUp('skip_q')} title="Skip question" className="px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm">
+                        Skip
+                      </button>
+                    ) : null}
+                    <button title="Open store" onClick={() => setStoreOpen(true)} className="px-3 py-2 bg-white border rounded-lg text-sm">Store</button>
+                  </div>
                 </div>
 
                 <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-8 border-2 border-indigo-100 text-center">
@@ -1263,47 +1389,20 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
               ))}
             </div>
 
-            <div className="mt-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Daily Quests</h4>
-              {quests.length === 0 ? <p className="text-xs text-gray-500">No active quests.</p> : null}
-              <div className="space-y-2">
-                {quests.map((q) => (
-                  <div key={q.id} className="rounded-lg border px-3 py-2 flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{q.title}</p>
-                      <p className="text-xs text-gray-500">{q.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-indigo-600">{q.progress}/{q.target}</p>
-                      <div className="mt-1">
-                        <button onClick={() => void handleClaimQuest(q.id)} disabled={q.isCompleted} className="text-xs text-green-600 hover:underline mr-2">
-                          {q.isCompleted ? 'Completed' : 'Claim'}
-                        </button>
-                        {!q.isCompleted ? (
-                          <button onClick={() => void handleUsePowerUp('skip_q')} className="text-xs text-indigo-600 hover:underline">Use Skip</button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-lg border p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold">Daily Quests</p>
+                  <p className="text-xs text-gray-500">{quests.length} active</p>
+                </div>
+                <button onClick={() => setQuestsOpen(true)} className="px-3 py-1 bg-indigo-600 text-white rounded">Open</button>
               </div>
-            </div>
-
-            <div className="mt-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Reward Store</h4>
-              <div className="space-y-2">
-                {storeItems.map((item) => (
-                  <div key={item.id} className="rounded-lg border px-3 py-2 flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{item.name}</p>
-                      <p className="text-xs text-gray-500">{item.description}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-indigo-600">{item.xpCost} XP</p>
-                      <button onClick={() => void handlePurchase(item.code)} className="text-xs text-indigo-600 hover:underline mt-1">Buy</button>
-                    </div>
-                  </div>
-                ))}
+              <div className="rounded-lg border p-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold">Reward Store</p>
+                  <p className="text-xs text-gray-500">{storeItems.length} items</p>
+                </div>
+                <button onClick={() => setStoreOpen(true)} className="px-3 py-1 bg-indigo-600 text-white rounded">Open</button>
               </div>
             </div>
             {myLeaderboardEntry ? (
@@ -1315,6 +1414,84 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
           </div>
         </div>
       ) : null}
+      {/* Modals */}
+      {storeOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setStoreOpen(false)} />
+          <div className="bg-white rounded-xl shadow-lg z-10 max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Reward Store</h3>
+              <button onClick={() => setStoreOpen(false)} className="text-gray-500">Close</button>
+            </div>
+            <div className="space-y-3">
+              {storeItems.map((item) => (
+                <div key={item.id} className="flex items-center justify-between border rounded-lg p-3">
+                  <div>
+                    <p className="font-semibold">{item.name}</p>
+                    <p className="text-xs text-gray-500">{item.description}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-indigo-600">{item.xpCost} XP</p>
+                    <div className="mt-2 flex gap-2 justify-end">
+                      <button onClick={() => void handlePurchase(item.code)} className="px-3 py-1 bg-indigo-600 text-white rounded">Buy</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4">
+              <h4 className="text-sm font-semibold">Your Inventory</h4>
+              <div className="mt-2 space-y-2">
+                {studentPurchases.length === 0 ? <div className="text-xs text-gray-500">No purchases yet.</div> : null}
+                {studentPurchases.map((p) => {
+                  const meta = storeItems.find((s) => s.id === p.storeItemId);
+                  return (
+                    <div key={p.id} className="flex items-center justify-between border rounded-lg p-3">
+                      <div>
+                        <p className="font-semibold">{meta?.name || 'Item'}</p>
+                        <p className="text-xs text-gray-500">{meta?.description}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => void handleUsePowerUp(meta?.code || '')} className="px-3 py-1 bg-white border rounded">Use</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {questsOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setQuestsOpen(false)} />
+          <div className="bg-white rounded-xl shadow-lg z-10 max-w-lg w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Daily Quests</h3>
+              <button onClick={() => setQuestsOpen(false)} className="text-gray-500">Close</button>
+            </div>
+            <div className="space-y-3">
+              {quests.length === 0 ? <p className="text-xs text-gray-500">No active quests.</p> : null}
+              {quests.map((q) => (
+                <div key={q.id} className="flex items-center justify-between border rounded-lg p-3">
+                  <div>
+                    <p className="font-semibold">{q.title}</p>
+                    <p className="text-xs text-gray-500">{q.description}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-indigo-600">{q.progress}/{q.target}</p>
+                    {q.isCompleted ? (
+                      <div className="text-xs text-green-600">Completed</div>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
     </div>
   );
 }
