@@ -252,6 +252,9 @@ export interface GamifiedAttemptResultItem {
   totalScore: number;
   completedAt: string;
   answers: GamifiedAttemptAnswerResultItem[];
+  xpGained?: number;
+  newXp?: StudentXpItem;
+  awardedBadges?: BadgeItem[];
 }
 
 export interface VideoSummaryItem {
@@ -292,6 +295,38 @@ export interface StudentXpItem {
   totalXp: number;
   level: string;
   updatedAt: string;
+}
+
+export interface StudentQuestItem {
+  id: string;
+  studentId: string;
+  questType: string;
+  title: string;
+  description: string | null;
+  target: number;
+  progress: number;
+  rewardXp: number;
+  rewardBadgeCode?: string | null;
+  isCompleted: boolean;
+  createdAt: string;
+  expiresAt?: string | null;
+}
+
+export interface StoreItem {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  xpCost: number;
+  isConsumable: boolean;
+  createdAt: string;
+}
+
+export interface StudentStorePurchaseItem {
+  id: string;
+  studentId: string;
+  storeItemId: string;
+  purchasedAt: string;
 }
 
 export interface StudentTaskItem {
