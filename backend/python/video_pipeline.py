@@ -94,6 +94,14 @@ def fetch_youtube_transcript(video_id: str) -> str:
 def download_youtube_audio(video_url: str, output_dir: str) -> str:
     output_template = str(Path(output_dir) / "youtube_audio.%(ext)s")
     ytdlp_bin = shutil.which("yt-dlp")
+
+    # Optional environment config to handle restricted videos / IP blocks
+    # - YTDLP_COOKIES: path to a Netscape cookies.txt file exported from your browser
+    # - YTDLP_JS_RUNTIMES: comma-separated JS runtimes to pass to yt-dlp (e.g. "node")
+    # - YTDLP_PROXY: proxy URL (e.g. "http://user:pass@host:port")
+    cookies_path = os.getenv("YTDLP_COOKIES")
+    js_runtimes = os.getenv("YTDLP_JS_RUNTIMES")
+    proxy = os.getenv("YTDLP_PROXY")
     # Prefer the yt_dlp Python API when available (more reliable in some environments)
     try:
         import yt_dlp
@@ -106,6 +114,13 @@ def download_youtube_audio(video_url: str, output_dir: str) -> str:
             "ignoreerrors": False,
             "noplaylist": True,
         }
+        if cookies_path:
+            ydl_opts["cookiefile"] = cookies_path
+        if proxy:
+            # yt_dlp supports 'proxy' option
+            ydl_opts["proxy"] = proxy
+
+        # Use the API download; some extraction paths may still require a JS runtime
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
     except Exception:
@@ -132,9 +147,28 @@ def download_youtube_audio(video_url: str, output_dir: str) -> str:
             ]
 
         try:
+            # Add optional args for cookies, js runtimes, and proxy to the external command
+            if cookies_path:
+                cmd.extend(["--cookies", cookies_path])
+            if js_runtimes:
+                cmd.extend(["--js-runtimes", js_runtimes])
+            if proxy:
+                cmd.extend(["--proxy", proxy])
+
             subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.CalledProcessError as exc:
             stderr_text = exc.stderr.decode("utf-8", errors="ignore") if exc.stderr else str(exc)
+            # Detect common failure messages and provide actionable hints
+            if "Sign in to confirm you\'re not a bot" in stderr_text or "Sign in to confirm you\u2019re not a bot" in stderr_text:
+                raise RuntimeError(
+                    "yt-dlp: YouTube is requiring interactive sign-in (captcha). "
+                    "You can either: (1) provide a browser cookies file via the YTDLP_COOKIES env var, "
+                    "or (2) use a residential proxy via YTDLP_PROXY. Note: both approaches may violate YouTube Terms of Service. "
+                    f"Original yt-dlp message: {stderr_text}")
+            if "No supported JavaScript runtime could be found" in stderr_text or "No supported JavaScript runtime" in stderr_text:
+                raise RuntimeError(
+                    "yt-dlp: No JS runtime available. Install Node.js or Deno on the server, or set YTDLP_JS_RUNTIMES to 'node'. "
+                    f"Original yt-dlp message: {stderr_text}")
             raise RuntimeError(f"yt-dlp download failed: {stderr_text}")
 
     candidates = sorted(Path(output_dir).glob("youtube_audio.*"))
