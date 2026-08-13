@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import base64
 import subprocess
 import sys
 import tempfile
@@ -97,8 +98,21 @@ def download_youtube_audio(video_url: str, output_dir: str) -> str:
 
     # Optional environment config to handle restricted videos / IP blocks
     # - YTDLP_COOKIES: path to a Netscape cookies.txt file exported from your browser
+    # - YTDLP_COOKIES_CONTENT: cookies file content (base64 or raw) for platforms without a persistent FS
     # - YTDLP_JS_RUNTIMES: comma-separated JS runtimes to pass to yt-dlp (e.g. "node")
     # - YTDLP_PROXY: proxy URL (e.g. "http://user:pass@host:port")
+
+    # Support writing cookies from an env var (Render free-tier can't persist files; use this)
+    cookies_content = os.getenv("YTDLP_COOKIES_CONTENT")
+    if not os.getenv("YTDLP_COOKIES") and cookies_content:
+        try:
+            decoded = base64.b64decode(cookies_content).decode("utf-8")
+        except Exception:
+            decoded = cookies_content
+        cookies_tmp = os.path.join(tempfile.gettempdir(), f"ytdlp_cookies_{os.getpid()}.txt")
+        Path(cookies_tmp).write_text(decoded, encoding="utf-8")
+        os.environ["YTDLP_COOKIES"] = cookies_tmp
+
     cookies_path = os.getenv("YTDLP_COOKIES")
     # Default to 'node' since most servers have Node.js available; override with env var if needed
     js_runtimes = os.getenv("YTDLP_JS_RUNTIMES", "node")
