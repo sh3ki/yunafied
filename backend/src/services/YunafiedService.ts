@@ -2937,6 +2937,35 @@ export class YunafiedService {
     return (result.rows[0] as import("../types/models.js").MeetingRoom) || null;
   }
 
+  async getLatestMeetingsForSchedules(scheduleIds: string[]): Promise<import("../types/models.js").MeetingRoom[]> {
+    if (!scheduleIds || scheduleIds.length === 0) return [];
+    const result = await pool.query(
+      `SELECT DISTINCT ON (schedule_id)
+              id,
+              room_token AS "roomToken",
+              schedule_id AS "scheduleId",
+              teacher_id AS "teacherId",
+              student_id AS "studentId",
+              teacher_name AS "teacherName",
+              student_name AS "studentName",
+              schedule_title AS "scheduleTitle",
+              schedule_description AS "scheduleDescription",
+              status,
+              offer,
+              answer,
+              teacher_ice_candidates AS "teacherIceCandidates",
+              student_ice_candidates AS "studentIceCandidates",
+              created_at AS "createdAt",
+              updated_at AS "updatedAt"
+         FROM meeting_rooms
+        WHERE schedule_id = ANY($1)
+     ORDER BY schedule_id, created_at DESC`,
+      [scheduleIds],
+    );
+
+    return result.rows as import("../types/models.js").MeetingRoom[];
+  }
+
   // ─── Video Summaries ────────────────────────────────────────────────────────
 
   async createVideoSummary(input: {
