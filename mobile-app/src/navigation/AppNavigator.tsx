@@ -31,6 +31,7 @@ import { StatusBar } from 'expo-status-bar';
 import { mobileApiClient } from '../api/client';
 import VideoCallNative from '../screens/VideoCallNative';
 import { useAppContext } from '../context/AppContext';
+import MobileChart from '../components/MobileChart';
 import {
   AssignmentItem,
   AuditLogItem,
@@ -97,19 +98,46 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PillButton({ label, onPress, disabled }: { label: string; onPress: () => void; disabled?: boolean }) {
+function PillButton({ label, onPress, disabled, modalChildren, style }: { label: string; onPress?: () => void; disabled?: boolean; modalChildren?: React.ReactNode; style?: any }) {
+  const [visible, setVisible] = useState(false);
+
+  const handlePress = () => {
+    if (modalChildren) {
+      setVisible(true);
+      return;
+    }
+    if (onPress) onPress();
+  };
+
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.button,
-        disabled ? styles.buttonDisabled : null,
-        pressed ? styles.buttonPressed : null,
-      ]}
-    >
-      <Text style={styles.buttonText}>{label}</Text>
-    </Pressable>
+    <>
+      <Pressable
+        onPress={handlePress}
+        disabled={disabled}
+        style={({ pressed }) => [
+          styles.button,
+          disabled ? styles.buttonDisabled : null,
+          pressed ? styles.buttonPressed : null,
+          style,
+        ]}
+      >
+        <Text style={styles.buttonText}>{label}</Text>
+      </Pressable>
+      {modalChildren ? (
+        <Modal visible={visible} transparent animationType="slide" onRequestClose={() => setVisible(false)}>
+          <SafeAreaView style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }}>
+            <View style={{ flex: 1, padding: 20 }}>
+              <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 12, maxHeight: '90%' }}>
+                {modalChildren}
+                <Pressable onPress={() => setVisible(false)} style={{ alignSelf: 'flex-end', marginTop: 12 }}>
+                  <Text style={{ color: '#6d28d9', fontWeight: '700' }}>Close</Text>
+                </Pressable>
+              </View>
+            </View>
+          </SafeAreaView>
+        </Modal>
+      ) : null}
+    </>
   );
 }
 
@@ -134,9 +162,7 @@ function LandingScreen({ navigation }: any) {
             <Text style={styles.landingBrandName}>YUNAFied</Text>
             <Text style={styles.landingBrandSub}>AI-Powered Tutorial System</Text>
           </View>
-          <Pressable onPress={() => navigation.navigate('Login')} style={styles.landingLoginBtn}>
-            <Text style={styles.landingLoginBtnText}>Login</Text>
-          </Pressable>
+          <PillButton label="Login" style={styles.landingLoginBtn} modalChildren={<LoginScreen />} />
         </View>
 
         {/* Hero */}
@@ -152,9 +178,7 @@ function LandingScreen({ navigation }: any) {
             Manage schedules, assignments, grading, AI learning support, and more in one unified platform for admins, teachers, and students.
           </Text>
           <View style={styles.landingActions}>
-            <Pressable onPress={() => navigation.navigate('Login')} style={styles.landingGetStartedBtn}>
-              <Text style={styles.landingGetStartedText}>Get Started</Text>
-            </Pressable>
+            <PillButton label="Get Started" style={styles.landingGetStartedBtn} modalChildren={<LoginScreen />} />
           </View>
         </View>
 
@@ -556,6 +580,17 @@ function DashboardScreen() {
   const { session, dashboardStats, data } = useAppContext();
   const user = session!.user;
 
+  const roleCounts = useMemo(() => {
+    const students = data.users.filter((u) => u.role === 'student').length;
+    const teachers = data.users.filter((u) => u.role === 'teacher').length;
+    const admins = data.users.filter((u) => u.role === 'admin').length;
+    return [
+      { label: 'Students', value: students },
+      { label: 'Teachers', value: teachers },
+      { label: 'Admins', value: admins },
+    ];
+  }, [data.users]);
+
   return (
     <Shell title={`Hello, ${user.fullName}`} subtitle="Dashboard overview">
       <View style={styles.rowWrap}>
@@ -583,6 +618,22 @@ function DashboardScreen() {
             <Text style={styles.muted}>{`${item.day} | ${item.startTime} - ${item.endTime}`}</Text>
           </View>
         ))}
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Activity</Text>
+        <MobileChart
+          data={[
+            { label: 'Upcoming', value: dashboardStats.upcoming },
+            { label: 'Assignments', value: dashboardStats.assignments },
+            { label: user.role === 'admin' ? 'Users' : 'Pending', value: user.role === 'admin' ? dashboardStats.users : dashboardStats.pending },
+          ]}
+        />
+      </Card>
+
+      <Card>
+        <Text style={styles.sectionTitle}>Users</Text>
+        <MobileChart type="pie" data={roleCounts} height={120} />
       </Card>
     </Shell>
   );
