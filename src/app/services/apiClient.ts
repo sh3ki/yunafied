@@ -830,7 +830,7 @@ class YunafiedApiClient {
   }
 
   async deleteNotification(id: string): Promise<void> {
-    await this.request<void>(`/api/notifications/${id}`, { method: "DELETE" });
+    await this.request<void>(`/api/notifications/${encodeURIComponent(id)}`, { method: "DELETE" });
   }
 
   async listNotificationsDb(limit = 30): Promise<NotificationDbItem[]> {
