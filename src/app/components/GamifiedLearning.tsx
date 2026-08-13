@@ -11,6 +11,10 @@ import {
   GamifiedQuizDetailItem,
   GamifiedQuizItem,
   UserRole,
+  StudentXpItem,
+  BadgeItem,
+  StudentQuestItem,
+  StoreItem,
 } from '@/app/types/models';
 
 interface GamifiedLearningProps {
@@ -123,6 +127,10 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   const [categories, setCategories] = useState<GamifiedCategoryItem[]>([]);
   const [quizzes, setQuizzes] = useState<GamifiedQuizItem[]>([]);
   const [leaderboard, setLeaderboard] = useState<GamifiedLeaderboardItem[]>([]);
+  const [quests, setQuests] = useState<StudentQuestItem[]>([]);
+  const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
+  const [studentPurchases, setStudentPurchases] = useState<StudentStorePurchaseItem[]>([]);
+  const [eliminatedChoiceIds, setEliminatedChoiceIds] = useState<string[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<GamifiedQuizDetailItem | null>(null);
 
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
@@ -144,6 +152,9 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
   const [timeLeft, setTimeLeft] = useState(20);
   const [timerActive, setTimerActive] = useState(false);
   const [attemptResult, setAttemptResult] = useState<GamifiedAttemptResultItem | null>(null);
+  const [studentXp, setStudentXp] = useState<StudentXpItem | null>(null);
+  const [studentBadges, setStudentBadges] = useState<BadgeItem[]>([]);
+  const [badgePopup, setBadgePopup] = useState<BadgeItem | null>(null);
   const [attemptAnswers, setAttemptAnswers] = useState<
     Array<{ questionId: string; selectedChoiceId: string | null; timeRemainingSeconds: number }>
   >([]);
@@ -166,6 +177,28 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!canPlay) return;
+    void (async () => {
+      try {
+        const xp = await apiClient.getStudentXp();
+        setStudentXp(xp);
+      } catch (_e) {
+        // ignore
+      }
+      try {
+        const badges = await apiClient.listStudentBadges();
+        setStudentBadges(badges);
+      } catch (_e) {
+        // ignore
+      }
+        try {
+          const purchases = await apiClient.listStudentStorePurchases();
+          setStudentPurchases(purchases);
+        } catch (_e) {}
+    })();
+  }, [canPlay]);
 
   const loadCategoryScopedData = async (categoryId: string) => {
     if (!categoryId) {
@@ -192,6 +225,16 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
       });
     } catch (error: any) {
       toast.error(error.message || 'Failed to load quizzes and leaderboard.');
+    }
+    try {
+      if (canPlay) {
+        const q = await apiClient.listStudentQuests();
+        setQuests(q);
+        const items = await apiClient.listStoreItems();
+        setStoreItems(items);
+      }
+    } catch (_e) {
+      // ignore
     }
   };
 
@@ -338,10 +381,84 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
         const rows = await apiClient.listGamifiedLeaderboard({ categoryId: selectedCategoryId, limit: 10 });
         setLeaderboard(rows);
       }
+      try {
+        if (canPlay) {
+          const q = await apiClient.listStudentQuests();
+          setQuests(q);
+        }
+      } catch (_e) {}
+      // update XP & badges if returned
+      if (result.newXp) {
+        setStudentXp(result.newXp);
+      }
+      if (result.awardedBadges && result.awardedBadges.length) {
+        setStudentBadges((prev) => [...result.awardedBadges!, ...prev]);
+        // show popup for first badge
+        setBadgePopup(result.awardedBadges[0]);
+        window.setTimeout(() => setBadgePopup(null), 3500);
+      }
       toast.success('Score saved to leaderboard.');
     } catch (error: any) {
       setIsSubmittingAttempt(false);
       toast.error(error.message || 'Failed to submit quiz attempt.');
+    }
+  };
+
+  const handleClaimQuest = async (id: string) => {
+    try {
+      const updated = await apiClient.claimStudentQuest(id);
+      setQuests((prev) => prev.map((p) => (p.id === id ? updated : p)));
+      toast.success('Quest claimed!');
+      // refresh xp & badges
+      const xp = await apiClient.getStudentXp();
+      setStudentXp(xp);
+      const badges = await apiClient.listStudentBadges();
+      setStudentBadges(badges);
+      const purchases = await apiClient.listStudentStorePurchases();
+      setStudentPurchases(purchases);
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to claim quest.');
+    }
+  };
+
+  const handlePurchase = async (code: string) => {
+    try {
+      await apiClient.purchaseStoreItem(code);
+      toast.success('Purchased item');
+      const xp = await apiClient.getStudentXp();
+      setStudentXp(xp);
+      const purchases = await apiClient.listStudentStorePurchases();
+      setStudentPurchases(purchases);
+    } catch (error: any) {
+      toast.error(error.message || 'Purchase failed.');
+    }
+  };
+
+  const handleUsePowerUp = async (code: string) => {
+    try {
+      await apiClient.useStoreItem(code);
+      const purchases = await apiClient.listStudentStorePurchases();
+      setStudentPurchases(purchases);
+
+      // apply effect locally
+      if (code === '50_50' && activeQuestion) {
+        // remove two wrong choices (keep correct + one wrong)
+        const wrong = activeQuestion.choices.filter((c) => !c.isCorrect).map((c) => c.id);
+        const toRemove: string[] = wrong.slice(0, Math.max(0, wrong.length - 1));
+        setEliminatedChoiceIds(toRemove);
+        toast.success('50/50 used');
+      }
+
+      if (code === 'skip_q' && activeQuestion) {
+        // auto-award correct choice to the user
+        const correct = activeQuestion.choices.find((c) => c.isCorrect);
+        if (correct) {
+          await handleAnswer(correct.id);
+          toast.success('Question skipped (awarded)');
+        }
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Use failed');
     }
   };
 
@@ -536,6 +653,24 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
 
   return (
     <div className="p-4 md:p-8 space-y-6">
+      {badgePopup ? (
+        <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="fixed top-6 right-6 z-50">
+          <div className="bg-white shadow-lg rounded-xl px-4 py-3 flex items-center gap-3 border">
+            <div className="bg-yellow-50 p-3 rounded-full">
+              <Sparkles className="h-6 w-6 text-yellow-600" />
+            </div>
+            <div>
+              <p className="font-bold text-gray-800">Badge earned!</p>
+              <p className="text-sm text-gray-600">{badgePopup.name}</p>
+            </div>
+          </div>
+          <div className="pointer-events-none">
+            {Array.from({ length: 20 }).map((_, i) => (
+              <motion.span key={i} initial={{ y: -10, opacity: 0 }} animate={{ y: 200 + Math.random() * 200, opacity: 1 }} transition={{ duration: 1.2, delay: i * 0.03 }} className="absolute top-0 right-0">🎉</motion.span>
+            ))}
+          </div>
+        </motion.div>
+      ) : null}
       <div>
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
           <Target className="h-7 w-7 text-green-600" />
@@ -965,10 +1100,11 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {activeQuestion.choices.map((choice, index) => {
-                    const isSelected = choice.id === selectedChoiceId;
+                      const isSelected = choice.id === selectedChoiceId;
+                      const isEliminated = eliminatedChoiceIds.includes(choice.id);
                     const baseColor = optionColorClasses[index % optionColorClasses.length];
                     const isCorrectChoice = Boolean(choice.isCorrect);
-                    const isWrongSelected = answered && isSelected && !isCorrectChoice;
+                      const isWrongSelected = answered && isSelected && !isCorrectChoice;
                     const answeredClass = isCorrectChoice
                       ? 'bg-green-600 border-green-700'
                       : isWrongSelected
@@ -978,12 +1114,14 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
                     return (
                       <button
                         key={choice.id}
-                        onClick={() => void handleAnswer(choice.id)}
-                        disabled={answered}
+                          onClick={() => void handleAnswer(choice.id)}
+                          disabled={answered || isEliminated}
                         className={`px-6 py-5 rounded-xl font-bold text-lg transition-all duration-300 text-white border-2 border-transparent shadow-md ${
-                          answered
-                            ? answeredClass
-                            : `${baseColor} hover:scale-[1.01]`
+                            answered
+                              ? answeredClass
+                              : isEliminated
+                                ? 'bg-gray-200 text-gray-500 cursor-not-allowed opacity-60'
+                                : `${baseColor} hover:scale-[1.01]`
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -1097,6 +1235,21 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <h3 className="text-lg font-bold text-gray-800 mb-4">Leaderboard</h3>
+            {studentXp ? (
+              <div className="mb-4 rounded-lg border p-3 bg-indigo-50">
+                <p className="text-xs text-indigo-700 font-semibold">Level: {studentXp.level}</p>
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-indigo-800">XP: {studentXp.totalXp}</p>
+                  <p className="text-xs text-gray-500">Updated</p>
+                </div>
+                <div className="w-full bg-white rounded-full h-2 mt-2">
+                  <div
+                    className="bg-indigo-600 h-2 rounded-full transition-all"
+                    style={{ width: `${Math.min(100, Math.round((studentXp.totalXp % 500) / 5))}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
             {leaderboard.length === 0 ? <p className="text-sm text-gray-500">No scores yet in this category.</p> : null}
             <div className="space-y-2">
               {leaderboard.map((entry, index) => (
@@ -1110,6 +1263,49 @@ export function GamifiedLearning({ role, userId }: GamifiedLearningProps) {
               ))}
             </div>
 
+            <div className="mt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Daily Quests</h4>
+              {quests.length === 0 ? <p className="text-xs text-gray-500">No active quests.</p> : null}
+              <div className="space-y-2">
+                {quests.map((q) => (
+                  <div key={q.id} className="rounded-lg border px-3 py-2 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{q.title}</p>
+                      <p className="text-xs text-gray-500">{q.description}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-indigo-600">{q.progress}/{q.target}</p>
+                      <div className="mt-1">
+                        <button onClick={() => void handleClaimQuest(q.id)} disabled={q.isCompleted} className="text-xs text-green-600 hover:underline mr-2">
+                          {q.isCompleted ? 'Completed' : 'Claim'}
+                        </button>
+                        {!q.isCompleted ? (
+                          <button onClick={() => void handleUsePowerUp('skip_q')} className="text-xs text-indigo-600 hover:underline">Use Skip</button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <h4 className="text-sm font-semibold text-gray-700 mb-2">Reward Store</h4>
+              <div className="space-y-2">
+                {storeItems.map((item) => (
+                  <div key={item.id} className="rounded-lg border px-3 py-2 flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{item.name}</p>
+                      <p className="text-xs text-gray-500">{item.description}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-indigo-600">{item.xpCost} XP</p>
+                      <button onClick={() => void handlePurchase(item.code)} className="text-xs text-indigo-600 hover:underline mt-1">Buy</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
             {myLeaderboardEntry ? (
               <div className="mt-4 rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-2">
                 <p className="text-xs text-indigo-700 font-semibold">Your Best Score</p>
