@@ -80,6 +80,29 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function manilaTodayIso(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' });
+}
+
+function timeToMinutes(t: string): number {
+  const [hh, mm] = t.split(':').map((s) => Number(s || 0));
+  return hh * 60 + mm;
+}
+
+function minutesToTime(m: number): string {
+  const hh = Math.floor(m / 60);
+  const mm = m % 60;
+  const hhStr = String(Math.min(23, hh)).padStart(2, '0');
+  const mmStr = String(Math.min(59, mm)).padStart(2, '0');
+  return `${hhStr}:${mmStr}`;
+}
+
+function endMaxFromStart(start: string): string {
+  const startM = timeToMinutes(start);
+  const maxM = Math.min(23 * 60 + 59, startM + 6 * 60);
+  return minutesToTime(maxM);
+}
+
 function isoFromDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -240,7 +263,9 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   }, [teacherSchedules]);
 
   const openRequestModal = () => {
-    setRequestForm((prev) => ({ ...prev, date: selectedDateIso }));
+    const manilaMin = manilaTodayIso();
+    const selected = selectedDateIso < manilaMin ? manilaMin : selectedDateIso;
+    setRequestForm((prev) => ({ ...prev, date: selected }));
     setRequestOpen(true);
   };
 
@@ -282,6 +307,12 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
       return;
     }
 
+    // validate times: end later than start and max 6 hours
+    const reqStart = timeToMinutes(requestForm.startTime);
+    const reqEnd = timeToMinutes(requestForm.endTime);
+    if (reqEnd <= reqStart) { toast.error('End time must be later than start time.'); return; }
+    if (reqEnd - reqStart > 6 * 60) { toast.error('Maximum session duration is 6 hours.'); return; }
+
     try {
       setSaving(true);
       await onCreate({
@@ -320,6 +351,12 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
       toast.error('Please select a teacher first.');
       return;
     }
+
+    // validate times: end later than start and max 6 hours
+    const cStart = timeToMinutes(createForm.startTime);
+    const cEnd = timeToMinutes(createForm.endTime);
+    if (cEnd <= cStart) { toast.error('End time must be later than start time.'); return; }
+    if (cEnd - cStart > 6 * 60) { toast.error('Maximum session duration is 6 hours.'); return; }
 
     try {
       setSaving(true);
@@ -365,6 +402,11 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   const submitAccept = async () => {
     if (!acceptItem) return;
     if (!acceptForm.title.trim()) { toast.error('Title is required.'); return; }
+    // validate times
+    const aStart = timeToMinutes(acceptForm.startTime);
+    const aEnd = timeToMinutes(acceptForm.endTime);
+    if (aEnd <= aStart) { toast.error('End time must be later than start time.'); return; }
+    if (aEnd - aStart > 6 * 60) { toast.error('Maximum session duration is 6 hours.'); return; }
     try {
       setSaving(true);
       await onRespond(acceptItem.id, {
@@ -414,6 +456,11 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
 
   const submitMove = async () => {
     if (!moveItem) return;
+    // validate times
+    const mStart = timeToMinutes(moveForm.startTime);
+    const mEnd = timeToMinutes(moveForm.endTime);
+    if (mEnd <= mStart) { toast.error('End time must be later than start time.'); return; }
+    if (mEnd - mStart > 6 * 60) { toast.error('Maximum session duration is 6 hours.'); return; }
     try {
       setSaving(true);
       await onMove(moveItem.id, { date: moveForm.date, startTime: moveForm.startTime, endTime: moveForm.endTime, title: moveItem.title, description: moveItem.description });
@@ -464,6 +511,11 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   const submitAdminEdit = async () => {
     if (!adminEditItem) return;
     if (!adminEditForm.title.trim()) { toast.error('Title is required.'); return; }
+    // validate times
+    const adStart = timeToMinutes(adminEditForm.startTime);
+    const adEnd = timeToMinutes(adminEditForm.endTime);
+    if (adEnd <= adStart) { toast.error('End time must be later than start time.'); return; }
+    if (adEnd - adStart > 6 * 60) { toast.error('Maximum session duration is 6 hours.'); return; }
     try {
       setSaving(true);
       await onAdminEdit(adminEditItem.id, {
@@ -790,6 +842,7 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
                 <Input
                   type="date"
                   value={requestForm.date}
+                  min={manilaTodayIso()}
                   onChange={(e) => setRequestForm((prev) => ({ ...prev, date: e.target.value }))}
                 />
               </div>
@@ -798,7 +851,14 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
                 <Input
                   type="time"
                   value={requestForm.startTime}
-                  onChange={(e) => setRequestForm((prev) => ({ ...prev, startTime: e.target.value }))}
+                  onChange={(e) => {
+                    const start = e.target.value;
+                    setRequestForm((prev) => {
+                      const max = endMaxFromStart(start);
+                      const endClamped = timeToMinutes(prev.endTime) > timeToMinutes(max) ? max : prev.endTime;
+                      return { ...prev, startTime: start, endTime: endClamped };
+                    });
+                  }}
                 />
               </div>
               <div>
@@ -806,7 +866,13 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
                 <Input
                   type="time"
                   value={requestForm.endTime}
-                  onChange={(e) => setRequestForm((prev) => ({ ...prev, endTime: e.target.value }))}
+                  max={endMaxFromStart(requestForm.startTime)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const max = endMaxFromStart(requestForm.startTime);
+                    const clamped = timeToMinutes(val) > timeToMinutes(max) ? max : val;
+                    setRequestForm((prev) => ({ ...prev, endTime: clamped }));
+                  }}
                 />
               </div>
             </div>
@@ -865,7 +931,14 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
                 <Input
                   type="time"
                   value={createForm.startTime}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, startTime: e.target.value }))}
+                  onChange={(e) => {
+                    const start = e.target.value;
+                    setCreateForm((prev) => {
+                      const max = endMaxFromStart(start);
+                      const endClamped = timeToMinutes(prev.endTime) > timeToMinutes(max) ? max : prev.endTime;
+                      return { ...prev, startTime: start, endTime: endClamped };
+                    });
+                  }}
                 />
               </div>
               <div>
@@ -873,7 +946,13 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
                 <Input
                   type="time"
                   value={createForm.endTime}
-                  onChange={(e) => setCreateForm((prev) => ({ ...prev, endTime: e.target.value }))}
+                  max={endMaxFromStart(createForm.startTime)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const max = endMaxFromStart(createForm.startTime);
+                    const clamped = timeToMinutes(val) > timeToMinutes(max) ? max : val;
+                    setCreateForm((prev) => ({ ...prev, endTime: clamped }));
+                  }}
                 />
               </div>
             </div>
@@ -960,11 +1039,32 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
               </div>
               <div>
                 <label className="text-sm font-medium">Start</label>
-                <Input type="time" value={acceptForm.startTime} onChange={(e) => setAcceptForm((p) => ({ ...p, startTime: e.target.value }))} />
+                <Input
+                  type="time"
+                  value={acceptForm.startTime}
+                  onChange={(e) => {
+                    const start = e.target.value;
+                    setAcceptForm((p) => {
+                      const max = endMaxFromStart(start);
+                      const endClamped = timeToMinutes(p.endTime) > timeToMinutes(max) ? max : p.endTime;
+                      return { ...p, startTime: start, endTime: endClamped };
+                    });
+                  }}
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">End</label>
-                <Input type="time" value={acceptForm.endTime} onChange={(e) => setAcceptForm((p) => ({ ...p, endTime: e.target.value }))} />
+                <Input
+                  type="time"
+                  value={acceptForm.endTime}
+                  max={endMaxFromStart(acceptForm.startTime)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const max = endMaxFromStart(acceptForm.startTime);
+                    const clamped = timeToMinutes(val) > timeToMinutes(max) ? max : val;
+                    setAcceptForm((p) => ({ ...p, endTime: clamped }));
+                  }}
+                />
               </div>
             </div>
             <div>
@@ -1020,11 +1120,32 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium">Start</label>
-                <Input type="time" value={moveForm.startTime} onChange={(e) => setMoveForm((p) => ({ ...p, startTime: e.target.value }))} />
+                <Input
+                  type="time"
+                  value={moveForm.startTime}
+                  onChange={(e) => {
+                    const start = e.target.value;
+                    setMoveForm((p) => {
+                      const max = endMaxFromStart(start);
+                      const endClamped = timeToMinutes(p.endTime) > timeToMinutes(max) ? max : p.endTime;
+                      return { ...p, startTime: start, endTime: endClamped };
+                    });
+                  }}
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">End</label>
-                <Input type="time" value={moveForm.endTime} onChange={(e) => setMoveForm((p) => ({ ...p, endTime: e.target.value }))} />
+                <Input
+                  type="time"
+                  value={moveForm.endTime}
+                  max={endMaxFromStart(moveForm.startTime)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const max = endMaxFromStart(moveForm.startTime);
+                    const clamped = timeToMinutes(val) > timeToMinutes(max) ? max : val;
+                    setMoveForm((p) => ({ ...p, endTime: clamped }));
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -1091,11 +1212,32 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
               </div>
               <div>
                 <label className="text-sm font-medium">Start</label>
-                <Input type="time" value={adminEditForm.startTime} onChange={(e) => setAdminEditForm((p) => ({ ...p, startTime: e.target.value }))} />
+                <Input
+                  type="time"
+                  value={adminEditForm.startTime}
+                  onChange={(e) => {
+                    const start = e.target.value;
+                    setAdminEditForm((p) => {
+                      const max = endMaxFromStart(start);
+                      const endClamped = timeToMinutes(p.endTime) > timeToMinutes(max) ? max : p.endTime;
+                      return { ...p, startTime: start, endTime: endClamped };
+                    });
+                  }}
+                />
               </div>
               <div>
                 <label className="text-sm font-medium">End</label>
-                <Input type="time" value={adminEditForm.endTime} onChange={(e) => setAdminEditForm((p) => ({ ...p, endTime: e.target.value }))} />
+                <Input
+                  type="time"
+                  value={adminEditForm.endTime}
+                  max={endMaxFromStart(adminEditForm.startTime)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const max = endMaxFromStart(adminEditForm.startTime);
+                    const clamped = timeToMinutes(val) > timeToMinutes(max) ? max : val;
+                    setAdminEditForm((p) => ({ ...p, endTime: clamped }));
+                  }}
+                />
               </div>
             </div>
             <div>
