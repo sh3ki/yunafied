@@ -636,18 +636,20 @@ function AuthenticatedShell({
               )}
 
               {currentView === 'assignments' && (
-                <Assignments
-                  assignments={data.assignments}
-                  submissions={data.submissions}
-                  role={userRole}
-                  userId={session.user.id}
-                  students={data.users.filter((u) => u.role === 'student').map((u) => ({ id: u.id, name: u.fullName }))}
-                  onCreateAssignment={onCreateAssignment}
-                  onSubmitAssignment={onSubmitAssignment}
-                  onGradeSubmission={onGradeSubmission}
-                  onToggleClose={onToggleAssignmentClosed}
-                  backendBaseUrl={backendBaseUrl}
-                />
+                <div className="p-4 md:p-8 h-[calc(100vh-64px)]">
+                  <Assignments
+                    assignments={data.assignments}
+                    submissions={data.submissions}
+                    role={userRole}
+                    userId={session.user.id}
+                    students={data.users.filter((u) => u.role === 'student').map((u) => ({ id: u.id, name: u.fullName }))}
+                    onCreateAssignment={onCreateAssignment}
+                    onSubmitAssignment={onSubmitAssignment}
+                    onGradeSubmission={onGradeSubmission}
+                    onToggleClose={onToggleAssignmentClosed}
+                    backendBaseUrl={backendBaseUrl}
+                  />
+                </div>
               )}
 
               {currentView === 'grades' && (
