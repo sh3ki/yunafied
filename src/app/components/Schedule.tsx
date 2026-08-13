@@ -239,7 +239,8 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   );
 
   const pendingTeacherRequests = useMemo(
-    () => teacherSchedules.filter((item) => item.status === 'pending').sort((a, b) => `${a.date}-${a.startTime}`.localeCompare(`${b.date}-${b.startTime}`)),
+    // sort pending requests newest -> oldest so latest appears first
+    () => teacherSchedules.filter((item) => item.status === 'pending').sort((a, b) => `${b.date}-${b.startTime}`.localeCompare(`${a.date}-${a.startTime}`)),
     [teacherSchedules],
   );
 
@@ -728,9 +729,10 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
 
             {(() => {
               const todayIsoStr = isoFromDate(new Date());
+              // show newest schedules first (latest -> oldest)
               const tabSchedules = teacherSchedules
                 .filter((item) => listTab === 'today' ? item.date === todayIsoStr : item.status === listTab)
-                .sort((a, b) => `${a.date}-${a.startTime}`.localeCompare(`${b.date}-${b.startTime}`));
+                .sort((a, b) => `${b.date}-${b.startTime}`.localeCompare(`${a.date}-${a.startTime}`));
 
               if (tabSchedules.length === 0) {
                 return (
