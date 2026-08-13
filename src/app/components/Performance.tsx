@@ -12,6 +12,9 @@ interface PerformanceProps {
   schedules?: ScheduleItem[];
   role?: string;
   userId?: string;
+  showHeader?: boolean;
+  title?: string;
+  subtitle?: string;
 }
 
 const GRADE_COLORS: Record<string, string> = {
@@ -36,7 +39,7 @@ function gradeCategory(grade: string | null): string {
   return grade;
 }
 
-export function Performance({ submissions, assignments = [], users = [], schedules = [], role, userId }: PerformanceProps) {
+export function Performance({ submissions, assignments = [], users = [], schedules = [], role, userId, showHeader = true, title, subtitle }: PerformanceProps) {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
 
   const students = useMemo(() => users.filter((u) => u.role === 'student'), [users]);
@@ -131,10 +134,12 @@ export function Performance({ submissions, assignments = [], users = [], schedul
 
   return (
     <div className="p-6 space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">Performance Analytics</h1>
-        <p className="text-gray-500 text-sm mt-1">Student progress, grades, and session data</p>
-      </div>
+      {showHeader && (
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">{title || 'Performance Analytics'}</h1>
+          <p className="text-gray-500 text-sm mt-1">{subtitle || 'Student progress, grades, and session data'}</p>
+        </div>
+      )}
 
       {/* Top stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -259,7 +264,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
               {students.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}
             </select>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-64 overflow-y-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
