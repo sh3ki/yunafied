@@ -1203,7 +1203,14 @@ app.post(
       const safeExt = path.extname(req.file.originalname).toLowerCase() || ".mp4";
       tmpVideoPath = path.join(os.tmpdir(), `yunafied_vid_${Date.now()}${safeExt}`);
       await fs.writeFile(tmpVideoPath, req.file.buffer);
-      transcript = await transcribeUploadedVideoWithWhisper(tmpVideoPath);
+      try {
+        transcript = await transcribeUploadedVideoWithWhisper(tmpVideoPath);
+      } catch (err) {
+        console.error('[video-summary] Upload transcription failed:', err instanceof Error ? err.message : err);
+        // Return a 502 with a helpful message rather than throwing to the global handler
+        res.status(502).json({ message: 'Transcription of uploaded video failed.', details: err instanceof Error ? err.message : String(err) });
+        return;
+      }
     } else if (videoUrl) {
       sourceType = "youtube";
       sourceReference = videoUrl;
