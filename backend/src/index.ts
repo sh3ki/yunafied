@@ -2889,13 +2889,21 @@ app.delete("/api/notifications/:id", requireAuth, async (req: AuthenticatedReque
   try {
     const userId = req.auth?.sub;
     if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
-    const deleted = await service.deleteNotification(req.params.id, userId);
-    if (!deleted) {
-      // Notification may be a synthetic/generated ref (eg "grade:...", "assignment-due:...")
-      // These are not persisted in the notifications table. Marking as read will
-      // hide the notification for the user, so treat that as a successful dismiss.
-      await service.markNotificationRead(req.params.id, userId);
+    const id = req.params.id;
+
+    // Synthetic notifications use a composite id like "type:uuid" (eg "grade:...",
+    // "announcement:...") and are not stored in the notifications table. Attempting
+    // to DELETE them will cause Postgres to try casting the value to UUID and fail.
+    // In that case, treat the delete as a dismiss by recording a read-ref.
+    if (id.includes(':')) {
+      await service.markNotificationRead(id, userId);
       res.status(204).end();
+      return;
+    }
+
+    const deleted = await service.deleteNotification(id, userId);
+    if (!deleted) {
+      res.status(404).json({ message: "Notification not found." });
       return;
     }
 
