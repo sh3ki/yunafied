@@ -333,29 +333,35 @@ export function Assignments({
                       <p className="text-red-500 text-sm mt-1">The teacher has closed this assignment.</p>
                     </div>
                   ) : mySubmission ? (
-                    <div className="bg-green-50 border border-green-100 rounded-lg p-6 text-center">
-                      <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
-                      <h5 className="font-bold text-green-800 text-lg">Submitted</h5>
-                      <p className="text-green-700 mt-1">Your work has been received.</p>
-                      {mySubmission.contentText && (
-                        <p className="mt-3 text-sm text-gray-600 bg-white border border-green-200 rounded-lg p-3 text-left">{mySubmission.contentText}</p>
-                      )}
-                      {mySubmission.fileName && mySubmission.fileUrl && (
-                        <a
-                          href={toDownloadUrl(resolveFileUrl(mySubmission.fileUrl, backendBaseUrl))}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          download={mySubmission.fileName}
-                          className="mt-3 inline-flex items-center gap-1 text-sm text-indigo-600 underline"
-                        >
-                          <Paperclip className="h-3.5 w-3.5" />
-                          {mySubmission.fileName}
-                        </a>
-                      )}
+                    <>
+                      <div className="bg-green-50 border border-green-100 rounded-lg p-6 text-center">
+                        <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                        <h5 className="font-bold text-green-800 text-lg">Submitted</h5>
+                        <p className="text-green-700 mt-1">Your work has been received.</p>
+                        {mySubmission.contentText && (
+                          <p className="mt-3 text-sm text-gray-600 bg-white border border-green-200 rounded-lg p-3 text-left">{mySubmission.contentText}</p>
+                        )}
+                        {mySubmission.fileName && mySubmission.fileUrl && (
+                          <a
+                            href={toDownloadUrl(resolveFileUrl(mySubmission.fileUrl, backendBaseUrl))}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            download={mySubmission.fileName}
+                            className="mt-3 inline-flex items-center gap-1 text-sm text-indigo-600 underline"
+                          >
+                            <Paperclip className="h-3.5 w-3.5" />
+                            {mySubmission.fileName}
+                          </a>
+                        )}
+                      </div>
+
                       {(mySubmission.grade || mySubmission.feedback) ? (
-                        <div className="mt-4 text-left">
+                        <div className="mt-4 bg-blue-50 border border-blue-100 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h5 className="font-bold text-blue-800">Grade and Feedback</h5>
+                          </div>
                           {mySubmission.grade && (
-                            <div className="text-sm font-semibold">Grade: <span className="text-indigo-600">{mySubmission.grade}</span></div>
+                            <div className="text-sm font-semibold">Grade: <span className="text-blue-600">{mySubmission.grade}</span></div>
                           )}
                           {mySubmission.feedback && (
                             <div className="mt-2 text-sm text-gray-700 bg-white border border-gray-100 rounded-lg p-3">{mySubmission.feedback}</div>
@@ -364,7 +370,7 @@ export function Assignments({
                       ) : (
                         <p className="mt-4 text-xs text-gray-500">View your grade and feedback in <span className="font-semibold text-indigo-600">Grades &amp; Feedback</span>.</p>
                       )}
-                    </div>
+                    </>
                   ) : (
                     <div className="space-y-4">
                       <div>
