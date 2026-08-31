@@ -205,6 +205,11 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
   });
 
   const teachers = useMemo(() => users.filter((u) => u.role === 'teacher' && u.status === 'active'), [users]);
+  const qualifiedTeachers = useMemo(() => [...teachers].sort((a, b) => {
+    const aQualified = a.specializations?.some((item) => item.toLowerCase().includes('english')) ? 0 : 1;
+    const bQualified = b.specializations?.some((item) => item.toLowerCase().includes('english')) ? 0 : 1;
+    return aQualified - bQualified || a.fullName.localeCompare(b.fullName);
+  }), [teachers]);
   const students = useMemo(() => users.filter((u) => u.role === 'student' && u.status === 'active'), [users]);
 
   useEffect(() => {
@@ -594,8 +599,8 @@ export function Schedule({ schedules, users, role, userId, onCreate, onRespond, 
               onChange={(e) => setSelectedTeacherId(e.target.value)}
             >
               <option value="">Select teacher</option>
-              {teachers.map((teacher) => (
-                <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>
+              {qualifiedTeachers.map((teacher) => (
+                <option key={teacher.id} value={teacher.id}>{teacher.fullName}{teacher.specializations?.length ? ` — ${teacher.specializations.join(', ')}` : ''}</option>
               ))}
             </select>
           </div>
