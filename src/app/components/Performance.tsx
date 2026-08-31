@@ -15,6 +15,7 @@ interface PerformanceProps {
   showHeader?: boolean;
   title?: string;
   subtitle?: string;
+  interpretations?: Record<string, string>;
 }
 
 const GRADE_COLORS: Record<string, string> = {
@@ -39,7 +40,7 @@ function gradeCategory(grade: string | null): string {
   return grade;
 }
 
-export function Performance({ submissions, assignments = [], users = [], schedules = [], role, userId, showHeader = true, title, subtitle }: PerformanceProps) {
+export function Performance({ submissions, assignments = [], users = [], schedules = [], role, userId, showHeader = true, title, subtitle, interpretations = {} }: PerformanceProps) {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
 
   const students = useMemo(() => users.filter((u) => u.role === 'student'), [users]);
@@ -177,6 +178,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
           ) : (
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No graded submissions yet</div>
           )}
+          <Interpretation text={interpretations.performanceGradeDistribution} />
         </div>
 
         {/* Submission Status Pie */}
@@ -199,6 +201,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
           ) : (
             <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No submissions yet</div>
           )}
+          <Interpretation text={interpretations.performanceSubmissionStatus} />
         </div>
       </div>
 
@@ -221,6 +224,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
               <Legend />
             </BarChart>
           </ResponsiveContainer>
+          <Interpretation text={interpretations.performanceAssignmentStats} />
         </div>
       )}
 
@@ -247,6 +251,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          <Interpretation text={interpretations.performanceSessionOverview} />
         </div>
       )}
 
@@ -300,3 +305,6 @@ export function Performance({ submissions, assignments = [], users = [], schedul
   );
 }
 
+function Interpretation({ text }: { text?: string }) {
+  return text ? <p className="mt-4 text-sm text-gray-600 bg-indigo-50 rounded-lg p-3"><span className="font-semibold text-indigo-700">Interpretation:</span> {text}</p> : null;
+}
