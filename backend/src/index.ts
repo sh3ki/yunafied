@@ -804,6 +804,8 @@ const enrollmentSchema = z.object({
 });
 
 const enrollmentUpdateSchema = z.object({
+  studentId: z.string().uuid().optional(),
+  teacherId: z.string().uuid().optional(),
   subject: z.string().min(2).max(200).optional(),
   tutorialGroup: z.string().max(120).nullable().optional(),
   gradeLevel: z.string().max(120).nullable().optional(),
