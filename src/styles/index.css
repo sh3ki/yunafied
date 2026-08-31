@@ -11,11 +11,22 @@
   background: white;
 }
 
+.teacher-print-report {
+  display: block;
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1000px;
+  background: white;
+}
+
 @media print {
   @page { size: A4 portrait; margin: 12mm; }
   body * { visibility: hidden !important; }
   .admin-print-report,
-  .admin-print-report * { visibility: visible !important; }
+  .admin-print-report *,
+  .teacher-print-report,
+  .teacher-print-report * { visibility: visible !important; }
   .admin-print-report {
     position: absolute;
     left: 0;
@@ -24,4 +35,12 @@
     padding: 0;
   }
   .admin-print-chart { break-inside: avoid; page-break-inside: avoid; margin-bottom: 18px; }
+  .teacher-print-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+  }
+  .teacher-print-chart { break-inside: avoid; page-break-inside: avoid; margin-bottom: 18px; }
 }
