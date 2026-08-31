@@ -595,7 +595,7 @@ export class YunafiedService {
       whereSql = `WHERE s.teacher_id = $${params.length}`;
     } else if (requester.role === "student") {
       params.push(requester.id);
-      whereSql = `WHERE s.status = 'accepted' OR s.student_id = $${params.length}`;
+      whereSql = `WHERE s.status = 'scheduled' OR s.student_id = $${params.length}`;
     }
 
     const result = await pool.query(
@@ -610,6 +610,7 @@ export class YunafiedService {
               t.full_name AS "teacherName",
               s.student_id AS "studentId",
               st.full_name AS "studentName",
+              s.enrollment_id AS "enrollmentId",
               s.status,
               s.request_note AS "requestNote",
               s.response_note AS "responseNote",
@@ -702,11 +703,21 @@ export class YunafiedService {
     endTime: string;
     teacherId: string;
     studentId?: string | null;
+    enrollmentId: string;
   }): Promise<ScheduleItem> {
     this.validateTimeRange(input.startTime, input.endTime);
     await this.assertUserRole(input.teacherId, "teacher");
     if (input.studentId) {
       await this.assertUserRole(input.studentId, "student");
+    }
+
+    const enrollment = await pool.query<{ student_id: string; teacher_id: string }>(
+      `SELECT student_id, teacher_id FROM enrollment_records WHERE id = $1 AND status = 'active'`,
+      [input.enrollmentId],
+    );
+    if (!enrollment.rows[0]) throw new Error("The selected class assignment is not active.");
+    if (enrollment.rows[0].teacher_id !== input.teacherId || enrollment.rows[0].student_id !== input.studentId) {
+      throw new Error("The selected teacher and student must match the class assignment.");
     }
 
     await this.ensureTeacherAvailability({
@@ -720,6 +731,7 @@ export class YunafiedService {
       `INSERT INTO schedules (
           teacher_id,
           student_id,
+          enrollment_id,
           title,
           description,
           scheduled_date,
@@ -738,11 +750,11 @@ export class YunafiedService {
           trim(to_char($5::date, 'FMDay')),
           $6::time,
           $7::time,
-          'accepted',
+          'scheduled',
           NOW()
        )
        RETURNING id`,
-      [input.teacherId, input.studentId || null, input.title, input.description, input.date, input.startTime, input.endTime],
+      [input.teacherId, input.studentId || null, input.enrollmentId, input.title, input.description, input.date, input.startTime, input.endTime],
     );
 
     const created = await this.getScheduleById(insert.rows[0].id);
