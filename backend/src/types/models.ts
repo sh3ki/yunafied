@@ -408,4 +408,7 @@ export interface AdminAnalyticsItem {
   gradeDistribution: { grade: string; count: number }[];
   monthlySessionCounts: { month: string; count: number }[];
   topStudents: { studentId: string; studentName: string; avgGrade: number; submissionCount: number }[];
+  enrollmentTrends?: { period: string; count: number }[];
+  teacherActivity?: { teacherId: string; teacherName: string; sessions: number; assignments: number }[];
+  studentProgress?: { studentId: string; studentName: string; firstAverage: number | null; latestAverage: number | null; change: number | null }[];
 }
