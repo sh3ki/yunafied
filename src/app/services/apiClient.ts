@@ -89,6 +89,7 @@ export interface AccountEnrollmentPayload {
   specializations?: string[];
   notes?: string;
   availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
+  classSchedule?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
 }
 
 interface UpdateUserPayload {
@@ -295,6 +296,10 @@ class YunafiedApiClient {
 
   async updateTeacherRecord(id: string, payload: Partial<Omit<TeacherRecordItem, "teacherId" | "teacher" | "availability" | "updatedAt">>): Promise<void> {
     await this.request<void>(`/api/admin/teacher-records/${id}`, { method: "PUT", body: JSON.stringify(payload) });
+  }
+
+  async replaceTeacherAvailability(id: string, availability: Array<{ dayOfWeek: number; startTime: string; endTime: string }>): Promise<void> {
+    await this.request<void>(`/api/admin/teacher-records/${id}/availability`, { method: "PUT", body: JSON.stringify({ availability }) });
   }
 
   async listStudentRecords(): Promise<StudentRecordItem[]> {
@@ -765,6 +770,7 @@ class YunafiedApiClient {
     gradeLevel?: string;
     status?: EnrollmentStatus;
     note?: string;
+    classSchedule?: { dayOfWeek: number; startTime: string; endTime: string }[];
   }): Promise<EnrollmentRecordItem> {
     return this.request<EnrollmentRecordItem>("/api/enrollments", {
       method: "POST",
@@ -787,6 +793,7 @@ class YunafiedApiClient {
       actionTaken?: string | null;
       pullOutReason?: string | null;
       statusNotes?: string | null;
+      classSchedule?: { dayOfWeek: number; startTime: string; endTime: string }[];
     },
   ): Promise<EnrollmentRecordItem> {
     return this.request<EnrollmentRecordItem>(`/api/enrollments/${id}`, {
