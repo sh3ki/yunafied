@@ -1604,6 +1604,21 @@ app.get("/api/student-records", requireAuth, requireRole("admin", "teacher"), as
   }
 });
 
+const teacherRecordSchema = z.object({
+  mobileNumber: z.string().max(40).nullable().optional(), professionalTitle: z.string().max(160).nullable().optional(),
+  employmentStatus: z.string().max(80).nullable().optional(), education: z.string().max(500).nullable().optional(),
+  certifications: z.string().max(1000).nullable().optional(), yearsExperience: z.coerce.number().int().min(0).max(80).nullable().optional(),
+  specializations: z.array(z.string().min(1).max(120)).default([]), notes: z.string().max(2000).nullable().optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
+});
+
+app.get("/api/admin/teacher-records", requireAuth, requireRole("admin"), async (_req, res, next) => {
+  try { res.json(await service.listTeacherRecords()); } catch (error) { next(error); }
+});
+
+app.put("/api/admin/teacher-records/:id", requireAuth, requireRole("admin"), async (req, res, next) => {
+  try { const payload = teacherRecordSchema.parse(req.body); await service.upsertTeacherRecord(req.params.id, payload); res.status(204).end(); } catch (error) { next(error); }
+});
+
 const updateUserSchema = z.object({
   email: z.string().email(),
   firstName: z.string().min(2),
@@ -1911,7 +1926,6 @@ app.patch("/api/schedules/:id/respond", requireAuth, requireRole("teacher"), asy
   try {
     const payload = teacherRespondScheduleSchema.parse(req.body);
     const teacherId = req.auth?.sub;
-
     if (!teacherId) {
       res.status(401).json({ message: "Unauthorized" });
       return;
@@ -2531,6 +2545,7 @@ const accountEnrollmentSchema = z.object({
   email: z.string().email(), firstName: z.string().min(2), middleName: z.string().optional(), lastName: z.string().min(2),
   role: z.enum(["teacher", "student"]), profileImageUrl: z.string().url().nullable().optional(), profileImagePublicId: z.string().nullable().optional(),
   studentId: z.string().uuid().optional(), teacherId: z.string().uuid().optional(), subject: z.string().min(2).max(200).optional(), tutorialGroup: z.string().max(120).optional(), gradeLevel: z.string().max(120).optional(), note: z.string().max(1000).optional(),
+  mobileNumber: z.string().max(40).optional(), professionalTitle: z.string().max(160).optional(), employmentStatus: z.string().max(80).optional(), education: z.string().max(500).optional(), certifications: z.string().max(1000).optional(), yearsExperience: z.coerce.number().int().min(0).max(80).optional(), specializations: z.array(z.string().min(1).max(120)).optional(), notes: z.string().max(2000).optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
 });
 
 app.post("/api/enrollments/account", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -2542,6 +2557,8 @@ app.post("/api/enrollments/account", requireAuth, requireRole("admin"), async (r
     if (exists) { res.status(409).json({ message: "Email is already registered." }); return; }
     const rawToken = randomBytes(32).toString("hex");
     const user = await service.createPendingUser({ ...payload, tokenHash: hashVerificationToken(rawToken), tokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) });
+    if (payload.role === "teacher") await service.upsertTeacherRecord(user.id, payload);
+    if (payload.role === "teacher" && payload.availability?.length) await Promise.all(payload.availability.map((block) => service.createAvailabilityBlock(user.id, block)));
     const assignmentStudentId = payload.role === "student" ? user.id : payload.studentId;
     const assignmentTeacherId = payload.role === "teacher" ? user.id : payload.teacherId;
     if (payload.subject && assignmentStudentId && assignmentTeacherId) await service.createEnrollmentRecord({ studentId: assignmentStudentId, teacherId: assignmentTeacherId, subject: payload.subject, tutorialGroup: payload.tutorialGroup || null, gradeLevel: payload.gradeLevel || null, note: payload.note || null, createdById: creatorId });
@@ -3140,9 +3157,11 @@ app.get("/api/teacher/availability", requireAuth, async (req: AuthenticatedReque
 
 app.post("/api/teacher/availability", requireAuth, requireRole("teacher", "admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const teacherId = req.auth?.sub;
+    const requestedTeacherId = z.string().uuid().optional().parse(req.body?.teacherId);
+    const teacherId = req.auth?.role === "admin" ? requestedTeacherId : req.auth?.sub;
     if (!teacherId) { res.status(401).json({ message: "Unauthorized" }); return; }
     const input = z.object({
+      teacherId: z.string().uuid().optional(),
       dayOfWeek: z.number().int().min(0).max(6),
       startTime: z.string(),
       endTime: z.string(),
