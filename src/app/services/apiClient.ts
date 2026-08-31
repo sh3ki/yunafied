@@ -28,6 +28,7 @@ import {
   StudentXpItem,
   SubmissionItem,
   TeacherAvailabilityItem,
+  TeacherRecordItem,
   TranslationHistoryItem,
   UserRole,
   UserStatus,
@@ -79,6 +80,15 @@ export interface AccountEnrollmentPayload {
   note?: string;
   profileImageUrl?: string | null;
   profileImagePublicId?: string | null;
+  mobileNumber?: string;
+  professionalTitle?: string;
+  employmentStatus?: string;
+  education?: string;
+  certifications?: string;
+  yearsExperience?: number;
+  specializations?: string[];
+  notes?: string;
+  availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
 }
 
 interface UpdateUserPayload {
@@ -277,6 +287,14 @@ class YunafiedApiClient {
 
   async listUsers(): Promise<AuthUser[]> {
     return this.request<AuthUser[]>("/api/users");
+  }
+
+  async listTeacherRecords(): Promise<TeacherRecordItem[]> {
+    return this.request<TeacherRecordItem[]>("/api/admin/teacher-records");
+  }
+
+  async updateTeacherRecord(id: string, payload: Partial<Omit<TeacherRecordItem, "teacherId" | "teacher" | "availability" | "updatedAt">>): Promise<void> {
+    await this.request<void>(`/api/admin/teacher-records/${id}`, { method: "PUT", body: JSON.stringify(payload) });
   }
 
   async listStudentRecords(): Promise<StudentRecordItem[]> {
@@ -895,7 +913,7 @@ class YunafiedApiClient {
     return this.request<TeacherAvailabilityItem[]>(`/api/teacher/availability${qs}`);
   }
 
-  async createTeacherAvailability(payload: { dayOfWeek: number; startTime: string; endTime: string }): Promise<TeacherAvailabilityItem> {
+  async createTeacherAvailability(payload: { dayOfWeek: number; startTime: string; endTime: string; teacherId?: string }): Promise<TeacherAvailabilityItem> {
     return this.request<TeacherAvailabilityItem>("/api/teacher/availability", {
       method: "POST",
       body: JSON.stringify(payload),
