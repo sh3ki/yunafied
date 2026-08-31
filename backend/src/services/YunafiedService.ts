@@ -3706,6 +3706,32 @@ export class YunafiedService {
     return result.rows[0] || null;
   }
 
+  async getAdminPerformanceGraphs(): Promise<Record<string, unknown[]>> {
+    const [submissionStatus, assignmentStats, sessionStatus] = await Promise.all([
+      pool.query<{ name: string; value: string }>(`SELECT CASE WHEN grade_value IS NULL OR grade_value = '' THEN 'Pending' ELSE 'Graded' END AS name, COUNT(*)::text AS value FROM submissions GROUP BY 1 ORDER BY 1`),
+      pool.query<{ name: string; submitted: string; graded: string; pending: string }>(`SELECT a.title AS name, COUNT(s.id)::text AS submitted, COUNT(s.id) FILTER (WHERE s.grade_value IS NOT NULL AND s.grade_value <> '')::text AS graded, COUNT(s.id) FILTER (WHERE s.grade_value IS NULL OR s.grade_value = '')::text AS pending FROM assignments a LEFT JOIN submissions s ON s.assignment_id = a.id GROUP BY a.id, a.title ORDER BY a.created_at DESC LIMIT 20`),
+      pool.query<{ name: string; value: string }>(`SELECT status AS name, COUNT(*)::text AS value FROM schedules GROUP BY status ORDER BY status`),
+    ]);
+    return {
+      performanceGradeDistribution: [],
+      performanceSubmissionStatus: submissionStatus.rows.map(r => ({ name: r.name, value: Number(r.value) })),
+      performanceAssignmentStats: assignmentStats.rows.map(r => ({ name: r.name, submitted: Number(r.submitted), graded: Number(r.graded), pending: Number(r.pending) })),
+      performanceSessionOverview: sessionStatus.rows.map(r => ({ name: r.name, value: Number(r.value) })),
+    };
+  }
+
+  async getLatestAdminDashboardInterpretation(graphKey: string): Promise<{ interpretation: string; createdAt: string; snapshot: unknown } | null> {
+    const result = await pool.query<{ interpretation: string; createdAt: string; snapshot: unknown }>(
+      `SELECT interpretation, created_at AS "createdAt", snapshot
+         FROM admin_dashboard_interpretations
+        WHERE snapshot->>'graphKey' = $1
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [graphKey],
+    );
+    return result.rows[0] || null;
+  }
+
   async saveAdminDashboardInterpretation(input: { fingerprint: string; filters: unknown; snapshot: unknown; interpretation: string }): Promise<{ interpretation: string; createdAt: string }> {
     const result = await pool.query<{ interpretation: string; createdAt: string }>(
       `INSERT INTO admin_dashboard_interpretations (fingerprint, filters, snapshot, interpretation)
