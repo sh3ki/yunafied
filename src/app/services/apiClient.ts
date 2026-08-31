@@ -64,6 +64,22 @@ interface CreateUserPayload {
   password: string;
 }
 
+export interface AccountEnrollmentPayload {
+  email: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  role: "teacher" | "student";
+  studentId?: string;
+  teacherId?: string;
+  subject?: string;
+  tutorialGroup?: string;
+  gradeLevel?: string;
+  note?: string;
+  profileImageUrl?: string | null;
+  profileImagePublicId?: string | null;
+}
+
 interface UpdateUserPayload {
   email: string;
   firstName: string;
@@ -209,6 +225,22 @@ class YunafiedApiClient {
       method: "POST",
       body: JSON.stringify({ email }),
     });
+  }
+
+  async enrollAccount(payload: AccountEnrollmentPayload): Promise<{ user: AuthUser; message: string }> {
+    return this.request<{ user: AuthUser; message: string }>("/api/enrollments/account", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  async resendVerification(userId: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/auth/resend-verification", { method: "POST", body: JSON.stringify({ userId }) });
+  }
+
+  async verifyAccount(token: string): Promise<{ email: string; firstName: string; middleName: string | null; lastName: string; role: "teacher" | "student"; token: string }> {
+    return this.request(`/api/auth/verify-account?token=${encodeURIComponent(token)}`);
+  }
+
+  async completeAccountSetup(payload: { token: string; firstName: string; middleName?: string; lastName: string; password: string }): Promise<LoginResponse> {
+    return this.request<LoginResponse>("/api/auth/complete-account-setup", { method: "POST", body: JSON.stringify(payload) });
   }
 
   async forgotPassword(email: string): Promise<{ message: string }> {
@@ -707,6 +739,7 @@ class YunafiedApiClient {
     teacherId: string;
     subject: string;
     tutorialGroup?: string;
+    gradeLevel?: string;
     status?: EnrollmentStatus;
     note?: string;
   }): Promise<EnrollmentRecordItem> {
@@ -721,6 +754,7 @@ class YunafiedApiClient {
     payload: {
       subject?: string;
       tutorialGroup?: string | null;
+      gradeLevel?: string | null;
       status?: EnrollmentStatus;
       note?: string | null;
     },
