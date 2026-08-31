@@ -11,7 +11,8 @@ import {
   Megaphone,
   Sparkles,
   UserRound,
-  Video
+  Video,
+  ClipboardList
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -32,6 +33,7 @@ export function BottomNav({ role, currentView, onNavigate, chatUnreadTotal = 0 }
     { id: 'chats', label: 'Chats', icon: MessageCircle, roles: ['admin', 'teacher', 'student'] },
     { id: 'notifications', label: 'Alerts', icon: Bell, roles: ['admin', 'teacher', 'student'] },
     { id: 'enrollments', label: 'Enroll', icon: Users, roles: ['admin', 'teacher', 'student'] },
+    { id: 'student-records', label: 'Records', icon: ClipboardList, roles: ['admin', 'teacher'] },
     { id: 'materials', label: 'Materials', icon: Library, roles: ['admin', 'teacher', 'student'] },
     { id: 'gamified-learning', label: 'Quiz', icon: Sparkles, roles: ['admin', 'teacher', 'student'] },
     { id: 'ai-guide', label: 'AI Guide', icon: Sparkles, roles: ['student'] },
