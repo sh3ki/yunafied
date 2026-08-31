@@ -3371,8 +3371,6 @@ app.get("/api/admin/meeting-history", requireAuth, requireRole("admin"), async (
 const adminAnalyticsQuerySchema = z.object({
   dateFrom: z.string().date().optional(),
   dateTo: z.string().date().optional(),
-  academicYear: z.string().regex(/^\d{4}$/).optional(),
-  classFilter: z.string().optional(),
   status: z.string().optional(),
 });
 
