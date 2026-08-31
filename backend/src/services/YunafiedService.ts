@@ -3331,6 +3331,7 @@ export class YunafiedService {
     actorId?: string;
     action?: string;
     entityType?: string;
+    search?: string;
     dateFrom?: string;
     dateTo?: string;
     page: number;
@@ -3343,7 +3344,8 @@ export class YunafiedService {
     if (filters.action) { params.push(filters.action); conditions.push(`action = $${params.length}`); }
     if (filters.entityType) { params.push(filters.entityType); conditions.push(`entity_type = $${params.length}`); }
     if (filters.dateFrom) { params.push(filters.dateFrom); conditions.push(`created_at >= $${params.length}`); }
-    if (filters.dateTo) { params.push(filters.dateTo); conditions.push(`created_at <= $${params.length}`); }
+    if (filters.dateTo) { params.push(`${filters.dateTo}T23:59:59.999Z`); conditions.push(`created_at <= $${params.length}`); }
+    if (filters.search?.trim()) { params.push(`%${filters.search.trim()}%`); conditions.push(`(actor_name ILIKE $${params.length} OR action ILIKE $${params.length} OR entity_type ILIKE $${params.length} OR COALESCE(entity_id, '') ILIKE $${params.length} OR COALESCE(ip_address, '') ILIKE $${params.length})`); }
 
     const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
     const offset = (filters.page - 1) * filters.pageSize;
