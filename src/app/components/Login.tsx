@@ -557,15 +557,7 @@ export function Login({ onLogin, onSignup, onForgotPassword, onResetPassword, on
 
         <div className="mt-8 text-center pt-6 border-t border-white/15">
           {mode === 'login' ? (
-            <p className="text-indigo-100/80 text-sm">
-              Don't have an account?{' '}
-              <button 
-                onClick={() => setMode('signup')}
-                className="text-cyan-200 font-bold hover:underline"
-              >
-                Sign Up
-              </button>
-            </p>
+            <p className="text-indigo-100/80 text-sm">Accounts are created by the YUNAfied administrator.</p>
           ) : (
             <p className="text-indigo-100/80 text-sm">
               Already have an account?{' '}
