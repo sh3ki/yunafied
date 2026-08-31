@@ -36,6 +36,7 @@ export interface AuthUser {
   profileImageUrl: string | null;
   profileImagePublicId: string | null;
   createdAt: string;
+  specializations?: string[];
 }
 
 export interface ScheduleItem {
@@ -449,6 +450,21 @@ export interface AdminAnalyticsItem {
   interpretationGeneratedAt?: string | null;
   interpretations?: Record<string, { text: string; generatedAt: string | null }>;
   filters?: { dateFrom: string | null; dateTo: string | null; academicYear: string | null; classFilter: string | null; status: string | null };
+}
+
+export interface TeacherRecordItem {
+  teacherId: string;
+  teacher: AuthUser;
+  mobileNumber: string | null;
+  professionalTitle: string | null;
+  employmentStatus: string | null;
+  education: string | null;
+  certifications: string | null;
+  yearsExperience: number | null;
+  specializations: string[];
+  notes: string | null;
+  availability: TeacherAvailabilityItem[];
+  updatedAt: string;
 }
 
 export interface StudentRecordAssignment {
