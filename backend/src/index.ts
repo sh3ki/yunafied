@@ -809,6 +809,11 @@ const enrollmentUpdateSchema = z.object({
   gradeLevel: z.string().max(120).nullable().optional(),
   status: z.enum(["active", "completed", "dropped", "archived"]).optional(),
   note: z.string().max(1000).nullable().optional(),
+  dropReason: z.string().max(1000).nullable().optional(),
+  dropDate: z.string().date().nullable().optional(),
+  actionTaken: z.string().max(1000).nullable().optional(),
+  pullOutReason: z.string().max(1000).nullable().optional(),
+  statusNotes: z.string().max(2000).nullable().optional(),
 });
 
 const materialLinkSchema = z.object({
@@ -1547,7 +1552,7 @@ const createUserSchema = z.object({
   middleName: z.string().optional(),
   lastName: z.string().min(2),
   role: z.enum(["teacher", "student"]),
-  status: z.enum(["active", "inactive", "pending", "archived"]).default("active"),
+  status: z.enum(["active", "inactive", "pending", "archived", "completed", "dropped"]).default("active"),
   profileImageUrl: z.string().url().nullable().optional(),
   profileImagePublicId: z.string().nullable().optional(),
   password: z.string().min(6),
@@ -1605,10 +1610,19 @@ const updateUserSchema = z.object({
   middleName: z.string().optional(),
   lastName: z.string().min(2),
   role: z.enum(["admin", "teacher", "student"]),
-  status: z.enum(["active", "inactive", "pending", "archived"]),
+  status: z.enum(["active", "inactive", "pending", "archived", "completed", "dropped"]),
   profileImageUrl: z.string().url().nullable().optional(),
   profileImagePublicId: z.string().nullable().optional(),
   password: z.string().min(6).optional(),
+});
+
+const changeUserStatusSchema = z.object({
+  status: z.enum(["active", "inactive", "pending", "archived", "completed", "dropped"]),
+  reason: z.string().max(1000).nullable().optional(),
+  dropDate: z.string().date().nullable().optional(),
+  actionTaken: z.string().max(1000).nullable().optional(),
+  pullOutReason: z.string().max(1000).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
 });
 
 app.put("/api/users/:id", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
@@ -1616,6 +1630,9 @@ app.put("/api/users/:id", requireAuth, requireRole("admin"), async (req: Authent
     const payload = updateUserSchema.parse(req.body);
     const existing = await service.findUserWithPasswordById(req.params.id);
     if (!existing) { res.status(404).json({ message: "User not found." }); return; }
+    if (payload.status === "dropped" && existing.status !== "dropped") {
+      res.status(400).json({ message: "Use the Change Status action to mark a student as dropped and provide the required details." }); return;
+    }
     if (existing.role === "admin" && (payload.role !== "admin" || payload.status === "archived")) {
       res.status(400).json({ message: "The designated Admin account cannot be demoted or archived." }); return;
     }
@@ -1646,6 +1663,20 @@ app.put("/api/users/:id", requireAuth, requireRole("admin"), async (req: Authent
   } catch (error) {
     next(error);
   }
+});
+
+app.patch("/api/users/:id/status", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const payload = changeUserStatusSchema.parse(req.body);
+    const changedById = req.auth?.sub;
+    if (!changedById) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const target = await service.findUserWithPasswordById(req.params.id);
+    if (!target) { res.status(404).json({ message: "User not found." }); return; }
+    if (target.role === "admin" && payload.status !== "active") { res.status(400).json({ message: "The designated Admin account cannot have its status changed." }); return; }
+    const updated = await service.changeUserStatus(req.params.id, changedById, payload);
+    res.json(updated);
+    clearBootstrapCache();
+  } catch (error) { next(error); }
 });
 
 app.delete("/api/users/:id", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
@@ -2596,7 +2627,7 @@ app.post("/api/enrollments", requireAuth, requireRole("admin"), async (req: Auth
 app.patch("/api/enrollments/:id", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
   try {
     const payload = enrollmentUpdateSchema.parse(req.body);
-    const row = await service.updateEnrollmentRecord(req.params.id, payload);
+    const row = await service.updateEnrollmentRecord(req.params.id, { ...payload, changedById: req.auth?.sub || null });
 
     if (!row) {
       res.status(404).json({ message: "Enrollment record not found." });
