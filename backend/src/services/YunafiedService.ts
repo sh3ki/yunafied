@@ -1282,6 +1282,29 @@ export class YunafiedService {
     };
   }
 
+  private async attachEnrollmentClassSchedules(rows: EnrollmentRecordItem[]): Promise<EnrollmentRecordItem[]> {
+    if (!rows.length) return rows.map((row) => ({ ...row, classSchedule: [] }));
+    const schedules = await pool.query(
+      `SELECT id, enrollment_id AS "enrollmentId", day_of_week AS "dayOfWeek",
+              to_char(start_time, 'HH24:MI') AS "startTime",
+              to_char(end_time, 'HH24:MI') AS "endTime"
+         FROM enrollment_class_schedules
+        WHERE enrollment_id = ANY($1::uuid[])
+        ORDER BY day_of_week, start_time`,
+      [rows.map((row) => row.id)],
+    );
+    return rows.map((row) => ({ ...row, classSchedule: schedules.rows.filter((item) => item.enrollmentId === row.id) }));
+  }
+
+  private async replaceEnrollmentClassSchedules(enrollmentId: string, schedules: { dayOfWeek: number; startTime: string; endTime: string }[]): Promise<void> {
+    await pool.query("DELETE FROM enrollment_class_schedules WHERE enrollment_id = $1", [enrollmentId]);
+    if (!schedules.length) return;
+    const values = schedules.map((_, index) => `($1, $${index * 3 + 2}, $${index * 3 + 3}, $${index * 3 + 4})`).join(", ");
+    const params: unknown[] = [enrollmentId];
+    schedules.forEach((schedule) => params.push(schedule.dayOfWeek, schedule.startTime, schedule.endTime));
+    await pool.query(`INSERT INTO enrollment_class_schedules (enrollment_id, day_of_week, start_time, end_time) VALUES ${values}`, params);
+  }
+
   async listEnrollmentRecords(requester: { id: string; role: UserRole }): Promise<EnrollmentRecordItem[]> {
     const baseSql = `SELECT e.id,
                             e.student_id AS "studentId",
@@ -1307,16 +1330,16 @@ export class YunafiedService {
 
     if (requester.role === "admin") {
       const result = await pool.query(`${baseSql} ORDER BY e.updated_at DESC`);
-      return result.rows as EnrollmentRecordItem[];
+      return this.attachEnrollmentClassSchedules(result.rows as EnrollmentRecordItem[]);
     }
 
     if (requester.role === "teacher") {
       const result = await pool.query(`${baseSql} WHERE e.teacher_id = $1 ORDER BY e.updated_at DESC`, [requester.id]);
-      return result.rows as EnrollmentRecordItem[];
+      return this.attachEnrollmentClassSchedules(result.rows as EnrollmentRecordItem[]);
     }
 
     const result = await pool.query(`${baseSql} WHERE e.student_id = $1 ORDER BY e.updated_at DESC`, [requester.id]);
-    return result.rows as EnrollmentRecordItem[];
+    return this.attachEnrollmentClassSchedules(result.rows as EnrollmentRecordItem[]);
   }
 
   async listStudentRecords(requester: { id: string; role: UserRole }): Promise<StudentRecordItem[]> {
@@ -1468,6 +1491,7 @@ export class YunafiedService {
     gradeLevel?: string | null;
     status?: EnrollmentStatus;
     note?: string | null;
+    classSchedule?: { dayOfWeek: number; startTime: string; endTime: string }[];
     createdById: string;
   }): Promise<EnrollmentRecordItem> {
     const result = await pool.query(
@@ -1497,6 +1521,7 @@ export class YunafiedService {
     );
 
     const row = result.rows[0] as Omit<EnrollmentRecordItem, "studentName" | "teacherName">;
+    await this.replaceEnrollmentClassSchedules(result.rows[0].id, input.classSchedule || []);
     const names = await pool.query(
       `SELECT id, full_name
          FROM users
@@ -1509,6 +1534,7 @@ export class YunafiedService {
       ...row,
       studentName: nameById.get(input.studentId) || "Student",
       teacherName: nameById.get(input.teacherId) || "Teacher",
+      classSchedule: input.classSchedule || [],
     };
   }
 
@@ -1527,6 +1553,7 @@ export class YunafiedService {
       actionTaken?: string | null;
       pullOutReason?: string | null;
       statusNotes?: string | null;
+      classSchedule?: { dayOfWeek: number; startTime: string; endTime: string }[];
       changedById?: string | null;
     },
   ): Promise<EnrollmentRecordItem | null> {
@@ -1596,6 +1623,8 @@ export class YunafiedService {
       await pool.query(`INSERT INTO status_change_history (entity_type, entity_id, previous_status, new_status, reason, drop_date, action_taken, pull_out_reason, notes, changed_by_id) VALUES ('enrollment', $1, $2, $3, $4, $5, $6, $7, $8, $9)`, [id, row.status, input.status, input.dropReason?.trim() || null, input.dropDate || null, input.actionTaken?.trim() || null, input.pullOutReason?.trim() || null, input.statusNotes?.trim() || null, input.changedById || null]);
     }
 
+    if (input.classSchedule !== undefined) await this.replaceEnrollmentClassSchedules(id, input.classSchedule);
+
     const updated = result.rows[0] as Omit<EnrollmentRecordItem, "studentName" | "teacherName">;
     const names = await pool.query(
       `SELECT id, full_name
@@ -1609,6 +1638,7 @@ export class YunafiedService {
       ...updated,
       studentName: nameById.get(updated.studentId) || "Student",
       teacherName: nameById.get(updated.teacherId) || "Teacher",
+      classSchedule: input.classSchedule !== undefined ? input.classSchedule : (await this.attachEnrollmentClassSchedules([updated as EnrollmentRecordItem]))[0].classSchedule,
     };
   }
 
@@ -3896,6 +3926,11 @@ export class YunafiedService {
         submissionCount: Number(r.submissionCount),
       })),
     };
+  }
+
+  async replaceTeacherAvailability(teacherId: string, blocks: { dayOfWeek: number; startTime: string; endTime: string }[]): Promise<void> {
+    await pool.query("DELETE FROM teacher_availability WHERE teacher_id = $1", [teacherId]);
+    for (const block of blocks) await this.createAvailabilityBlock(teacherId, block);
   }
 
   async getFilteredAdminAnalytics(filters: { dateFrom?: string; dateTo?: string; academicYear?: string; classFilter?: string; status?: string }): Promise<import("../types/models.js").AdminAnalyticsItem> {
