@@ -431,6 +431,32 @@ export interface AdminAnalyticsItem {
   filters?: { dateFrom: string | null; dateTo: string | null; academicYear: string | null; classFilter: string | null; status: string | null };
 }
 
+export interface StudentRecordAssignment {
+  assignment: AssignmentItem;
+  submission: SubmissionItem | null;
+}
+
+export interface StudentRecordGamifiedAttempt {
+  id: string;
+  quizId: string;
+  studentId: string;
+  quizTitle: string;
+  categoryName: string;
+  totalQuestions: number;
+  correctAnswers: number;
+  totalScore: number;
+  completedAt: string;
+}
+
+export interface StudentRecordItem {
+  student: Pick<AuthUser, 'id' | 'firstName' | 'middleName' | 'lastName' | 'fullName' | 'role' | 'status' | 'profileImageUrl' | 'createdAt'>;
+  enrollments: EnrollmentRecordItem[];
+  schedules: ScheduleItem[];
+  assignments: StudentRecordAssignment[];
+  gamifiedAttempts: StudentRecordGamifiedAttempt[];
+  meetingHistory: CallHistoryItem[];
+}
+
 export interface NotificationDbItem {
   id: string;
   userId: string;
