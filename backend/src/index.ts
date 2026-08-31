@@ -627,9 +627,17 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
   );
 
   // CORS: allow www origin (DNS redirects www→apex, so preflight must not be redirected)
+  const allowedOrigins = process.env.NODE_ENV === "production"
+    ? ["https://www.yunafied.online"]
+    : [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://www.yunafied.online",
+      ];
+
   app.use(
     cors({
-      origin: "https://www.yunafied.online",
+      origin: allowedOrigins,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
       credentials: true,
