@@ -43,6 +43,8 @@ interface DbUserRow {
   is_verified: boolean;
   otp_code: string | null;
   otp_expires_at: string | null;
+  verification_token_hash: string | null;
+  verification_token_expires_at: string | null;
 }
 
 interface DbTranslationRow {
@@ -209,7 +211,7 @@ export class YunafiedService {
 
   async findUserWithPasswordByEmail(email: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users WHERE email = $1",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE email = $1",
       [email],
     );
 
@@ -218,7 +220,7 @@ export class YunafiedService {
 
   async findUserWithPasswordById(userId: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users WHERE id = $1",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE id = $1",
       [userId],
     );
 
@@ -274,7 +276,7 @@ export class YunafiedService {
 
   async listUsers(): Promise<AuthUser[]> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at FROM users ORDER BY created_at DESC",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users ORDER BY created_at DESC",
     );
 
     return result.rows.map((row) => this.toAuthUser(row));
@@ -282,7 +284,7 @@ export class YunafiedService {
 
   async listUsersByRoles(roles: UserRole[]): Promise<AuthUser[]> {
     const result = await pool.query<DbUserRow>(
-      `SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at
+      `SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at
          FROM users
         WHERE role = ANY($1::user_role[])
         ORDER BY last_name ASC, first_name ASC`,
@@ -324,6 +326,52 @@ export class YunafiedService {
     );
 
     return this.toAuthUser(result.rows[0]);
+  }
+
+  async createPendingUser(input: {
+    email: string;
+    firstName: string;
+    middleName?: string | null;
+    lastName: string;
+    role: "teacher" | "student";
+    profileImageUrl?: string | null;
+    profileImagePublicId?: string | null;
+    tokenHash: string;
+    tokenExpiresAt: Date;
+  }): Promise<AuthUser> {
+    const fullName = [input.firstName, input.middleName, input.lastName].filter(Boolean).join(" ");
+    const result = await pool.query<DbUserRow>(
+      `INSERT INTO users (email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, is_verified, verification_token_hash, verification_token_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, '', FALSE, $9, $10)
+       RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at`,
+      [input.email.trim().toLowerCase(), input.firstName, input.middleName || null, input.lastName, fullName, input.role, input.profileImageUrl || null, input.profileImagePublicId || null, input.tokenHash, input.tokenExpiresAt.toISOString()],
+    );
+    return this.toAuthUser(result.rows[0]);
+  }
+
+  async findUserByVerificationToken(tokenHash: string): Promise<DbUserRow | null> {
+    const result = await pool.query<DbUserRow>(
+      `SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at
+         FROM users WHERE verification_token_hash = $1`, [tokenHash],
+    );
+    return result.rows[0] || null;
+  }
+
+  async completeAccountSetup(userId: string, input: { firstName: string; middleName?: string | null; lastName: string; passwordHash: string }): Promise<AuthUser | null> {
+    const fullName = [input.firstName, input.middleName, input.lastName].filter(Boolean).join(' ');
+    const result = await pool.query<DbUserRow>(
+      `UPDATE users SET first_name = $1, middle_name = $2, last_name = $3, full_name = $4,
+              password_hash = $5, status = 'active', is_verified = TRUE,
+              verification_token_hash = NULL, verification_token_expires_at = NULL, updated_at = NOW()
+        WHERE id = $6 AND status = 'pending'
+        RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at`,
+      [input.firstName, input.middleName || null, input.lastName, fullName, input.passwordHash, userId],
+    );
+    return result.rows[0] ? this.toAuthUser(result.rows[0]) : null;
+  }
+
+  async saveVerificationToken(userId: string, tokenHash: string, expiresAt: Date): Promise<void> {
+    await pool.query("UPDATE users SET verification_token_hash = $1, verification_token_expires_at = $2 WHERE id = $3", [tokenHash, expiresAt.toISOString(), userId]);
   }
 
   async updateUser(
@@ -389,7 +437,7 @@ export class YunafiedService {
   async deleteUser(userId: string): Promise<boolean> {
     // Soft delete — preserves referential integrity, required for Render Free Tier safety
     const result = await pool.query(
-      "UPDATE users SET deleted_at = NOW(), status = 'inactive' WHERE id = $1 AND deleted_at IS NULL",
+      "UPDATE users SET deleted_at = NOW(), status = 'archived' WHERE id = $1 AND deleted_at IS NULL",
       [userId],
     );
     return (result.rowCount || 0) > 0;
@@ -1200,6 +1248,7 @@ export class YunafiedService {
                             teacher.full_name AS "teacherName",
                             e.subject,
                             e.tutorial_group AS "tutorialGroup",
+                            e.grade_level AS "gradeLevel",
                             e.status,
                             e.note,
                             e.created_by_id AS "createdById",
@@ -1228,18 +1277,20 @@ export class YunafiedService {
     teacherId: string;
     subject: string;
     tutorialGroup?: string | null;
+    gradeLevel?: string | null;
     status?: EnrollmentStatus;
     note?: string | null;
     createdById: string;
   }): Promise<EnrollmentRecordItem> {
     const result = await pool.query(
-      `INSERT INTO enrollment_records (student_id, teacher_id, subject, tutorial_group, status, note, created_by_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO enrollment_records (student_id, teacher_id, subject, tutorial_group, grade_level, status, note, created_by_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id,
                  student_id AS "studentId",
                  teacher_id AS "teacherId",
                  subject,
                  tutorial_group AS "tutorialGroup",
+                 grade_level AS "gradeLevel",
                  status,
                  note,
                  created_by_id AS "createdById",
@@ -1250,6 +1301,7 @@ export class YunafiedService {
         input.teacherId,
         input.subject,
         input.tutorialGroup || null,
+        input.gradeLevel || null,
         input.status || "active",
         input.note || null,
         input.createdById,
@@ -1277,12 +1329,13 @@ export class YunafiedService {
     input: {
       subject?: string;
       tutorialGroup?: string | null;
+      gradeLevel?: string | null;
       status?: EnrollmentStatus;
       note?: string | null;
     },
   ): Promise<EnrollmentRecordItem | null> {
     const existing = await pool.query(
-      `SELECT id, student_id, teacher_id, subject, tutorial_group, status, note, created_by_id, created_at, updated_at
+      `SELECT id, student_id, teacher_id, subject, tutorial_group, grade_level, status, note, created_by_id, created_at, updated_at
          FROM enrollment_records
         WHERE id = $1`,
       [id],
@@ -1297,8 +1350,9 @@ export class YunafiedService {
       `UPDATE enrollment_records
           SET subject = $1,
               tutorial_group = $2,
-              status = $3,
-              note = $4,
+              grade_level = $3,
+              status = $4,
+              note = $5,
               updated_at = NOW()
         WHERE id = $5
         RETURNING id,
@@ -1306,6 +1360,7 @@ export class YunafiedService {
                   teacher_id AS "teacherId",
                   subject,
                   tutorial_group AS "tutorialGroup",
+                  grade_level AS "gradeLevel",
                   status,
                   note,
                   created_by_id AS "createdById",
@@ -1314,6 +1369,7 @@ export class YunafiedService {
       [
         input.subject ?? row.subject,
         input.tutorialGroup === undefined ? row.tutorial_group : input.tutorialGroup,
+        input.gradeLevel === undefined ? row.grade_level : input.gradeLevel,
         input.status ?? row.status,
         input.note === undefined ? row.note : input.note,
         id,
@@ -1337,7 +1393,7 @@ export class YunafiedService {
   }
 
   async deleteEnrollmentRecord(id: string): Promise<boolean> {
-    const result = await pool.query("DELETE FROM enrollment_records WHERE id = $1", [id]);
+    const result = await pool.query("UPDATE enrollment_records SET status = 'archived', updated_at = NOW() WHERE id = $1 AND status <> 'archived'", [id]);
     return (result.rowCount || 0) > 0;
   }
 
