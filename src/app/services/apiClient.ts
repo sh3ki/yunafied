@@ -775,6 +775,8 @@ class YunafiedApiClient {
   async updateEnrollment(
     id: string,
     payload: {
+      studentId?: string;
+      teacherId?: string;
       subject?: string;
       tutorialGroup?: string | null;
       gradeLevel?: string | null;
