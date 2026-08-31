@@ -21,6 +21,7 @@ import {
   MessageUserItem,
   ScheduleItem,
   ScheduleStatus,
+  StatusChangeHistoryItem,
   SubmissionItem,
   StudentRecordItem,
   StudentRecordAssignment,
@@ -435,6 +436,20 @@ export class YunafiedService {
     }
 
     return this.toAuthUser(result.rows[0]);
+  }
+
+  async changeUserStatus(userId: string, changedById: string, input: { status: UserStatus; reason?: string | null; dropDate?: string | null; actionTaken?: string | null; pullOutReason?: string | null; notes?: string | null }): Promise<AuthUser | null> {
+    if (input.status === "dropped" && !input.reason?.trim()) throw new Error("A reason is required when marking a student as dropped.");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const existing = await client.query<DbUserRow>("SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE id = $1 FOR UPDATE", [userId]);
+      if (!existing.rows[0]) { await client.query("ROLLBACK"); return null; }
+      const updated = await client.query<DbUserRow>("UPDATE users SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at", [input.status, userId]);
+      await client.query(`INSERT INTO status_change_history (entity_type, entity_id, previous_status, new_status, reason, drop_date, action_taken, pull_out_reason, notes, changed_by_id) VALUES ('user', $1, $2, $3, $4, $5, $6, $7, $8, $9)`, [userId, existing.rows[0].status, input.status, input.reason?.trim() || null, input.dropDate || null, input.actionTaken?.trim() || null, input.pullOutReason?.trim() || null, input.notes?.trim() || null, changedById]);
+      await client.query("COMMIT");
+      return this.toAuthUser(updated.rows[0]);
+    } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
 
   async deleteUser(userId: string): Promise<boolean> {
@@ -1254,6 +1269,11 @@ export class YunafiedService {
                             e.grade_level AS "gradeLevel",
                             e.status,
                             e.note,
+                            e.drop_reason AS "dropReason",
+                            e.drop_date AS "dropDate",
+                            e.action_taken AS "actionTaken",
+                            e.pull_out_reason AS "pullOutReason",
+                            e.status_notes AS "statusNotes",
                             e.created_by_id AS "createdById",
                             e.created_at AS "createdAt",
                             e.updated_at AS "updatedAt"
@@ -1386,6 +1406,16 @@ export class YunafiedService {
     const submissions = submissionsResult.rows as SubmissionItem[];
     const attempts = attemptsResult.rows as StudentRecordGamifiedAttempt[];
     const meetings = meetingsResult.rows as import("../types/models.js").CallHistoryItem[];
+    const enrollmentIds = enrollmentRows.map((row) => row.id);
+    const historyResult = await pool.query<StatusChangeHistoryItem>(
+      `SELECT id, entity_type AS "entityType", entity_id AS "entityId", previous_status AS "previousStatus", new_status AS "newStatus", reason, drop_date AS "dropDate", action_taken AS "actionTaken", pull_out_reason AS "pullOutReason", notes, changed_by_id AS "changedById", created_at AS "createdAt"
+         FROM status_change_history
+        WHERE (entity_type = 'user' AND entity_id = ANY($1::uuid[]))
+           OR (entity_type = 'enrollment' AND entity_id = ANY($2::uuid[]))
+        ORDER BY created_at DESC`,
+      [studentIds, enrollmentIds],
+    );
+    const history = historyResult.rows;
     const submissionByAssignmentStudent = new Map(submissions.map((submission) => [`${submission.studentId}:${submission.assignmentId}`, submission]));
 
     return students.map((student) => {
@@ -1401,6 +1431,7 @@ export class YunafiedService {
         assignments: studentAssignments,
         gamifiedAttempts: attempts.filter((attempt) => attempt.studentId === student.id),
         meetingHistory: meetings.filter((meeting) => meeting.studentId === student.id),
+        statusHistory: history.filter((item) => item.entityId === student.id || studentEnrollments.some((enrollment) => enrollment.id === item.entityId)),
       };
     });
   }
@@ -1465,10 +1496,16 @@ export class YunafiedService {
       gradeLevel?: string | null;
       status?: EnrollmentStatus;
       note?: string | null;
+      dropReason?: string | null;
+      dropDate?: string | null;
+      actionTaken?: string | null;
+      pullOutReason?: string | null;
+      statusNotes?: string | null;
+      changedById?: string | null;
     },
   ): Promise<EnrollmentRecordItem | null> {
     const existing = await pool.query(
-      `SELECT id, student_id, teacher_id, subject, tutorial_group, grade_level, status, note, created_by_id, created_at, updated_at
+      `SELECT id, student_id, teacher_id, subject, tutorial_group, grade_level, status, note, drop_reason, drop_date, action_taken, pull_out_reason, status_notes, created_by_id, created_at, updated_at
          FROM enrollment_records
         WHERE id = $1`,
       [id],
@@ -1479,6 +1516,7 @@ export class YunafiedService {
     }
 
     const row = existing.rows[0];
+    if (input.status === "dropped" && !(input.dropReason ?? row.drop_reason)?.trim()) throw new Error("A reason is required when marking an enrollment as dropped.");
     const result = await pool.query(
       `UPDATE enrollment_records
           SET subject = $1,
@@ -1486,8 +1524,13 @@ export class YunafiedService {
               grade_level = $3,
               status = $4,
               note = $5,
+              drop_reason = $6,
+              drop_date = $7,
+              action_taken = $8,
+              pull_out_reason = $9,
+              status_notes = $10,
               updated_at = NOW()
-        WHERE id = $5
+        WHERE id = $11
         RETURNING id,
                   student_id AS "studentId",
                   teacher_id AS "teacherId",
@@ -1496,6 +1539,11 @@ export class YunafiedService {
                   grade_level AS "gradeLevel",
                   status,
                   note,
+                  drop_reason AS "dropReason",
+                  drop_date AS "dropDate",
+                  action_taken AS "actionTaken",
+                  pull_out_reason AS "pullOutReason",
+                  status_notes AS "statusNotes",
                   created_by_id AS "createdById",
                   created_at AS "createdAt",
                   updated_at AS "updatedAt"`,
@@ -1505,9 +1553,18 @@ export class YunafiedService {
         input.gradeLevel === undefined ? row.grade_level : input.gradeLevel,
         input.status ?? row.status,
         input.note === undefined ? row.note : input.note,
+        input.status === "dropped" ? (input.dropReason ?? row.drop_reason ?? null) : null,
+        input.status === "dropped" ? (input.dropDate ?? row.drop_date ?? null) : null,
+        input.status === "dropped" ? (input.actionTaken ?? row.action_taken ?? null) : null,
+        input.status === "dropped" ? (input.pullOutReason ?? row.pull_out_reason ?? null) : null,
+        input.status === "dropped" ? (input.statusNotes ?? row.status_notes ?? null) : null,
         id,
       ],
     );
+
+    if (input.status && input.status !== row.status) {
+      await pool.query(`INSERT INTO status_change_history (entity_type, entity_id, previous_status, new_status, reason, drop_date, action_taken, pull_out_reason, notes, changed_by_id) VALUES ('enrollment', $1, $2, $3, $4, $5, $6, $7, $8, $9)`, [id, row.status, input.status, input.dropReason?.trim() || null, input.dropDate || null, input.actionTaken?.trim() || null, input.pullOutReason?.trim() || null, input.statusNotes?.trim() || null, input.changedById || null]);
+    }
 
     const updated = result.rows[0] as Omit<EnrollmentRecordItem, "studentName" | "teacherName">;
     const names = await pool.query(
