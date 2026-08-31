@@ -2,11 +2,18 @@ import { useEffect, useState } from "react";
 import { Search, Video } from "lucide-react";
 import { apiClient } from "@/app/services/apiClient";
 import type { CallHistoryItem } from "@/app/types/models";
+import { PrintButton, TableFilter, TablePagination, TableSearch, printTableReport, DEFAULT_TABLE_PAGE_SIZE } from "./ui/table-tools";
 
 export function MeetingHistory() {
   const [rooms, setRooms] = useState<CallHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
+  const [teacherFilter, setTeacherFilter] = useState("");
+  const [studentFilter, setStudentFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
 
   useEffect(() => {
     setLoading(true);
@@ -19,13 +26,17 @@ export function MeetingHistory() {
 
   const filtered = rooms.filter((r) => {
     const q = search.toLowerCase();
-    if (!q) return true;
-    return (
+    const matchesSearch = !q || (
       r.teacherName.toLowerCase().includes(q) ||
       (r.studentName || "").toLowerCase().includes(q) ||
       r.roomToken.toLowerCase().includes(q)
     );
+    const date = r.startedAt?.slice(0, 10) || "";
+    return matchesSearch && (!teacherFilter || r.teacherName === teacherFilter) && (!studentFilter || (r.studentName || "") === studentFilter) && (!dateFrom || date >= dateFrom) && (!dateTo || date <= dateTo);
   });
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const printMeetings = () => printTableReport({ title: 'Meeting History', subtitle: `Filters: ${teacherFilter || 'All teachers'} · ${studentFilter || 'All students'} · ${dateFrom || 'Any date'} to ${dateTo || 'Any date'} · ${search || 'No search'}`, columns: ['Room Token', 'Teacher', 'Student', 'Started At', 'Ended At', 'Duration'], rows: filtered.map((room) => [room.roomToken, room.teacherName, room.studentName || '—', room.startedAt ? new Date(room.startedAt).toLocaleString() : '—', room.endedAt ? new Date(room.endedAt).toLocaleString() : '—', room.durationSeconds != null ? `${Math.floor(room.durationSeconds / 60)}m ${room.durationSeconds % 60}s` : '—']) });
+  useEffect(() => { setPage(1); }, [search, teacherFilter, studentFilter, dateFrom, dateTo]);
 
   return (
     <div className="p-6 space-y-6">
@@ -40,15 +51,13 @@ export function MeetingHistory() {
       </div>
 
       {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by teacher, student or room token…"
-          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      <div className="flex flex-wrap gap-2 items-center">
+        <TableSearch value={search} onChange={setSearch} placeholder="Search teacher, student or room..." />
+        <TableFilter label="Teachers" value={teacherFilter} options={rooms.map((room) => room.teacherName)} onChange={setTeacherFilter} />
+        <TableFilter label="Students" value={studentFilter} options={rooms.map((room) => room.studentName || '')} onChange={setStudentFilter} />
+        <input aria-label="Date from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+        <input aria-label="Date to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+        <PrintButton onClick={printMeetings} />
       </div>
 
       {/* Table */}
@@ -78,7 +87,7 @@ export function MeetingHistory() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((room) => {
+                paginated.map((room) => {
                   const durationLabel = room.durationSeconds != null
                     ? `${Math.floor(room.durationSeconds / 60)}m ${room.durationSeconds % 60}s`
                     : "—";
@@ -101,6 +110,7 @@ export function MeetingHistory() {
             </tbody>
           </table>
         </div>
+        <TablePagination page={page} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
       </div>
     </div>
   );
