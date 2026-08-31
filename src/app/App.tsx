@@ -36,6 +36,7 @@ import { Meetings } from '@/app/components/Meetings';
 import { AuditLogs } from '@/app/components/AuditLogs';
 import { MeetingHistory } from '@/app/components/MeetingHistory';
 import { Analytics } from '@/app/components/Analytics';
+import { TeacherDashboard } from '@/app/components/TeacherDashboard';
 import { apiClient } from '@/app/services/apiClient';
 import {
   AnnouncementItem,
@@ -98,6 +99,7 @@ interface AuthenticatedShellProps {
       password?: string;
     },
   ) => Promise<void>;
+  onChangeUserStatus: (id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => Promise<void>;
   onDeleteUser: (id: string) => Promise<void>;
   onCreateSchedule: (payload: {
     title: string;
@@ -201,6 +203,7 @@ function AuthenticatedShell({
   onLogout,
   onAddUser,
   onEditUser,
+  onChangeUserStatus,
   onDeleteUser,
   onCreateSchedule,
   onRespondSchedule,
@@ -389,88 +392,7 @@ function AuthenticatedShell({
                     );
                   })()}
                   {userRole === 'admin' && <Analytics onNavigateView={onNavigateView} submissions={data.submissions} assignments={data.assignments} users={data.users} schedules={data.schedules} />}
-                  {/* Teacher Dashboard */}
-                  {userRole === 'teacher' && (() => {
-                    const mySchedules = data.schedules.filter((s) => s.teacherId === session.user.id);
-                    const acceptedSessions = mySchedules.filter((s) => s.status === 'accepted').length;
-                    const pendingRequests = mySchedules.filter((s) => s.status === 'pending').length;
-                    const myAssignments = data.assignments.filter((a) => a.teacherId === session.user.id);
-                    const mySubs = data.submissions.filter((s) =>
-                      myAssignments.some((a) => a.id === s.assignmentId),
-                    );
-                    const gradedSubs = mySubs.filter((s) => s.grade).length;
-                    const ungradedSubs = mySubs.filter((s) => !s.grade).length;
-
-                    const submissionStatusData = [
-                      { name: 'Graded', value: gradedSubs },
-                      { name: 'Needs Grading', value: ungradedSubs },
-                    ];
-                    const scheduleByStatus = [
-                      { name: 'Accepted', value: acceptedSessions },
-                      { name: 'Pending', value: pendingRequests },
-                      { name: 'Declined', value: mySchedules.filter((s) => s.status === 'declined').length },
-                    ];
-
-                    return (
-                      <>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                          {[
-                            { label: 'Accepted Sessions', value: acceptedSessions, color: 'text-emerald-600', bg: 'bg-emerald-50' },
-                            { label: 'Pending Requests', value: pendingRequests, color: 'text-amber-600', bg: 'bg-amber-50' },
-                            { label: 'My Assignments', value: myAssignments.length, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                            { label: 'Needs Grading', value: ungradedSubs, color: 'text-rose-600', bg: 'bg-rose-50' },
-                          ].map((stat) => (
-                            <div key={stat.label} className={`${stat.bg} rounded-2xl p-5 border border-white shadow-sm`}>
-                              <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">{stat.label}</p>
-                              <p className={`text-3xl font-extrabold mt-2 ${stat.color}`}>{stat.value}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                            <h3 className="text-sm font-semibold text-gray-700 mb-4">Submission Status</h3>
-                            <ResponsiveContainer width="100%" height={200}>
-                              <PieChart>
-                                <Pie data={submissionStatusData} dataKey="value" cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={4}>
-                                  <Cell fill="#10b981" />
-                                  <Cell fill="#f59e0b" />
-                                </Pie>
-                                <Tooltip />
-                                <Legend />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                            <h3 className="text-sm font-semibold text-gray-700 mb-4">My Schedule Status</h3>
-                            <ResponsiveContainer width="100%" height={200}>
-                              <BarChart data={scheduleByStatus}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11 }} />
-                                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                                <Bar dataKey="value" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={32} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
-
-                  {/* Embed Performance into teacher dashboard (retain graphs, hide its header) */}
-                  {userRole === 'teacher' && (
-                    <div className="mt-6">
-                      <Performance
-                        submissions={data.submissions}
-                        assignments={data.assignments}
-                        users={data.users}
-                        schedules={data.schedules}
-                        role={userRole}
-                        userId={session.user.id}
-                        showHeader={false}
-                      />
-                    </div>
-                  )}
+                  {userRole === 'teacher' && <TeacherDashboard teacher={session.user} users={data.users} assignments={data.assignments} submissions={data.submissions} schedules={data.schedules} announcements={data.announcements} />}
 
                   {/* Student Dashboard */}
                   {userRole === 'student' && (() => {
@@ -587,7 +509,7 @@ function AuthenticatedShell({
 
               {currentView === 'notifications' && <Notifications onNavigate={onNavigateView} />}
 
-              {currentView === 'enrollments' && <EnrollmentRecords role={userRole} onAddUser={onAddUser} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUploadProfileImage={onUploadProfileImage} />}
+              {currentView === 'enrollments' && <EnrollmentRecords role={userRole} onAddUser={onAddUser} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUploadProfileImage={onUploadProfileImage} onChangeUserStatus={onChangeUserStatus} />}
 
               {currentView === 'student-records' && (userRole === 'admin' || userRole === 'teacher') && <StudentRecords role={userRole} />}
 
@@ -824,6 +746,11 @@ export default function App() {
       ...prev,
       users: prev.users.map((user) => (user.id === id ? updated : user)),
     }));
+  };
+
+  const changeUserStatus = async (id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => {
+    const updated = await apiClient.changeUserStatus(id, input);
+    setData((prev) => ({ ...prev, users: prev.users.map((user) => (user.id === id ? updated : user)) }));
   };
 
   const deleteUser = async (id: string) => {
@@ -1102,6 +1029,7 @@ export default function App() {
                 onLogout={handleLogout}
                 onAddUser={addUser}
                 onEditUser={editUser}
+                onChangeUserStatus={changeUserStatus}
                 onDeleteUser={deleteUser}
                 onCreateSchedule={createSchedule}
                 onRespondSchedule={respondSchedule}
