@@ -277,7 +277,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row gap-3 md:items-center">
           <TableSearch value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder="Search name or email..." />
-          <TableFilter label="Roles" value={roleFilter} options={users.map((user) => user.role)} onChange={(value) => setRoleFilter(value)} />
+          <TableFilter label="Roles" value={roleFilter} options={users.filter((user) => user.role !== 'admin').map((user) => user.role)} onChange={(value) => setRoleFilter(value)} />
           <TableFilter label="Statuses" value={statusFilter} options={users.map((user) => user.status)} onChange={(value) => setStatusFilter(value)} />
           <input aria-label="Created from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
           <input aria-label="Created to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
@@ -355,9 +355,9 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                   <button
                     onClick={() => handleDelete(user.id)}
                     className="text-gray-400 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full"
-                    title="Archive user"
+                    title="Archive user (soft delete)"
                   >
-                    <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4" />
                   </button>
                 </td>
               </tr>
