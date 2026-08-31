@@ -3386,6 +3386,7 @@ const auditLogsQuerySchema = z.object({
   actorId: z.string().optional(),
   action: z.string().optional(),
   entityType: z.string().optional(),
+  search: z.string().optional(),
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -3411,6 +3412,16 @@ const adminAnalyticsQuerySchema = z.object({
   dateFrom: z.string().date().optional(),
   dateTo: z.string().date().optional(),
   status: z.string().optional(),
+});
+
+app.post("/api/admin/audit-logs/print", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const actorId = req.auth?.sub;
+    if (!actorId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const actor = await service.findUserWithPasswordById(actorId);
+    service.createAuditLog({ actorId, actorName: actor?.full_name || req.auth?.email || "Administrator", actorRole: req.auth?.role || "admin", action: "PRINT_AUDIT_LOGS", entityType: "audit_logs", payload: req.body?.filters || null, ipAddress: req.ip });
+    res.status(204).end();
+  } catch (error) { next(error); }
 });
 
 function materiallyDifferent(previous: unknown, current: unknown): boolean {
