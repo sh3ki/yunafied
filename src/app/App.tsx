@@ -170,7 +170,7 @@ interface AuthenticatedShellProps {
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'grades', 'analytics', 'audit-logs', 'meeting-history', 'profile'],
+  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'grades', 'audit-logs', 'meeting-history', 'profile'],
   teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'gamified-learning', 'video-summarizer', 'profile'],
   student: [
     'dashboard',
@@ -307,7 +307,7 @@ function AuthenticatedShell({
                   <p className="text-gray-500 text-sm mb-8 capitalize">{userRole} Dashboard</p>
 
                   {/* Admin Dashboard */}
-                  {userRole === 'admin' && (() => {
+                  {userRole === 'admin' && false && (() => {
                     const today = new Date().toISOString().slice(0, 10);
                     const totalStudents = data.users.filter((u) => u.role === 'student').length;
                     const activeStudents = data.users.filter((u) => u.role === 'student' && u.status === 'active').length;
@@ -387,6 +387,7 @@ function AuthenticatedShell({
                       </>
                     );
                   })()}
+                  {userRole === 'admin' && <Analytics onNavigateView={onNavigateView} submissions={data.submissions} assignments={data.assignments} users={data.users} schedules={data.schedules} />}
                   {/* Teacher Dashboard */}
                   {userRole === 'teacher' && (() => {
                     const mySchedules = data.schedules.filter((s) => s.teacherId === session.user.id);
@@ -624,7 +625,7 @@ function AuthenticatedShell({
                 />
               )}
 
-              {currentView === 'performance' && (userRole === 'admin' || userRole === 'teacher') && (
+              {currentView === 'performance' && userRole === 'teacher' && (
                 <Performance
                   submissions={data.submissions}
                   assignments={data.assignments}
@@ -662,7 +663,6 @@ function AuthenticatedShell({
                 />
               )}
 
-              {currentView === 'analytics' && userRole === 'admin' && <Analytics />}
 
               {currentView === 'audit-logs' && userRole === 'admin' && <AuditLogs />}
 
