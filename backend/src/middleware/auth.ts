@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { NextFunction, Request, Response } from "express";
 import { UserRole } from "../types/models.js";
+import { pool } from "../lib/db.js";
 
 const jwtSecret = process.env.JWT_SECRET || "yunafied-dev-secret";
 
@@ -31,10 +32,22 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   try {
     const payload = jwt.verify(token, jwtSecret) as JwtPayload;
     req.auth = payload;
+    attachMutationAudit(req, res);
     next();
   } catch (_error) {
     res.status(401).json({ message: "Invalid or expired token" });
   }
+}
+
+function attachMutationAudit(req: AuthenticatedRequest, res: Response): void {
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method) || req.path === "/api/admin/audit-logs/print") return;
+  res.on("finish", () => {
+    if (res.statusCode < 400 && req.auth) {
+      const action = `${req.method}_${req.path.replace(/^\/api\//, "").replace(/[/:]+/g, "_").replace(/_+$/, "").toUpperCase()}`.slice(0, 120);
+      const entityType = req.path.split("/").filter(Boolean)[1] || "system";
+      void pool.query(`INSERT INTO audit_logs (actor_id, actor_name, actor_role, action, entity_type, entity_id, ip_address) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [req.auth.sub, req.auth.email, req.auth.role, action, entityType, req.params.id || null, req.ip]).catch((error) => console.error("[audit_log] request insert failed:", error));
+    }
+  });
 }
 
 export function requireRole(...roles: UserRole[]) {
