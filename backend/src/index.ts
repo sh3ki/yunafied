@@ -1775,7 +1775,8 @@ const createStudentScheduleRequestSchema = z.object({
 
 const createManagedScheduleSchema = z.object({
   teacherId: z.string().uuid().optional(),
-  studentId: nullableUuidSchema,
+  studentId: z.string().uuid(),
+  enrollmentId: z.string().uuid(),
   title: z.string().min(2),
   description: z.string().min(1).max(2000).default(""),
   date: scheduleDateSchema,
@@ -1891,13 +1892,7 @@ app.post("/api/schedules", requireAuth, async (req: AuthenticatedRequest, res, n
     }
 
     if (requester.role === "student") {
-      const payload = createStudentScheduleRequestSchema.parse(req.body);
-      const schedule = await service.createScheduleRequest({
-        ...payload,
-        studentId: requester.id,
-      });
-      res.status(201).json(schedule);
-      clearBootstrapCache();
+      res.status(403).json({ message: "Students cannot request schedules." });
       return;
     }
 
@@ -1917,7 +1912,8 @@ app.post("/api/schedules", requireAuth, async (req: AuthenticatedRequest, res, n
         startTime: payload.startTime,
         endTime: payload.endTime,
         teacherId,
-        studentId: payload.studentId || null,
+        studentId: payload.studentId,
+        enrollmentId: payload.enrollmentId,
       });
       res.status(201).json(schedule);
       clearBootstrapCache();
