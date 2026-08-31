@@ -989,7 +989,7 @@ class YunafiedApiClient {
     return this.request<CallHistoryItem[]>("/api/admin/meeting-history");
   }
 
-  async getAdminAnalytics(filters?: { dateFrom?: string; dateTo?: string; academicYear?: string; classFilter?: string; status?: string }): Promise<AdminAnalyticsItem> {
+  async getAdminAnalytics(filters?: { dateFrom?: string; dateTo?: string; status?: string }): Promise<AdminAnalyticsItem> {
     const query = new URLSearchParams();
     Object.entries(filters || {}).forEach(([key, value]) => value && query.set(key, value));
     return this.request<AdminAnalyticsItem>(`/api/admin/analytics${query.toString() ? `?${query}` : ''}`);
