@@ -3676,6 +3676,48 @@ export class YunafiedService {
     };
   }
 
+  async getFilteredAdminAnalytics(filters: { dateFrom?: string; dateTo?: string; academicYear?: string; classFilter?: string; status?: string }): Promise<import("../types/models.js").AdminAnalyticsItem> {
+    const base = await this.getAdminAnalytics();
+    if (!Object.values(filters).some(Boolean)) return base;
+    const params = [filters.dateFrom || null, filters.dateTo || null, filters.academicYear || null, filters.classFilter || null, filters.status || null];
+    const userDate = `($1::date IS NULL OR u.created_at >= $1::date) AND ($2::date IS NULL OR u.created_at < ($2::date + INTERVAL '1 day')) AND ($3::int IS NULL OR EXTRACT(YEAR FROM u.created_at) = $3::int)`;
+    const enrollmentFilter = `($1::date IS NULL OR er.created_at >= $1::date) AND ($2::date IS NULL OR er.created_at < ($2::date + INTERVAL '1 day')) AND ($3::int IS NULL OR EXTRACT(YEAR FROM er.created_at) = $3::int) AND ($4::text IS NULL OR er.grade_level = $4::text) AND ($5::text IS NULL OR er.status::text = $5::text)`;
+    const scheduleFilter = `($1::date IS NULL OR s.scheduled_date >= $1::date) AND ($2::date IS NULL OR s.scheduled_date <= $2::date) AND ($3::int IS NULL OR EXTRACT(YEAR FROM s.scheduled_date) = $3::int) AND ($5::text IS NULL OR s.status = $5::text)`;
+    const submissionFilter = `($1::date IS NULL OR sub.submitted_at >= $1::date) AND ($2::date IS NULL OR sub.submitted_at < ($2::date + INTERVAL '1 day')) AND ($3::int IS NULL OR EXTRACT(YEAR FROM sub.submitted_at) = $3::int) AND ($4::text IS NULL OR er.grade_level = $4::text) AND ($5::text IS NULL OR er.status::text = $5::text)`;
+    const [students, teachers, sessions, submissions, enrollments, grades, trends] = await Promise.all([
+      pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM users u WHERE u.role = 'student' AND ${userDate} AND ($4::text IS NULL OR EXISTS (SELECT 1 FROM enrollment_records er WHERE er.student_id = u.id AND er.grade_level = $4::text AND ($5::text IS NULL OR er.status::text = $5::text)))`, params),
+      pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM users u WHERE u.role = 'teacher' AND ${userDate}`, params),
+      pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM schedules s WHERE ${scheduleFilter}`, params),
+      pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM submissions sub LEFT JOIN enrollment_records er ON er.student_id = sub.student_id WHERE ${submissionFilter}`, params),
+      pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM enrollment_records er WHERE ${enrollmentFilter}`, params),
+      pool.query<{ grade: string; count: string }>(`SELECT sub.grade_value AS grade, COUNT(*)::text AS count FROM submissions sub LEFT JOIN enrollment_records er ON er.student_id = sub.student_id WHERE sub.grade_value IS NOT NULL AND ${submissionFilter} GROUP BY sub.grade_value ORDER BY sub.grade_value`, params),
+      pool.query<{ month: string; count: string }>(`SELECT TO_CHAR(date_trunc('month', er.created_at), 'Mon YYYY') AS month, COUNT(*)::text AS count FROM enrollment_records er WHERE ${enrollmentFilter} GROUP BY 1 ORDER BY MIN(er.created_at)`, params),
+    ]);
+    return { ...base, totalStudents: Number(students.rows[0]?.count || 0), totalTeachers: Number(teachers.rows[0]?.count || 0), totalSessions: Number(sessions.rows[0]?.count || 0), totalSubmissions: Number(submissions.rows[0]?.count || 0), totalEnrollments: Number(enrollments.rows[0]?.count || 0), gradeDistribution: grades.rows.map(r => ({ grade: r.grade, count: Number(r.count) })), monthlySessionCounts: trends.rows.map(r => ({ month: r.month, count: Number(r.count) })) };
+  }
+
+  async getAdminDashboardInterpretation(fingerprint: string): Promise<{ interpretation: string; createdAt: string } | null> {
+    const result = await pool.query<{ interpretation: string; createdAt: string }>(
+      `SELECT interpretation, created_at AS "createdAt"
+         FROM admin_dashboard_interpretations
+        WHERE fingerprint = $1`,
+      [fingerprint],
+    );
+    return result.rows[0] || null;
+  }
+
+  async saveAdminDashboardInterpretation(input: { fingerprint: string; filters: unknown; snapshot: unknown; interpretation: string }): Promise<{ interpretation: string; createdAt: string }> {
+    const result = await pool.query<{ interpretation: string; createdAt: string }>(
+      `INSERT INTO admin_dashboard_interpretations (fingerprint, filters, snapshot, interpretation)
+       VALUES ($1, $2::jsonb, $3::jsonb, $4)
+       ON CONFLICT (fingerprint) DO UPDATE
+         SET interpretation = EXCLUDED.interpretation, updated_at = NOW()
+       RETURNING interpretation, created_at AS "createdAt"`,
+      [input.fingerprint, JSON.stringify(input.filters), JSON.stringify(input.snapshot), input.interpretation],
+    );
+    return result.rows[0];
+  }
+
   async importUsersFromCsv(
     rows: { firstName: string; lastName: string; email: string; role: string; password: string }[],
     createdById: string,
