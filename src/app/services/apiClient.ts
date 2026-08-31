@@ -762,6 +762,11 @@ class YunafiedApiClient {
       gradeLevel?: string | null;
       status?: EnrollmentStatus;
       note?: string | null;
+      dropReason?: string | null;
+      dropDate?: string | null;
+      actionTaken?: string | null;
+      pullOutReason?: string | null;
+      statusNotes?: string | null;
     },
   ): Promise<EnrollmentRecordItem> {
     return this.request<EnrollmentRecordItem>(`/api/enrollments/${id}`, {
@@ -998,6 +1003,10 @@ class YunafiedApiClient {
     const query = new URLSearchParams();
     Object.entries(filters || {}).forEach(([key, value]) => value && query.set(key, value));
     return this.request<AdminAnalyticsItem>(`/api/admin/analytics${query.toString() ? `?${query}` : ''}`);
+  }
+
+  async changeUserStatus(id: string, payload: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }): Promise<AuthUser> {
+    return this.request<AuthUser>(`/api/users/${id}/status`, { method: "PATCH", body: JSON.stringify(payload) });
   }
 
   async importUsersFromCsv(file: File): Promise<{ success: number; failed: number; errors: { row: number; reason: string }[] }> {
