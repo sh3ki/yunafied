@@ -1,7 +1,7 @@
 -- Status details and audit history for enrollment and account status changes.
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_status_check;
 ALTER TABLE users ADD CONSTRAINT users_status_check
-  CHECK (status IN ('active', 'inactive', 'pending', 'archived', 'dropped'));
+  CHECK (status IN ('active', 'inactive', 'pending', 'archived', 'completed', 'dropped'));
 
 ALTER TABLE enrollment_records
   ADD COLUMN IF NOT EXISTS drop_reason TEXT,
