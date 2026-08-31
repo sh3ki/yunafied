@@ -1346,7 +1346,7 @@ export class YunafiedService {
         [studentIds],
       ),
       pool.query(
-        `SELECT a.id, a.quiz_id AS "quizId", q.title AS "quizTitle", c.name AS "categoryName",
+        `SELECT a.id, a.quiz_id AS "quizId", a.student_id AS "studentId", q.title AS "quizTitle", c.name AS "categoryName",
                 a.total_questions AS "totalQuestions", a.correct_answers AS "correctAnswers",
                 a.total_score AS "totalScore", a.completed_at AS "completedAt"
            FROM gamified_attempts a
@@ -1357,15 +1357,25 @@ export class YunafiedService {
         [studentIds],
       ),
       pool.query(
-        `SELECT ch.id, ch.room_token AS "roomToken", ch.teacher_id AS "teacherId",
-                t.full_name AS "teacherName", ch.student_id AS "studentId", st.full_name AS "studentName",
-                COALESCE(ch.started_at, ch.created_at) AS "startedAt", ch.ended_at AS "endedAt",
-                ch.duration_seconds AS "durationSeconds", ch.ended_by AS "endedBy"
-           FROM call_history ch
-           JOIN users t ON t.id = ch.teacher_id
-      LEFT JOIN users st ON st.id = ch.student_id
-          WHERE ch.student_id = ANY($1::uuid[])
-          ORDER BY COALESCE(ch.started_at, ch.created_at) DESC`,
+        `SELECT * FROM (
+           SELECT ch.id, ch.room_token::text AS "roomToken", ch.teacher_id AS "teacherId",
+                  t.full_name AS "teacherName", ch.student_id AS "studentId", st.full_name AS "studentName",
+                  COALESCE(ch.started_at, ch.created_at) AS "startedAt", ch.ended_at AS "endedAt",
+                  ch.duration_seconds AS "durationSeconds", ch.ended_by AS "endedBy"
+             FROM call_history ch
+             JOIN users t ON t.id = ch.teacher_id
+        LEFT JOIN users st ON st.id = ch.student_id
+            WHERE ch.student_id = ANY($1::uuid[])
+           UNION ALL
+           SELECT mr.id, mr.room_token::text AS "roomToken", mr.teacher_id AS "teacherId",
+                  mr.teacher_name AS "teacherName", mr.student_id AS "studentId", mr.student_name AS "studentName",
+                  mr.created_at AS "startedAt",
+                  CASE WHEN mr.status = 'ended' THEN mr.updated_at ELSE NULL END AS "endedAt",
+                  NULL::int AS "durationSeconds", mr.status AS "endedBy"
+             FROM meeting_rooms mr
+            WHERE mr.student_id = ANY($1::uuid[])
+         ) history
+         ORDER BY "startedAt" DESC`,
         [studentIds],
       ),
     ]);
