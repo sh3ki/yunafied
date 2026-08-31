@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ImagePlus, Mail, Pencil, Search, Shield, Trash2, Upload, UserPlus } from 'lucide-react';
+import { ArrowRightLeft, ImagePlus, Mail, Pencil, Search, Shield, Trash2, Upload, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthUser, UserRole, UserStatus } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
@@ -39,6 +39,7 @@ interface UsersProps {
   onEditUser: (id: string, input: UpdateUserInput) => Promise<void>;
   onDeleteUser: (id: string) => Promise<void>;
   onUploadProfileImage: (file: File) => Promise<ProfileUploadResult>;
+  onChangeUserStatus?: (id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => Promise<void>;
 }
 
 const PAGE_SIZE = 8;
@@ -47,12 +48,15 @@ function getInitials(user: Pick<AuthUser, 'firstName' | 'lastName'>): string {
   return `${user.firstName?.trim().charAt(0) || ''}${user.lastName?.trim().charAt(0) || ''}`.toUpperCase() || '?';
 }
 
-export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUploadProfileImage }: UsersProps) {
+export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUploadProfileImage, onChangeUserStatus }: UsersProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AuthUser | null>(null);
+  const [statusUser, setStatusUser] = useState<AuthUser | null>(null);
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusForm, setStatusForm] = useState({ status: 'active' as UserStatus, reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' });
 
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
@@ -246,9 +250,14 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   };
 
   const getStatusClass = (status: UserStatus) =>
-    status === 'active'
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-      : 'bg-amber-50 text-amber-700 border-amber-100';
+    status === 'active' ? 'bg-blue-50 text-blue-700 border-blue-200' : status === 'dropped' ? 'bg-red-50 text-red-700 border-red-200' : status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-100';
+
+  const openStatus = (user: AuthUser) => { setStatusUser(user); setStatusForm({ status: user.status, reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' }); };
+  const saveStatus = async () => {
+    if (!statusUser || !onChangeUserStatus) return;
+    if (statusForm.status === 'dropped' && !statusForm.reason.trim()) { toast.error('A reason is required when marking a student as dropped.'); return; }
+    try { setStatusSaving(true); await onChangeUserStatus(statusUser.id, statusForm); toast.success('User status updated.'); setStatusUser(null); } catch (error: any) { toast.error(error.message || 'Failed to update user status.'); } finally { setStatusSaving(false); }
+  };
 
   return (
     <div className="p-6">
@@ -346,6 +355,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
+                  {onChangeUserStatus && user.role === 'student' && <button onClick={() => openStatus(user)} className="text-gray-400 hover:text-indigo-600 transition p-2 hover:bg-indigo-50 rounded-full" title="Change student status"><ArrowRightLeft className="h-4 w-4" /></button>}
                   {user.status === 'pending' && (
                     <button
                       onClick={async () => { try { await apiClient.resendVerification(user.id); toast.success('Verification link sent.'); } catch (error: any) { toast.error(error.message || 'Failed to resend verification link.'); } }}
@@ -493,6 +503,8 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                     <option value="inactive">Inactive</option>
                     <option value="pending">Pending verification</option>
                     <option value="archived">Archived</option>
+                    <option value="completed">Completed</option>
+                    <option value="dropped">Dropped</option>
                   </select>
                 </div>
               </div>
@@ -515,11 +527,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
             <h3 className="text-xl font-bold mb-4">Edit User</h3>
             <div className="space-y-4">
               <div className="flex items-center gap-4">
-                <img
-                  src={editUser.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((editUser.firstName || '') + ' ' + (editUser.lastName || 'User'))}&background=e0e7ff&color=3730a3`}
-                  alt="Edit user profile"
-                  className="h-14 w-14 rounded-full object-cover border border-gray-200"
-                />
+                {editUser.profileImageUrl ? <img src={editUser.profileImageUrl} alt="Edit user profile" className="h-14 w-14 rounded-full object-cover border border-gray-200" /> : <span className="h-14 w-14 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 flex items-center justify-center text-lg font-bold">{`${editUser.firstName.trim().charAt(0)}${editUser.lastName.trim().charAt(0)}`.toUpperCase() || '?'}</span>}
                 <label className="cursor-pointer inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm hover:bg-gray-50">
                   <ImagePlus className="h-4 w-4" />
                   {uploadingImage ? 'Uploading...' : 'Change Image'}
@@ -618,6 +626,8 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
         </div>
       )}
 
+      {statusUser && <StatusChangeModal user={statusUser} form={statusForm} setForm={setStatusForm} saving={statusSaving} onCancel={() => setStatusUser(null)} onSave={saveStatus} />}
+
       {/* CSV Import Result Modal */}
       {csvResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -649,3 +659,10 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
     </div>
   );
 }
+
+function StatusChangeModal({ user, form, setForm, saving, onCancel, onSave }: { user: AuthUser; form: { status: UserStatus; reason: string; dropDate: string; actionTaken: string; pullOutReason: string; notes: string }; setForm: React.Dispatch<React.SetStateAction<typeof form>>; saving: boolean; onCancel: () => void; onSave: () => void }) {
+  const drop = form.status === 'dropped';
+  return <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-5"><div className="flex justify-between items-start gap-4 mb-4"><div><h2 className="text-lg font-bold text-gray-800">Change Status: {user.fullName}</h2><p className="text-sm text-gray-500 mt-1">This changes the student’s overall account status.</p></div><button onClick={onCancel} className="text-gray-400 hover:text-gray-700"><X /></button></div><label className="block text-sm font-medium text-gray-700">New status<select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as UserStatus }))} className="mt-1 w-full border rounded-lg px-3 py-2"><option value="active">Active</option><option value="completed">Completed</option><option value="inactive">Inactive</option><option value="pending">Pending verification</option><option value="archived">Archived</option><option value="dropped">Dropped</option></select></label>{drop && <div className="mt-4 space-y-3"><StatusField label="Reason for dropping" required value={form.reason} onChange={(value) => setForm((p) => ({ ...p, reason: value }))} /><label className="block text-sm font-medium text-gray-700">Date of drop *<input type="date" value={form.dropDate} onChange={(e) => setForm((p) => ({ ...p, dropDate: e.target.value }))} className="mt-1 w-full border rounded-lg px-3 py-2" /></label><StatusField label="Action taken" value={form.actionTaken} onChange={(value) => setForm((p) => ({ ...p, actionTaken: value }))} /><StatusField label="Pull-out reason" value={form.pullOutReason} onChange={(value) => setForm((p) => ({ ...p, pullOutReason: value }))} /><StatusField label="Other relevant notes" value={form.notes} onChange={(value) => setForm((p) => ({ ...p, notes: value }))} /></div>}<div className="flex justify-end gap-2 mt-5"><button onClick={onCancel} className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100">Cancel</button><button disabled={saving} onClick={onSave} className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-60">{saving ? 'Saving...' : 'Save Status'}</button></div></div></div>;
+}
+
+function StatusField({ label, value, onChange, required = false }: { label: string; value: string; onChange: (value: string) => void; required?: boolean }) { return <label className="block text-sm font-medium text-gray-700">{label}{required && <span className="text-red-500"> *</span>}<textarea value={value} onChange={(e) => onChange(e.target.value)} rows={2} className="mt-1 w-full border rounded-lg px-3 py-2 resize-none" /></label>; }
