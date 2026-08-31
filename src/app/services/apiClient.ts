@@ -37,6 +37,7 @@ import {
   StudentQuestItem,
   StoreItem,
   StudentStorePurchaseItem,
+  StudentRecordItem,
 } from "@/app/types/models";
 
 interface LoginResponse {
@@ -276,6 +277,10 @@ class YunafiedApiClient {
 
   async listUsers(): Promise<AuthUser[]> {
     return this.request<AuthUser[]>("/api/users");
+  }
+
+  async listStudentRecords(): Promise<StudentRecordItem[]> {
+    return this.request<StudentRecordItem[]>("/api/student-records");
   }
 
   async createUser(payload: CreateUserPayload): Promise<AuthUser> {
