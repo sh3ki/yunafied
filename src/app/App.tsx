@@ -9,12 +9,12 @@ import {
 } from 'recharts';
 import '@/styles/fonts.css';
 import { Login } from '@/app/components/Login';
+import { AccountSetup } from '@/app/components/AccountSetup';
 import { LandingPage } from '@/app/components/LandingPage';
 import { Sidebar } from '@/app/components/Sidebar';
 import { BottomNav } from '@/app/components/BottomNav';
 import { Schedule } from '@/app/components/Schedule';
 import { Assignments } from '@/app/components/Assignments';
-import { UsersView } from '@/app/components/Users';
 import { Communication } from '@/app/components/Communication';
 import { Chats } from '@/app/components/Chats';
 import { GamifiedLearning } from '@/app/components/GamifiedLearning';
@@ -170,7 +170,7 @@ interface AuthenticatedShellProps {
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'grades', 'users', 'analytics', 'audit-logs', 'meeting-history', 'profile'],
+  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'materials', 'gamified-learning', 'performance', 'grades', 'analytics', 'audit-logs', 'meeting-history', 'profile'],
   teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'gamified-learning', 'video-summarizer', 'profile'],
   student: [
     'dashboard',
@@ -585,7 +585,7 @@ function AuthenticatedShell({
 
               {currentView === 'notifications' && <Notifications onNavigate={onNavigateView} />}
 
-              {currentView === 'enrollments' && <EnrollmentRecords role={userRole} />}
+              {currentView === 'enrollments' && <EnrollmentRecords role={userRole} onAddUser={onAddUser} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUploadProfileImage={onUploadProfileImage} />}
 
               {currentView === 'materials' && <LearningMaterials role={userRole} backendBaseUrl={backendBaseUrl} />}
 
@@ -659,16 +659,6 @@ function AuthenticatedShell({
                   role={userRole}
                   userId={session.user.id}
                   onGradeSubmission={onGradeSubmission}
-                />
-              )}
-
-              {currentView === 'users' && userRole === 'admin' && (
-                <UsersView
-                  users={data.users}
-                  onAddUser={onAddUser}
-                  onEditUser={onEditUser}
-                  onDeleteUser={onDeleteUser}
-                  onUploadProfileImage={onUploadProfileImage}
                 />
               )}
 
@@ -1084,6 +1074,7 @@ export default function App() {
             )
           }
         />
+        <Route path="/verify-account" element={<AccountSetup />} />
         <Route path="/app" element={<Navigate to="/app/dashboard" replace />} />
         <Route
           path="/app/video-call/:roomToken"
