@@ -29,6 +29,7 @@ import { GradesFeedback } from '@/app/components/GradesFeedback';
 import { Notifications } from '@/app/components/Notifications';
 import { EnrollmentRecords } from '@/app/components/EnrollmentRecords';
 import { StudentRecords } from '@/app/components/StudentRecords';
+import { TeacherRecords } from '@/app/components/TeacherRecords';
 import { LearningMaterials } from '@/app/components/LearningMaterials';
 import { VideoCall } from '@/app/components/VideoCall';
 import { IncomingCall } from '@/app/components/IncomingCall';
@@ -173,7 +174,7 @@ interface AuthenticatedShellProps {
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'student-records', 'materials', 'gamified-learning', 'grades', 'audit-logs', 'meeting-history', 'profile'],
+  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'teacher-records', 'student-records', 'materials', 'gamified-learning', 'grades', 'audit-logs', 'meeting-history', 'profile'],
   teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'student-records', 'gamified-learning', 'video-summarizer', 'profile'],
   student: [
     'dashboard',
@@ -510,6 +511,8 @@ function AuthenticatedShell({
               {currentView === 'notifications' && <Notifications onNavigate={onNavigateView} />}
 
               {currentView === 'enrollments' && <EnrollmentRecords role={userRole} onAddUser={onAddUser} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUploadProfileImage={onUploadProfileImage} onChangeUserStatus={onChangeUserStatus} />}
+
+              {currentView === 'teacher-records' && userRole === 'admin' && <TeacherRecords />}
 
               {currentView === 'student-records' && (userRole === 'admin' || userRole === 'teacher') && <StudentRecords role={userRole} />}
 
