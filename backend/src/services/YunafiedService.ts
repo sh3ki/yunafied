@@ -49,6 +49,7 @@ interface DbUserRow {
   otp_expires_at: string | null;
   verification_token_hash: string | null;
   verification_token_expires_at: string | null;
+  specializations?: string[];
 }
 
 interface DbTranslationRow {
@@ -275,12 +276,13 @@ export class YunafiedService {
       profileImageUrl: row.profile_image_url,
       profileImagePublicId: row.profile_image_public_id,
       createdAt: row.created_at,
+      specializations: row.specializations || [],
     };
   }
 
   async listUsers(): Promise<AuthUser[]> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users ORDER BY created_at DESC",
+      "SELECT u.id, u.email, u.first_name, u.middle_name, u.last_name, u.full_name, u.role, u.status, u.profile_image_url, u.profile_image_public_id, u.password_hash, u.created_at, u.is_verified, u.otp_code, u.otp_expires_at, u.verification_token_hash, u.verification_token_expires_at, COALESCE(tr.specializations, '{}') AS specializations FROM users u LEFT JOIN teacher_records tr ON tr.teacher_id = u.id ORDER BY u.created_at DESC",
     );
 
     return result.rows.map((row) => this.toAuthUser(row));
@@ -288,10 +290,10 @@ export class YunafiedService {
 
   async listUsersByRoles(roles: UserRole[]): Promise<AuthUser[]> {
     const result = await pool.query<DbUserRow>(
-      `SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at
-         FROM users
-        WHERE role = ANY($1::user_role[])
-        ORDER BY last_name ASC, first_name ASC`,
+      `SELECT u.id, u.email, u.first_name, u.middle_name, u.last_name, u.full_name, u.role, u.status, u.profile_image_url, u.profile_image_public_id, u.password_hash, u.created_at, u.is_verified, u.otp_code, u.otp_expires_at, u.verification_token_hash, u.verification_token_expires_at, COALESCE(tr.specializations, '{}') AS specializations
+         FROM users u LEFT JOIN teacher_records tr ON tr.teacher_id = u.id
+        WHERE u.role = ANY($1::user_role[])
+        ORDER BY u.last_name ASC, u.first_name ASC`,
       [roles],
     );
 
@@ -330,6 +332,26 @@ export class YunafiedService {
     );
 
     return this.toAuthUser(result.rows[0]);
+  }
+
+  async listTeacherRecords(): Promise<unknown[]> {
+    const result = await pool.query<DbUserRow & Record<string, unknown>>(
+      `SELECT u.id, u.email, u.first_name, u.middle_name, u.last_name, u.full_name, u.role, u.status,
+              u.profile_image_url, u.profile_image_public_id, u.password_hash, u.created_at, u.is_verified,
+              u.otp_code, u.otp_expires_at, u.verification_token_hash, u.verification_token_expires_at,
+              tr.mobile_number AS "mobileNumber", tr.professional_title AS "professionalTitle",
+              tr.employment_status AS "employmentStatus", tr.education, tr.certifications,
+              tr.years_experience AS "yearsExperience", tr.specializations, tr.notes,
+              tr.updated_at AS "updatedAt"
+         FROM users u LEFT JOIN teacher_records tr ON tr.teacher_id = u.id
+        WHERE u.role = 'teacher' ORDER BY u.last_name, u.first_name`,
+    );
+    const availability = await pool.query(`SELECT id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek", start_time AS "startTime", end_time AS "endTime", is_active AS "isActive", created_at AS "createdAt" FROM teacher_availability WHERE is_active = TRUE ORDER BY day_of_week, start_time`);
+    return result.rows.map((row) => ({ teacherId: row.id, teacher: this.toAuthUser(row), mobileNumber: row.mobileNumber || null, professionalTitle: row.professionalTitle || null, employmentStatus: row.employmentStatus || null, education: row.education || null, certifications: row.certifications || null, yearsExperience: row.yearsExperience == null ? null : Number(row.yearsExperience), specializations: Array.isArray(row.specializations) ? row.specializations : [], notes: row.notes || null, availability: availability.rows.filter((item) => item.teacherId === row.id), updatedAt: row.updatedAt || row.created_at }));
+  }
+
+  async upsertTeacherRecord(teacherId: string, input: { mobileNumber?: string | null; professionalTitle?: string | null; employmentStatus?: string | null; education?: string | null; certifications?: string | null; yearsExperience?: number | null; specializations?: string[]; notes?: string | null }): Promise<void> {
+    await pool.query(`INSERT INTO teacher_records (teacher_id, mobile_number, professional_title, employment_status, education, certifications, years_experience, specializations, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (teacher_id) DO UPDATE SET mobile_number=EXCLUDED.mobile_number, professional_title=EXCLUDED.professional_title, employment_status=EXCLUDED.employment_status, education=EXCLUDED.education, certifications=EXCLUDED.certifications, years_experience=EXCLUDED.years_experience, specializations=EXCLUDED.specializations, notes=EXCLUDED.notes, updated_at=NOW()`, [teacherId, input.mobileNumber || null, input.professionalTitle || null, input.employmentStatus || null, input.education || null, input.certifications || null, input.yearsExperience ?? null, input.specializations || [], input.notes || null]);
   }
 
   async createPendingUser(input: {
