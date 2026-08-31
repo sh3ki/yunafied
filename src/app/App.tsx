@@ -110,6 +110,7 @@ interface AuthenticatedShellProps {
     endTime: string;
     teacherId?: string;
     studentId?: string | null;
+    enrollmentId?: string;
     requestNote?: string;
   }) => Promise<void>;
   onRespondSchedule: (
@@ -174,7 +175,7 @@ interface AuthenticatedShellProps {
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'announcements', 'chats', 'notifications', 'enrollments', 'teacher-records', 'student-records', 'materials', 'gamified-learning', 'grades', 'audit-logs', 'meeting-history', 'profile'],
+  admin: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'enrollments', 'teacher-records', 'student-records', 'materials', 'gamified-learning', 'grades', 'audit-logs', 'meeting-history', 'profile'],
   teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'student-records', 'gamified-learning', 'video-summarizer', 'profile'],
   student: [
     'dashboard',
@@ -782,6 +783,7 @@ export default function App() {
     endTime: string;
     teacherId?: string;
     studentId?: string | null;
+    enrollmentId?: string;
     requestNote?: string;
   }) => {
     const created = await apiClient.createSchedule(payload);
