@@ -189,6 +189,15 @@ export interface EnrollmentRecordItem {
   actionTaken?: string | null;
   pullOutReason?: string | null;
   statusNotes?: string | null;
+  classSchedule: EnrollmentClassScheduleItem[];
+}
+
+export interface EnrollmentClassScheduleItem {
+  id?: string;
+  enrollmentId?: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
 }
 
 export interface StatusChangeHistoryItem {
