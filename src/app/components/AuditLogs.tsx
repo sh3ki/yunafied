@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Search, ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
+import { Eye, X } from "lucide-react";
 import { apiClient } from "@/app/services/apiClient";
 import type { AuditLogItem } from "@/app/types/models";
+import { PrintButton, TableFilter, TablePagination, TableSearch, printTableReport, DEFAULT_TABLE_PAGE_SIZE } from "./ui/table-tools";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE;
 
 export function AuditLogs() {
   const [rows, setRows] = useState<AuditLogItem[]>([]);
@@ -17,7 +18,6 @@ export function AuditLogs() {
   const [filterDateFrom, setFilterDateFrom] = useState("");
   const [filterDateTo, setFilterDateTo] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
-  const [appliedSearch, setAppliedSearch] = useState("");
 
   const [selected, setSelected] = useState<AuditLogItem | null>(null);
 
@@ -27,6 +27,7 @@ export function AuditLogs() {
       const result = await apiClient.listAuditLogs({
         action: filterAction || undefined,
         entityType: filterEntityType || undefined,
+        search: filterSearch.trim() || undefined,
         dateFrom: filterDateFrom || undefined,
         dateTo: filterDateTo || undefined,
         page: pg,
@@ -46,20 +47,19 @@ export function AuditLogs() {
   useEffect(() => {
     fetchLogs(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterAction, filterEntityType, filterDateFrom, filterDateTo]);
+  }, [filterAction, filterEntityType, filterDateFrom, filterDateTo, filterSearch]);
 
-  const handleSearch = () => {
-    setAppliedSearch(filterSearch.trim().toLowerCase());
+  const printLogs = async () => {
+    const allRows: AuditLogItem[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+    do {
+      const result = await apiClient.listAuditLogs({ action: filterAction || undefined, entityType: filterEntityType || undefined, search: filterSearch.trim() || undefined, dateFrom: filterDateFrom || undefined, dateTo: filterDateTo || undefined, page: currentPage, pageSize: 50 });
+      allRows.push(...result.rows); totalPages = result.totalPages; currentPage += 1;
+    } while (currentPage <= totalPages);
+    await apiClient.recordAuditLogPrint({ action: filterAction, entityType: filterEntityType, search: filterSearch, dateFrom: filterDateFrom, dateTo: filterDateTo });
+    printTableReport({ title: 'Audit Trail', subtitle: `Filters: ${filterAction || 'All actions'} · ${filterEntityType || 'All entity types'} · ${filterDateFrom || 'Any date'} to ${filterDateTo || 'Any date'} · ${filterSearch || 'No search'}`, columns: ['Actor', 'Role', 'Action', 'Entity Type', 'Entity ID', 'IP Address', 'Date'], rows: allRows.map((log) => [log.actorName, log.actorRole, log.action, log.entityType, log.entityId || '—', log.ipAddress || '—', new Date(log.createdAt).toLocaleString()]) });
   };
-
-  const displayedRows = appliedSearch
-    ? rows.filter(
-        (r) =>
-          r.actorName.toLowerCase().includes(appliedSearch) ||
-          r.action.toLowerCase().includes(appliedSearch) ||
-          r.entityType.toLowerCase().includes(appliedSearch),
-      )
-    : rows;
 
   return (
     <div className="p-6 space-y-6">
@@ -74,23 +74,11 @@ export function AuditLogs() {
       <div className="bg-white border border-gray-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Action</label>
-          <input
-            type="text"
-            value={filterAction}
-            onChange={(e) => { setFilterAction(e.target.value); setPage(1); }}
-            placeholder="e.g. CREATE_USER"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <TableFilter label="Actions" value={filterAction} options={rows.map((row) => row.action)} onChange={(value) => { setFilterAction(value); setPage(1); }} />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Entity Type</label>
-          <input
-            type="text"
-            value={filterEntityType}
-            onChange={(e) => { setFilterEntityType(e.target.value); setPage(1); }}
-            placeholder="e.g. user"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <TableFilter label="Entity types" value={filterEntityType} options={rows.map((row) => row.entityType)} onChange={(value) => { setFilterEntityType(value); setPage(1); }} />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Date From</label>
@@ -114,23 +102,8 @@ export function AuditLogs() {
 
       {/* Search bar */}
       <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            value={filterSearch}
-            onChange={(e) => setFilterSearch(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="Search actor, action, entity..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <button
-          onClick={handleSearch}
-          className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition"
-        >
-          Search
-        </button>
+        <TableSearch value={filterSearch} onChange={setFilterSearch} placeholder="Search actor, action, entity..." />
+        <PrintButton onClick={() => void printLogs()} />
       </div>
 
       {/* Table */}
@@ -153,14 +126,14 @@ export function AuditLogs() {
                     Loading…
                   </td>
                 </tr>
-              ) : displayedRows.length === 0 ? (
+              ) : rows.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-12 text-gray-400">
                     No audit log entries found.
                   </td>
                 </tr>
               ) : (
-                displayedRows.map((log) => (
+                rows.map((log) => (
                   <tr key={log.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{log.actorName}</td>
                     <td className="px-4 py-3">
@@ -202,29 +175,7 @@ export function AuditLogs() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50">
-            <span className="text-sm text-gray-500">
-              Page {page} of {totalPages} — {total} entries
-            </span>
-            <div className="flex gap-1">
-              <button
-                disabled={page <= 1}
-                onClick={() => fetchLogs(page - 1)}
-                className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-40 transition"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => fetchLogs(page + 1)}
-                className="p-1.5 rounded-lg hover:bg-gray-200 disabled:opacity-40 transition"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <TablePagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={(nextPage) => void fetchLogs(nextPage)} />
       </div>
 
       {/* Detail Modal */}
