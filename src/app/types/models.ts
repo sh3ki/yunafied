@@ -420,6 +420,15 @@ export interface AdminAnalyticsItem {
   gradeDistribution: { grade: string; count: number }[];
   monthlySessionCounts: { month: string; count: number }[];
   topStudents: { studentId: string; studentName: string; avgGrade: number; submissionCount: number }[];
+  enrollmentStatus?: { status: string; count: number }[];
+  submissionStatus?: { status: string; count: number }[];
+  enrollmentTrends?: { period: string; count: number }[];
+  teacherActivity?: { teacherId: string; teacherName: string; sessions: number; assignments: number }[];
+  studentProgress?: { studentId: string; studentName: string; firstAverage: number | null; latestAverage: number | null; change: number | null }[];
+  interpretation?: string;
+  interpretationGeneratedAt?: string | null;
+  interpretations?: Record<string, { text: string; generatedAt: string | null }>;
+  filters?: { dateFrom: string | null; dateTo: string | null; academicYear: string | null; classFilter: string | null; status: string | null };
 }
 
 export interface NotificationDbItem {
