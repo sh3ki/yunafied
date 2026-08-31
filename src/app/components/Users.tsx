@@ -3,6 +3,7 @@ import { ArrowRightLeft, ImagePlus, Mail, Pencil, Search, Shield, Trash2, Upload
 import { toast } from 'sonner';
 import { AuthUser, UserRole, UserStatus } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
+import { PrintButton, TableFilter, TablePagination, TableSearch, printTableReport, DEFAULT_TABLE_PAGE_SIZE } from './ui/table-tools';
 
 interface ProfileUploadResult {
   secureUrl: string;
@@ -42,8 +43,6 @@ interface UsersProps {
   onChangeUserStatus?: (id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => Promise<void>;
 }
 
-const PAGE_SIZE = 8;
-
 function getInitials(user: Pick<AuthUser, 'firstName' | 'lastName'>): string {
   return `${user.firstName?.trim().charAt(0) || ''}${user.lastName?.trim().charAt(0) || ''}`.toUpperCase() || '?';
 }
@@ -59,9 +58,12 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   const [statusForm, setStatusForm] = useState({ status: 'active' as UserStatus, reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' });
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | UserStatus>('all');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // CSV import
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -121,24 +123,28 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
         user.fullName.toLowerCase().includes(keyword) ||
         user.email.toLowerCase().includes(keyword);
 
-      const roleMatch = roleFilter === 'all' || user.role === roleFilter;
-      const statusMatch = statusFilter === 'all' || user.status === statusFilter;
+      const roleMatch = !roleFilter || user.role === roleFilter;
+      const statusMatch = !statusFilter || user.status === statusFilter;
+      const createdDate = user.createdAt?.slice(0, 10) || '';
+      const dateMatch = (!dateFrom || createdDate >= dateFrom) && (!dateTo || createdDate <= dateTo);
 
-      return keywordMatch && roleMatch && statusMatch;
+      return keywordMatch && roleMatch && statusMatch && dateMatch;
     });
-  }, [sortedUsers, searchTerm, roleFilter, statusFilter]);
+  }, [sortedUsers, searchTerm, roleFilter, statusFilter, dateFrom, dateTo]);
 
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, roleFilter, statusFilter]);
+  }, [searchTerm, roleFilter, statusFilter, dateFrom, dateTo]);
 
-  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const safePage = Math.min(page, pageCount);
 
   const paginatedUsers = useMemo(() => {
-    const start = (safePage - 1) * PAGE_SIZE;
-    return filteredUsers.slice(start, start + PAGE_SIZE);
-  }, [filteredUsers, safePage]);
+    const start = (safePage - 1) * pageSize;
+    return filteredUsers.slice(start, start + pageSize);
+  }, [filteredUsers, safePage, pageSize]);
+
+  const printUsers = () => printTableReport({ title: 'User Management', subtitle: `Filters: ${roleFilter || 'All roles'} · ${statusFilter || 'All statuses'} · ${dateFrom || 'Any date'} to ${dateTo || 'Any date'} · ${searchTerm || 'No search'}`, columns: ['Name', 'Email', 'Role', 'Status', 'Created'], rows: filteredUsers.map((user) => [user.fullName, user.email, user.role, user.status, new Date(user.createdAt).toLocaleString()]) });
 
   const resetCreateForm = () => {
     setNewUser({
@@ -270,33 +276,12 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-4 border-b border-gray-100 bg-gray-50 flex flex-col md:flex-row gap-3 md:items-center">
-          <div className="relative flex-1">
-            <Search className="h-4 w-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by name or email"
-              className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm"
-            />
-          </div>
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value as 'all' | UserRole)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="all">All Roles</option>
-            <option value="teacher">Teacher</option>
-            <option value="student">Student</option>
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as 'all' | UserStatus)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
+          <TableSearch value={searchTerm} onChange={(value) => setSearchTerm(value)} placeholder="Search name or email..." />
+          <TableFilter label="Roles" value={roleFilter} options={users.map((user) => user.role)} onChange={(value) => setRoleFilter(value)} />
+          <TableFilter label="Statuses" value={statusFilter} options={users.map((user) => user.status)} onChange={(value) => setStatusFilter(value)} />
+          <input aria-label="Created from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+          <input aria-label="Created to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+          <PrintButton onClick={printUsers} />
         </div>
 
         <table className="w-full text-left">
@@ -306,6 +291,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
               <th className="px-6 py-4 font-semibold text-gray-600">Email</th>
               <th className="px-6 py-4 font-semibold text-gray-600">Role</th>
               <th className="px-6 py-4 font-semibold text-gray-600">Status</th>
+              <th className="px-6 py-4 font-semibold text-gray-600">Created</th>
               <th className="px-6 py-4 font-semibold text-gray-600 text-right">Actions</th>
             </tr>
           </thead>
@@ -323,6 +309,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                     <div className="font-medium text-gray-900">{user.fullName}</div>
                   </div>
                 </td>
+                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{new Date(user.createdAt).toLocaleDateString()}</td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2 text-gray-500">
                     <Mail className="h-4 w-4" />
@@ -378,7 +365,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
 
             {paginatedUsers.length === 0 && (
               <tr>
-                <td className="px-6 py-6 text-center text-sm text-gray-500" colSpan={5}>
+                <td className="px-6 py-6 text-center text-sm text-gray-500" colSpan={6}>
                   No users found.
                 </td>
               </tr>
@@ -386,28 +373,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
           </tbody>
         </table>
 
-        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-          <span className="text-xs text-gray-500">
-            Showing {(safePage - 1) * PAGE_SIZE + (paginatedUsers.length ? 1 : 0)} to {(safePage - 1) * PAGE_SIZE + paginatedUsers.length} of {filteredUsers.length}
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              disabled={safePage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1.5 text-sm rounded border border-gray-200 disabled:opacity-50"
-            >
-              Prev
-            </button>
-            <span className="text-sm text-gray-600">Page {safePage} / {pageCount}</span>
-            <button
-              disabled={safePage >= pageCount}
-              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-              className="px-3 py-1.5 text-sm rounded border border-gray-200 disabled:opacity-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <TablePagination page={safePage} pageSize={pageSize} total={filteredUsers.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
       </div>
 
       {isCreateOpen && (
