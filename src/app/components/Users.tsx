@@ -32,6 +32,14 @@ interface UpdateUserInput {
   profileImageUrl?: string | null;
   profileImagePublicId?: string | null;
   password?: string;
+  mobileNumber?: string;
+  professionalTitle?: string;
+  employmentStatus?: string;
+  yearsExperience?: string;
+  specializations?: string[];
+  education?: string;
+  certifications?: string;
+  availability?: { dayOfWeek: number; startTime: string; endTime: string }[];
 }
 
 interface UsersProps {
@@ -45,6 +53,10 @@ interface UsersProps {
 
 function getInitials(user: Pick<AuthUser, 'firstName' | 'lastName'>): string {
   return `${user.firstName?.trim().charAt(0) || ''}${user.lastName?.trim().charAt(0) || ''}`.toUpperCase() || '?';
+}
+
+function TeacherAvailabilityEditor({ blocks, setBlocks }: { blocks: { dayOfWeek: number; startTime: string; endTime: string }[]; setBlocks: React.Dispatch<React.SetStateAction<{ dayOfWeek: number; startTime: string; endTime: string }[]>> }) {
+  return <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3"><div className="flex items-center justify-between"><div><p className="font-semibold text-gray-700">Weekly Availability</p><p className="text-xs text-gray-500">Choose one or more days and time ranges.</p></div><button type="button" onClick={() => setBlocks((items) => [...items, { dayOfWeek: 1, startTime: '09:00', endTime: '10:00' }])} className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white">Add day/time</button></div><div className="mt-3 space-y-2">{blocks.map((block, index) => <div key={`${block.dayOfWeek}-${index}`} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2"><select value={block.dayOfWeek} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, dayOfWeek: Number(e.target.value) } : item))} className="rounded-lg border px-2 py-2 text-sm">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, value) => <option key={day} value={value}>{day}</option>)}</select><input type="time" value={block.startTime.slice(0, 5)} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, startTime: e.target.value } : item))} className="rounded-lg border px-2 py-2 text-sm" /><span className="text-gray-400">to</span><div className="flex gap-2"><input type="time" value={block.endTime.slice(0, 5)} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, endTime: e.target.value } : item))} className="w-full rounded-lg border px-2 py-2 text-sm" /><button type="button" onClick={() => setBlocks((items) => items.filter((_, i) => i !== index))} className="px-1 text-sm text-red-500">Remove</button></div></div>)}</div></div>;
 }
 
 export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUploadProfileImage, onChangeUserStatus }: UsersProps) {
@@ -108,6 +120,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
     profileImageUrl: null,
     profileImagePublicId: null,
     password: '',
+    mobileNumber: '', professionalTitle: '', employmentStatus: '', yearsExperience: '', specializations: [], education: '', certifications: '', availability: [],
   });
 
   const sortedUsers = useMemo(
@@ -172,8 +185,13 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
       profileImageUrl: user.profileImageUrl,
       profileImagePublicId: user.profileImagePublicId,
       password: '',
+      mobileNumber: '', professionalTitle: '', employmentStatus: '', yearsExperience: '', specializations: user.specializations || [], education: '', certifications: '', availability: [],
     });
     setIsEditOpen(true);
+    if (user.role === 'teacher') void apiClient.listTeacherRecords().then((records) => {
+      const record = records.find((item) => item.teacherId === user.id);
+      if (record) setEditUser((current) => ({ ...current, mobileNumber: record.mobileNumber || '', professionalTitle: record.professionalTitle || '', employmentStatus: record.employmentStatus || '', yearsExperience: record.yearsExperience == null ? '' : String(record.yearsExperience), specializations: record.specializations || [], education: record.education || '', certifications: record.certifications || '', availability: record.availability.map((item) => ({ dayOfWeek: item.dayOfWeek, startTime: item.startTime.slice(0, 5), endTime: item.endTime.slice(0, 5) })) }));
+    }).catch(() => undefined);
   };
 
   const handleCreate = async () => {
@@ -211,6 +229,10 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
         ...editUser,
         password: editUser.password || undefined,
       });
+      if (selectedUser.role === 'teacher') {
+        await apiClient.updateTeacherRecord(selectedUser.id, { mobileNumber: editUser.mobileNumber || null, professionalTitle: editUser.professionalTitle || null, employmentStatus: editUser.employmentStatus || null, yearsExperience: editUser.yearsExperience ? Number(editUser.yearsExperience) : null, specializations: editUser.specializations || [], education: editUser.education || null, certifications: editUser.certifications || null });
+        await apiClient.replaceTeacherAvailability(selectedUser.id, editUser.availability || []);
+      }
       toast.success('User updated successfully.');
       setIsEditOpen(false);
       setSelectedUser(null);
@@ -378,7 +400,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
 
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">Add New User</h3>
             <div className="space-y-4">
               <div className="flex items-center gap-4">
@@ -489,7 +511,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
 
       {isEditOpen && selectedUser && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 animate-in fade-in zoom-in-95">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl p-6 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto">
             <h3 className="text-xl font-bold mb-4">Edit User</h3>
             <div className="space-y-4">
               <div className="flex items-center gap-4">
@@ -579,6 +601,19 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                   </select>
                 </div>
               </div>
+              {editUser.role === 'teacher' && <div className="border-t pt-4 space-y-3">
+                <h4 className="font-semibold text-gray-800">Teacher Personnel Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input className="border rounded-lg px-3 py-2" placeholder="Mobile number" value={editUser.mobileNumber || ''} onChange={(e) => setEditUser({ ...editUser, mobileNumber: e.target.value })} />
+                  <input className="border rounded-lg px-3 py-2" placeholder="Professional title / position" value={editUser.professionalTitle || ''} onChange={(e) => setEditUser({ ...editUser, professionalTitle: e.target.value })} />
+                  <input className="border rounded-lg px-3 py-2" placeholder="Employment status" value={editUser.employmentStatus || ''} onChange={(e) => setEditUser({ ...editUser, employmentStatus: e.target.value })} />
+                  <input type="number" min="0" className="border rounded-lg px-3 py-2" placeholder="Years of experience" value={editUser.yearsExperience || ''} onChange={(e) => setEditUser({ ...editUser, yearsExperience: e.target.value })} />
+                  <input className="border rounded-lg px-3 py-2 md:col-span-2" placeholder="Subjects / specializations (comma separated)" value={(editUser.specializations || []).join(', ')} onChange={(e) => setEditUser({ ...editUser, specializations: e.target.value.split(',').map((item) => item.trim()).filter(Boolean) })} />
+                  <textarea className="border rounded-lg px-3 py-2" placeholder="Education" value={editUser.education || ''} onChange={(e) => setEditUser({ ...editUser, education: e.target.value })} />
+                  <textarea className="border rounded-lg px-3 py-2" placeholder="Certifications" value={editUser.certifications || ''} onChange={(e) => setEditUser({ ...editUser, certifications: e.target.value })} />
+                </div>
+                <TeacherAvailabilityEditor blocks={editUser.availability || []} setBlocks={(value) => setEditUser({ ...editUser, availability: typeof value === 'function' ? value(editUser.availability || []) : value })} />
+              </div>}
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setIsEditOpen(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
