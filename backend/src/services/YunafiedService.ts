@@ -403,6 +403,8 @@ export class YunafiedService {
   async updateUser(
     userId: string,
     input: {
+      studentId?: string;
+      teacherId?: string;
       firstName: string;
       middleName?: string | null;
       lastName: string;
@@ -1513,6 +1515,8 @@ export class YunafiedService {
   async updateEnrollmentRecord(
     id: string,
     input: {
+      studentId?: string;
+      teacherId?: string;
       subject?: string;
       tutorialGroup?: string | null;
       gradeLevel?: string | null;
@@ -1541,18 +1545,20 @@ export class YunafiedService {
     if (input.status === "dropped" && !(input.dropReason ?? row.drop_reason)?.trim()) throw new Error("A reason is required when marking an enrollment as dropped.");
     const result = await pool.query(
       `UPDATE enrollment_records
-          SET subject = $1,
-              tutorial_group = $2,
-              grade_level = $3,
-              status = $4,
-              note = $5,
-              drop_reason = $6,
-              drop_date = $7,
-              action_taken = $8,
-              pull_out_reason = $9,
-              status_notes = $10,
+          SET student_id = $1,
+              teacher_id = $2,
+              subject = $3,
+              tutorial_group = $4,
+              grade_level = $5,
+              status = $6,
+              note = $7,
+              drop_reason = $8,
+              drop_date = $9,
+              action_taken = $10,
+              pull_out_reason = $11,
+              status_notes = $12,
               updated_at = NOW()
-        WHERE id = $11
+        WHERE id = $13
         RETURNING id,
                   student_id AS "studentId",
                   teacher_id AS "teacherId",
@@ -1570,6 +1576,8 @@ export class YunafiedService {
                   created_at AS "createdAt",
                   updated_at AS "updatedAt"`,
       [
+        input.studentId ?? row.student_id,
+        input.teacherId ?? row.teacher_id,
         input.subject ?? row.subject,
         input.tutorialGroup === undefined ? row.tutorial_group : input.tutorialGroup,
         input.gradeLevel === undefined ? row.grade_level : input.gradeLevel,
