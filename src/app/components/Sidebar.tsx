@@ -13,7 +13,8 @@ import {
   ShieldCheck,
   Sparkles,
   UserRound,
-  Video
+  Video,
+  ClipboardList
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { SystemLogo } from '@/app/components/SystemLogo';
@@ -53,6 +54,7 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
     { id: 'assignments', label: 'Assignments', icon: BookOpen, roles: ['teacher', 'student'] },
     { id: 'grades', label: 'Grades/Feedback', icon: BookOpen, roles: ['teacher', 'student'] },
     { id: 'enrollments', label: 'Enrollments', icon: Users, roles: ['admin'] },
+    { id: 'student-records', label: 'Student Records', icon: ClipboardList, roles: ['admin', 'teacher'] },
     { id: 'ai-guide', label: 'AI Guide Bot', icon: Sparkles, roles: ['student'] },
     { id: 'gamified-learning', label: 'Gamified Learning', icon: Sparkles, roles: ['admin', 'teacher', 'student'] },
     { id: 'milestones', label: 'Milestones', icon: Flag, roles: ['student'] },
