@@ -21,6 +21,9 @@ function AvailabilityEditor({ blocks, setBlocks }: { blocks: { dayOfWeek: number
   const add = () => setBlocks((items) => [...items, { dayOfWeek: 1, startTime: '09:00', endTime: '10:00' }]);
   return <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3 md:col-span-2 lg:col-span-3"><div className="flex items-center justify-between"><div><p className="font-semibold text-gray-700">Weekly Availability</p><p className="text-xs text-gray-500">Choose any days and time ranges.</p></div><button type="button" onClick={add} className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white">Add day/time</button></div><div className="mt-2 space-y-2">{blocks.map((block, index) => <div key={`${block.dayOfWeek}-${index}`} className="flex flex-wrap gap-2"><select value={block.dayOfWeek} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, dayOfWeek: Number(e.target.value) } : item))} className="rounded-lg border px-2 py-2 text-sm">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, value) => <option key={day} value={value}>{day}</option>)}</select><input type="time" value={block.startTime} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, startTime: e.target.value } : item))} className="rounded-lg border px-2 py-2 text-sm" /><span className="self-center text-gray-400">to</span><input type="time" value={block.endTime} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, endTime: e.target.value } : item))} className="rounded-lg border px-2 py-2 text-sm" /><button type="button" onClick={() => setBlocks((items) => items.filter((_, i) => i !== index))} className="px-2 text-sm text-red-500">Remove</button></div>)}</div></div>;
 }
+function EditAssignmentModal({ target, form, setForm, teachers, students, saving, onCancel, onSave }: { target: EnrollmentRecordItem; form: { studentId: string; teacherId: string; subject: string; tutorialGroup: string; gradeLevel: string; note: string; status: EnrollmentStatus }; setForm: React.Dispatch<React.SetStateAction<typeof form>>; teachers: AuthUser[]; students: AuthUser[]; saving: boolean; onCancel: () => void; onSave: () => void }) {
+  return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-start justify-between"><div><h2 className="text-lg font-bold text-gray-800">Edit Class/Tutorial Assignment</h2><p className="text-sm text-gray-500">Update the assignment record for {target.studentName}.</p></div><button onClick={onCancel}><X /></button></div><div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2"><select value={form.studentId} onChange={(e) => setForm((p) => ({ ...p, studentId: e.target.value }))} className="rounded-lg border px-3 py-2">{students.map((student) => <option key={student.id} value={student.id}>{student.fullName}</option>)}</select><select value={form.teacherId} onChange={(e) => setForm((p) => ({ ...p, teacherId: e.target.value }))} className="rounded-lg border px-3 py-2">{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}</select><input value={form.subject} onChange={(e) => setForm((p) => ({ ...p, subject: e.target.value }))} placeholder="Subject" className="rounded-lg border px-3 py-2" /><input value={form.tutorialGroup} onChange={(e) => setForm((p) => ({ ...p, tutorialGroup: e.target.value }))} placeholder="Tutorial group" className="rounded-lg border px-3 py-2" /><input value={form.gradeLevel} onChange={(e) => setForm((p) => ({ ...p, gradeLevel: e.target.value }))} placeholder="Grade level" className="rounded-lg border px-3 py-2" /><select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as EnrollmentStatus }))} className="rounded-lg border px-3 py-2"><option value="active">Active</option><option value="completed">Completed</option><option value="dropped">Dropped</option><option value="archived">Archived</option></select><textarea value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} placeholder="Note" className="rounded-lg border px-3 py-2 md:col-span-2" /></div><div className="mt-5 flex justify-end gap-2"><button onClick={onCancel} className="rounded-lg px-4 py-2 text-gray-600">Cancel</button><button disabled={saving} onClick={onSave} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:opacity-50">Save Changes</button></div></div></div>;
+}
 export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, onUploadProfileImage, onChangeUserStatus }: EnrollmentRecordsProps) {
   const isAdmin = role === 'admin';
   const [rows, setRows] = useState<EnrollmentRecordItem[]>([]);
@@ -56,6 +59,8 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   const [dateTo, setDateTo] = useState('');
   const [statusTarget, setStatusTarget] = useState<EnrollmentRecordItem | null>(null);
   const [dropForm, setDropForm] = useState({ reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' });
+  const [editingAssignment, setEditingAssignment] = useState<EnrollmentRecordItem | null>(null);
+  const [editForm, setEditForm] = useState({ studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', status: 'active' as EnrollmentStatus });
 
   const students = useMemo(() => users.filter((u) => u.role === 'student' && u.status === 'active'), [users]);
   const teachers = useMemo(() => users.filter((u) => u.role === 'teacher' && u.status === 'active'), [users]);
@@ -145,6 +150,8 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
       toast.error(error.message || 'Failed to remove enrollment record.');
     }
   };
+  const openAssignmentEdit = (row: EnrollmentRecordItem) => { setEditingAssignment(row); setEditForm({ studentId: row.studentId, teacherId: row.teacherId, subject: row.subject, tutorialGroup: row.tutorialGroup || '', gradeLevel: row.gradeLevel || '', note: row.note || '', status: row.status }); };
+  const saveAssignmentEdit = async () => { if (!editingAssignment || !editForm.subject.trim()) { toast.error('Subject is required.'); return; } try { setSaving(true); const updated = await apiClient.updateEnrollment(editingAssignment.id, editForm); setRows((prev) => prev.map((row) => row.id === updated.id ? updated : row)); setEditingAssignment(null); toast.success('Class/tutorial assignment updated.'); } catch (error: any) { toast.error(error.message || 'Failed to update assignment.'); } finally { setSaving(false); } };
 
   // Stat counts
   const total = rows.length;
@@ -362,6 +369,9 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
                 <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{new Date(row.createdAt).toLocaleDateString()}</td>
                 {isAdmin && (
                   <td className="px-4 py-3 text-right">
+                    <button onClick={() => openAssignmentEdit(row)} className="mr-3 inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-700 text-sm">
+                      Edit
+                    </button>
                     <button onClick={() => remove(row.id)} className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 text-sm">
                       <Trash2 className="h-4 w-4" />
                       Archive
@@ -382,6 +392,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
         <TablePagination page={page} pageSize={pageSize} total={filteredRows.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
       </div>
       {statusTarget && <DropDetailsModal title={`Drop ${statusTarget.studentName} from ${statusTarget.subject}?`} form={dropForm} setForm={setDropForm} onCancel={() => setStatusTarget(null)} onSave={() => { if (!dropForm.reason.trim()) { toast.error('A reason is required.'); return; } void updateStatus(statusTarget.id, 'dropped', dropForm); }} />}
+      {editingAssignment && <EditAssignmentModal target={editingAssignment} form={editForm} setForm={setEditForm} teachers={teachers} students={students} saving={saving} onCancel={() => setEditingAssignment(null)} onSave={() => void saveAssignmentEdit()} />}
     </div>
   );
 }
