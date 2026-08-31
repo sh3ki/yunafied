@@ -801,6 +801,7 @@ const enrollmentSchema = z.object({
   gradeLevel: z.string().max(120).optional(),
   status: z.enum(["active", "completed", "dropped", "archived"]).default("active"),
   note: z.string().max(1000).optional(),
+  classSchedule: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional().default([]),
 });
 
 const enrollmentUpdateSchema = z.object({
@@ -816,6 +817,7 @@ const enrollmentUpdateSchema = z.object({
   actionTaken: z.string().max(1000).nullable().optional(),
   pullOutReason: z.string().max(1000).nullable().optional(),
   statusNotes: z.string().max(2000).nullable().optional(),
+  classSchedule: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
 });
 
 const materialLinkSchema = z.object({
@@ -1619,6 +1621,14 @@ app.get("/api/admin/teacher-records", requireAuth, requireRole("admin"), async (
 
 app.put("/api/admin/teacher-records/:id", requireAuth, requireRole("admin"), async (req, res, next) => {
   try { const payload = teacherRecordSchema.parse(req.body); await service.upsertTeacherRecord(req.params.id, payload); res.status(204).end(); } catch (error) { next(error); }
+});
+
+app.put("/api/admin/teacher-records/:id/availability", requireAuth, requireRole("admin"), async (req, res, next) => {
+  try {
+    const payload = z.object({ availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })) }).parse(req.body);
+    await service.replaceTeacherAvailability(req.params.id, payload.availability);
+    res.status(204).end();
+  } catch (error) { next(error); }
 });
 
 const updateUserSchema = z.object({
@@ -2547,7 +2557,7 @@ const accountEnrollmentSchema = z.object({
   email: z.string().email(), firstName: z.string().min(2), middleName: z.string().optional(), lastName: z.string().min(2),
   role: z.enum(["teacher", "student"]), profileImageUrl: z.string().url().nullable().optional(), profileImagePublicId: z.string().nullable().optional(),
   studentId: z.string().uuid().optional(), teacherId: z.string().uuid().optional(), subject: z.string().min(2).max(200).optional(), tutorialGroup: z.string().max(120).optional(), gradeLevel: z.string().max(120).optional(), note: z.string().max(1000).optional(),
-  mobileNumber: z.string().max(40).optional(), professionalTitle: z.string().max(160).optional(), employmentStatus: z.string().max(80).optional(), education: z.string().max(500).optional(), certifications: z.string().max(1000).optional(), yearsExperience: z.coerce.number().int().min(0).max(80).optional(), specializations: z.array(z.string().min(1).max(120)).optional(), notes: z.string().max(2000).optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
+  mobileNumber: z.string().max(40).optional(), professionalTitle: z.string().max(160).optional(), employmentStatus: z.string().max(80).optional(), education: z.string().max(500).optional(), certifications: z.string().max(1000).optional(), yearsExperience: z.coerce.number().int().min(0).max(80).optional(), specializations: z.array(z.string().min(1).max(120)).optional(), notes: z.string().max(2000).optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(), classSchedule: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
 });
 
 app.post("/api/enrollments/account", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -2563,7 +2573,7 @@ app.post("/api/enrollments/account", requireAuth, requireRole("admin"), async (r
     if (payload.role === "teacher" && payload.availability?.length) await Promise.all(payload.availability.map((block) => service.createAvailabilityBlock(user.id, block)));
     const assignmentStudentId = payload.role === "student" ? user.id : payload.studentId;
     const assignmentTeacherId = payload.role === "teacher" ? user.id : payload.teacherId;
-    if (payload.subject && assignmentStudentId && assignmentTeacherId) await service.createEnrollmentRecord({ studentId: assignmentStudentId, teacherId: assignmentTeacherId, subject: payload.subject, tutorialGroup: payload.tutorialGroup || null, gradeLevel: payload.gradeLevel || null, note: payload.note || null, createdById: creatorId });
+    if (payload.subject && assignmentStudentId && assignmentTeacherId) await service.createEnrollmentRecord({ studentId: assignmentStudentId, teacherId: assignmentTeacherId, subject: payload.subject, tutorialGroup: payload.tutorialGroup || null, gradeLevel: payload.gradeLevel || null, note: payload.note || null, classSchedule: payload.classSchedule, createdById: creatorId });
     try { await sendVerificationLinkEmail(user.email, user.firstName, rawToken); } catch (emailErr) { console.error("[EMAIL] Failed to send account verification link:", emailErr); }
     clearBootstrapCache();
     res.status(201).json({ user, message: "Account enrolled. A verification link has been sent." });
@@ -2633,6 +2643,7 @@ app.post("/api/enrollments", requireAuth, requireRole("admin"), async (req: Auth
       ...payload,
       tutorialGroup: payload.tutorialGroup || null,
       note: payload.note || null,
+      classSchedule: payload.classSchedule,
       createdById: creatorId,
     });
 
