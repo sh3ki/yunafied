@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -29,6 +29,7 @@ const port = Number(process.env.PORT || 4000);
 const service = new YunafiedService();
 const BOOTSTRAP_CACHE_TTL_MS = 30000;
 const bootstrapCache = new Map<string, { expiresAt: number; data: unknown }>();
+const GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
 
 interface GroqMessage {
   role: "system" | "user" | "assistant";
@@ -117,6 +118,27 @@ async function sendOtpEmail(toEmail: string, otpCode: string, firstName: string,
         <p style="color:#6b7280;font-size:13px;margin:0">${footer}</p>
       </div>
     `,
+  });
+}
+
+function hashVerificationToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+async function sendVerificationLinkEmail(toEmail: string, firstName: string, token: string): Promise<void> {
+  const from = process.env.RESEND_FROM || "onboarding@resend.dev";
+  const appUrl = process.env.FRONTEND_URL || process.env.VITE_APP_URL || "http://localhost:5173";
+  const verifyUrl = `${appUrl.replace(/\/$/, "")}/verify-account?token=${encodeURIComponent(token)}`;
+  await resend.emails.send({
+    from: `YUNAfied <${from}>`,
+    to: toEmail,
+    subject: "Complete your YUNAfied account setup",
+    html: `<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;background:#f8f9ff;padding:32px;border-radius:12px">
+      <h2 style="color:#4f46e5;margin:0 0 8px">Welcome to YUNAfied, ${firstName}!</h2>
+      <p style="color:#374151;margin:0 0 24px">Your account has been enrolled. Click the button below to verify your email and create your password. This link expires in <strong>24 hours</strong>.</p>
+      <a href="${verifyUrl}" style="display:inline-block;background:#4f46e5;color:#fff;text-decoration:none;padding:14px 20px;border-radius:8px;font-weight:bold">Verify This Account</a>
+      <p style="color:#6b7280;font-size:13px;margin-top:24px">If you did not expect this account, you can safely ignore this email.</p>
+    </div>`,
   });
 }
 
@@ -456,6 +478,7 @@ async function requestGroqChat(input: {
   messages: GroqMessage[];
   maxTokens?: number;
   temperature?: number;
+  reasoningEffort?: "low" | "medium" | "high";
 }): Promise<string> {
   const groqKey = process.env.GROQ_API_KEY;
 
@@ -470,10 +493,11 @@ async function requestGroqChat(input: {
       Authorization: `Bearer ${groqKey}`,
     },
     body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
+      model: GROQ_CHAT_MODEL,
       messages: input.messages,
       temperature: input.temperature ?? 0.2,
       max_tokens: input.maxTokens ?? 220,
+      reasoning_effort: input.reasoningEffort ?? "low",
     }),
   });
 
@@ -774,14 +798,16 @@ const enrollmentSchema = z.object({
   teacherId: z.string().uuid(),
   subject: z.string().min(2).max(200),
   tutorialGroup: z.string().max(120).optional(),
-  status: z.enum(["active", "completed", "dropped"]).default("active"),
+  gradeLevel: z.string().max(120).optional(),
+  status: z.enum(["active", "completed", "dropped", "archived"]).default("active"),
   note: z.string().max(1000).optional(),
 });
 
 const enrollmentUpdateSchema = z.object({
   subject: z.string().min(2).max(200).optional(),
   tutorialGroup: z.string().max(120).nullable().optional(),
-  status: z.enum(["active", "completed", "dropped"]).optional(),
+  gradeLevel: z.string().max(120).nullable().optional(),
+  status: z.enum(["active", "completed", "dropped", "archived"]).optional(),
   note: z.string().max(1000).nullable().optional(),
 });
 
@@ -828,7 +854,9 @@ app.get("/api/health/db", async (_req: Request, res: Response, next: NextFunctio
 
 app.post("/api/auth/register", async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const payload = signupSchema.parse(req.body);
+    res.status(403).json({ message: "Self-registration is disabled. Please contact the YUNAfied administrator." });
+    return;
+    /* const payload = signupSchema.parse(req.body);
     const exists = await service.findUserWithPasswordByEmail(payload.email);
     if (exists) {
       res.status(409).json({ message: "Email is already registered." });
@@ -862,7 +890,7 @@ app.post("/api/auth/register", async (req: Request, res: Response, next: NextFun
       console.error("[SMTP] Failed to send OTP email:", emailErr);
     }
 
-    res.status(201).json({ needsVerification: true, email: user.email });
+    res.status(201).json({ needsVerification: true, email: user.email }); */
   } catch (error) {
     next(error);
   }
@@ -987,8 +1015,8 @@ app.post("/api/auth/login", async (req: Request, res: Response, next: NextFuncti
       return;
     }
 
-    if (user.status === "inactive") {
-      res.status(403).json({ message: "Your account is inactive. Please contact the administrator." });
+    if (user.status !== "active") {
+      res.status(403).json({ message: user.status === "pending" ? "Please verify your account using the link sent to your email." : "Your account is not active. Please contact the administrator." });
       return;
     }
 
@@ -1116,7 +1144,7 @@ app.post("/api/ai/chat", requireAuth, async (req: AuthenticatedRequest, res: Res
       { role: "user", content: payload.message },
     ];
 
-    const answer = await requestGroqChat({ messages, temperature: 0.2, maxTokens: 220 });
+    const answer = await requestGroqChat({ messages, temperature: 0.2, maxTokens: 220, reasoningEffort: "low" });
 
     res.json({ answer });
   } catch (error) {
@@ -1145,7 +1173,7 @@ app.post("/api/ai/study-guide", requireAuth, async (req: AuthenticatedRequest, r
       { role: "user", content: payload.message },
     ];
 
-    const answer = await requestGroqChat({ messages, temperature: 0.35, maxTokens: 320 });
+    const answer = await requestGroqChat({ messages, temperature: 0.35, maxTokens: 320, reasoningEffort: "medium" });
     res.json({ answer });
   } catch (error) {
     next(error);
@@ -1174,7 +1202,7 @@ app.post("/api/ai/translate", requireAuth, async (req: AuthenticatedRequest, res
       },
     ];
 
-    const translatedText = await requestGroqChat({ messages, temperature: 0.1, maxTokens: 380 });
+    const translatedText = await requestGroqChat({ messages, temperature: 0.1, maxTokens: 380, reasoningEffort: "low" });
 
     const historyItem = await service.createTranslationHistory({
       userId,
@@ -1518,8 +1546,8 @@ const createUserSchema = z.object({
   firstName: z.string().min(2),
   middleName: z.string().optional(),
   lastName: z.string().min(2),
-  role: z.enum(["admin", "teacher", "student"]),
-  status: z.enum(["active", "inactive"]).default("active"),
+  role: z.enum(["teacher", "student"]),
+  status: z.enum(["active", "inactive", "pending", "archived"]).default("active"),
   profileImageUrl: z.string().url().nullable().optional(),
   profileImagePublicId: z.string().nullable().optional(),
   password: z.string().min(6),
@@ -1527,6 +1555,9 @@ const createUserSchema = z.object({
 
 app.post("/api/users", requireAuth, requireRole("admin"), async (req, res, next) => {
   try {
+    res.status(403).json({ message: "Manual user creation is disabled. Use Enrollment." });
+    return;
+    /*
     const payload = createUserSchema.parse(req.body);
     const exists = await service.findUserWithPasswordByEmail(payload.email);
     if (exists) {
@@ -1554,13 +1585,19 @@ app.post("/api/users", requireAuth, requireRole("admin"), async (req, res, next)
   }
 });
 
+    */
+  } catch (error) {
+    next(error);
+  }
+});
+
 const updateUserSchema = z.object({
   email: z.string().email(),
   firstName: z.string().min(2),
   middleName: z.string().optional(),
   lastName: z.string().min(2),
   role: z.enum(["admin", "teacher", "student"]),
-  status: z.enum(["active", "inactive"]),
+  status: z.enum(["active", "inactive", "pending", "archived"]),
   profileImageUrl: z.string().url().nullable().optional(),
   profileImagePublicId: z.string().nullable().optional(),
   password: z.string().min(6).optional(),
@@ -1569,6 +1606,14 @@ const updateUserSchema = z.object({
 app.put("/api/users/:id", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res, next) => {
   try {
     const payload = updateUserSchema.parse(req.body);
+    const existing = await service.findUserWithPasswordById(req.params.id);
+    if (!existing) { res.status(404).json({ message: "User not found." }); return; }
+    if (existing.role === "admin" && (payload.role !== "admin" || payload.status === "archived")) {
+      res.status(400).json({ message: "The designated Admin account cannot be demoted or archived." }); return;
+    }
+    if (payload.role === "admin" && existing.role !== "admin") {
+      res.status(400).json({ message: "A second Admin account cannot be created." }); return;
+    }
     const passwordHash = payload.password ? await bcrypt.hash(payload.password, 10) : undefined;
 
     const updated = await service.updateUser(req.params.id, {
@@ -1602,6 +1647,11 @@ app.delete("/api/users/:id", requireAuth, requireRole("admin"), async (req: Auth
       return;
     }
 
+    const target = await service.findUserWithPasswordById(req.params.id);
+    if (target?.role === "admin") {
+      res.status(400).json({ message: "The designated Admin account cannot be archived." });
+      return;
+    }
     const deleted = await service.deleteUser(req.params.id);
     if (!deleted) {
       res.status(404).json({ message: "User not found." });
@@ -2436,6 +2486,63 @@ app.patch("/api/chats/:chatId/read", requireAuth, async (req: AuthenticatedReque
   } catch (error) {
     next(error);
   }
+});
+
+const accountEnrollmentSchema = z.object({
+  email: z.string().email(), firstName: z.string().min(2), middleName: z.string().optional(), lastName: z.string().min(2),
+  role: z.enum(["teacher", "student"]), profileImageUrl: z.string().url().nullable().optional(), profileImagePublicId: z.string().nullable().optional(),
+  studentId: z.string().uuid().optional(), teacherId: z.string().uuid().optional(), subject: z.string().min(2).max(200).optional(), tutorialGroup: z.string().max(120).optional(), gradeLevel: z.string().max(120).optional(), note: z.string().max(1000).optional(),
+});
+
+app.post("/api/enrollments/account", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const creatorId = req.auth?.sub;
+    if (!creatorId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const payload = accountEnrollmentSchema.parse(req.body);
+    const exists = await service.findUserWithPasswordByEmail(payload.email.trim().toLowerCase());
+    if (exists) { res.status(409).json({ message: "Email is already registered." }); return; }
+    const rawToken = randomBytes(32).toString("hex");
+    const user = await service.createPendingUser({ ...payload, tokenHash: hashVerificationToken(rawToken), tokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) });
+    const assignmentStudentId = payload.role === "student" ? user.id : payload.studentId;
+    const assignmentTeacherId = payload.role === "teacher" ? user.id : payload.teacherId;
+    if (payload.subject && assignmentStudentId && assignmentTeacherId) await service.createEnrollmentRecord({ studentId: assignmentStudentId, teacherId: assignmentTeacherId, subject: payload.subject, tutorialGroup: payload.tutorialGroup || null, gradeLevel: payload.gradeLevel || null, note: payload.note || null, createdById: creatorId });
+    try { await sendVerificationLinkEmail(user.email, user.firstName, rawToken); } catch (emailErr) { console.error("[EMAIL] Failed to send account verification link:", emailErr); }
+    clearBootstrapCache();
+    res.status(201).json({ user, message: "Account enrolled. A verification link has been sent." });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/auth/resend-verification", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { userId } = z.object({ userId: z.string().uuid() }).parse(req.body);
+    const user = await service.findUserWithPasswordById(userId);
+    if (!user || user.status !== "pending") { res.status(400).json({ message: "Only pending accounts can receive a verification email." }); return; }
+    const rawToken = randomBytes(32).toString("hex");
+    await service.saveVerificationToken(user.id, hashVerificationToken(rawToken), new Date(Date.now() + 24 * 60 * 60 * 1000));
+    await sendVerificationLinkEmail(user.email, user.first_name, rawToken);
+    res.json({ message: "A new verification link has been sent." });
+  } catch (error) { next(error); }
+});
+
+app.get("/api/auth/verify-account", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const rawToken = z.string().min(32).parse(req.query.token);
+    const user = await service.findUserByVerificationToken(hashVerificationToken(rawToken));
+    if (!user || user.status !== "pending" || !user.verification_token_expires_at || new Date(user.verification_token_expires_at) < new Date()) { res.status(400).json({ message: "This verification link is invalid or expired." }); return; }
+    res.json({ email: user.email, firstName: user.first_name, middleName: user.middle_name, lastName: user.last_name, role: user.role, token: rawToken });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/auth/complete-account-setup", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const payload = z.object({ token: z.string().min(32), firstName: z.string().min(2), middleName: z.string().optional(), lastName: z.string().min(2), password: z.string().min(6) }).parse(req.body);
+    const user = await service.findUserByVerificationToken(hashVerificationToken(payload.token));
+    if (!user || user.status !== "pending" || !user.verification_token_expires_at || new Date(user.verification_token_expires_at) < new Date()) { res.status(400).json({ message: "This verification link is invalid or expired." }); return; }
+    const updated = await service.completeAccountSetup(user.id, { firstName: payload.firstName, middleName: payload.middleName, lastName: payload.lastName, passwordHash: await bcrypt.hash(payload.password, 10) });
+    if (!updated) { res.status(400).json({ message: "This account has already been set up." }); return; }
+    const accessToken = signAccessToken({ sub: updated.id, email: updated.email, role: updated.role });
+    res.json({ token: accessToken, user: updated });
+  } catch (error) { next(error); }
 });
 
 app.get("/api/enrollments", requireAuth, async (req: AuthenticatedRequest, res, next) => {
@@ -3277,6 +3384,9 @@ app.post(
   csvImportUpload.single("file"),
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
+      res.status(403).json({ message: "CSV user import is disabled. Use Enrollment." });
+      return;
+      /*
       const userId = req.auth?.sub;
       if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
       if (!req.file) { res.status(400).json({ message: "No file uploaded." }); return; }
@@ -3298,7 +3408,7 @@ app.post(
       });
 
       const result = await service.importUsersFromCsv(rows, userId);
-      res.json(result);
+      res.json(result); */
     } catch (error) { next(error); }
   },
 );
