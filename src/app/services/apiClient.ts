@@ -983,16 +983,21 @@ class YunafiedApiClient {
 
   // ─── Admin ────────────────────────────────────────────────────────────────────
 
-  async listAuditLogs(params: { actorId?: string; action?: string; entityType?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }): Promise<{ rows: AuditLogItem[]; total: number; page: number; pageSize: number; totalPages: number }> {
+  async listAuditLogs(params: { actorId?: string; action?: string; entityType?: string; search?: string; dateFrom?: string; dateTo?: string; page?: number; pageSize?: number }): Promise<{ rows: AuditLogItem[]; total: number; page: number; pageSize: number; totalPages: number }> {
     const qs = new URLSearchParams();
     if (params.actorId) qs.set("actorId", params.actorId);
     if (params.action) qs.set("action", params.action);
     if (params.entityType) qs.set("entityType", params.entityType);
+    if (params.search) qs.set("search", params.search);
     if (params.dateFrom) qs.set("dateFrom", params.dateFrom);
     if (params.dateTo) qs.set("dateTo", params.dateTo);
     qs.set("page", String(params.page || 1));
     qs.set("pageSize", String(params.pageSize || 20));
     return this.request(`/api/admin/audit-logs?${qs.toString()}`);
+  }
+
+  async recordAuditLogPrint(filters: Record<string, string>): Promise<void> {
+    await this.request<void>("/api/admin/audit-logs/print", { method: "POST", body: JSON.stringify({ filters }) });
   }
 
   async listMeetingHistory(): Promise<CallHistoryItem[]> {
