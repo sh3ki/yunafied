@@ -43,6 +43,10 @@ interface UsersProps {
 
 const PAGE_SIZE = 8;
 
+function getInitials(user: Pick<AuthUser, 'firstName' | 'lastName'>): string {
+  return `${user.firstName?.trim().charAt(0) || ''}${user.lastName?.trim().charAt(0) || ''}`.toUpperCase() || '?';
+}
+
 export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUploadProfileImage }: UsersProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -101,7 +105,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   });
 
   const sortedUsers = useMemo(
-    () => [...users].sort((a, b) => a.lastName.localeCompare(b.lastName)),
+    () => users.filter((user) => user.role !== 'admin').sort((a, b) => a.lastName.localeCompare(b.lastName)),
     [users],
   );
 
@@ -210,7 +214,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   const handleDelete = async (id: string) => {
     try {
       await onDeleteUser(id);
-      toast.success('User deleted successfully.');
+      toast.success('User archived successfully.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to delete user.');
     }
@@ -253,24 +257,6 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
           <h2 className="text-2xl font-bold text-gray-800">User Management</h2>
           <p className="text-gray-500">Administrator Module</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <input ref={csvInputRef} type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
-          <button
-            onClick={() => csvInputRef.current?.click()}
-            disabled={csvImporting}
-            className="flex items-center gap-2 border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg transition disabled:opacity-60"
-          >
-            <Upload className="h-4 w-4" />
-            {csvImporting ? 'Importing…' : 'Import CSV'}
-          </button>
-          <button
-            onClick={() => setIsCreateOpen(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition"
-          >
-            <UserPlus className="h-4 w-4" />
-            Add User
-          </button>
-        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -290,7 +276,6 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
             className="border border-gray-200 rounded-lg px-3 py-2 text-sm"
           >
             <option value="all">All Roles</option>
-            <option value="admin">Admin</option>
             <option value="teacher">Teacher</option>
             <option value="student">Student</option>
           </select>
@@ -320,11 +305,12 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
               <tr key={user.id} className="hover:bg-gray-50/50 transition">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={user.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName)}&background=e0e7ff&color=3730a3`}
+                    {user.profileImageUrl ? <><img
+                      src={user.profileImageUrl}
                       alt={user.fullName}
+                      onError={(event) => { event.currentTarget.style.display = 'none'; event.currentTarget.nextElementSibling?.classList.remove('hidden'); }}
                       className="h-10 w-10 rounded-full object-cover border border-gray-200"
-                    />
+                    /><span className="hidden h-10 w-10 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 flex items-center justify-center text-sm font-bold">{getInitials(user)}</span></> : <span className="h-10 w-10 rounded-full border border-indigo-100 bg-indigo-50 text-indigo-700 flex items-center justify-center text-sm font-bold">{getInitials(user)}</span>}
                     <div className="font-medium text-gray-900">{user.fullName}</div>
                   </div>
                 </td>
@@ -360,9 +346,19 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
+                  {user.status === 'pending' && (
+                    <button
+                      onClick={async () => { try { await apiClient.resendVerification(user.id); toast.success('Verification link sent.'); } catch (error: any) { toast.error(error.message || 'Failed to resend verification link.'); } }}
+                      className="text-gray-400 hover:text-indigo-600 transition p-2 hover:bg-indigo-50 rounded-full"
+                      title="Resend verification link"
+                    >
+                      <Mail className="h-4 w-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(user.id)}
                     className="text-gray-400 hover:text-red-500 transition p-2 hover:bg-red-50 rounded-full"
+                    title="Archive user"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -484,7 +480,6 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                   >
                     <option value="student">Student</option>
                     <option value="teacher">Teacher</option>
-                    <option value="admin">Administrator</option>
                   </select>
                 </div>
                 <div>
@@ -496,6 +491,8 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
+                    <option value="pending">Pending verification</option>
+                    <option value="archived">Archived</option>
                   </select>
                 </div>
               </div>
@@ -585,15 +582,14 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-                  <select
+                  {selectedUser?.role === 'admin' ? <div className="w-full border rounded-lg px-3 py-2 bg-gray-50 text-gray-600">Administrator (fixed)</div> : <select
                     className="w-full border rounded-lg px-3 py-2"
                     value={editUser.role}
                     onChange={(e) => setEditUser({ ...editUser, role: e.target.value as UserRole })}
                   >
                     <option value="student">Student</option>
                     <option value="teacher">Teacher</option>
-                    <option value="admin">Administrator</option>
-                  </select>
+                  </select>}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -604,6 +600,8 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
+                    <option value="pending">Pending verification</option>
+                    <option value="archived">Archived</option>
                   </select>
                 </div>
               </div>
