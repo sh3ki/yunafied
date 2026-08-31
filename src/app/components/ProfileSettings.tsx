@@ -25,6 +25,10 @@ interface ProfileSettingsProps {
   onUploadProfileImage: (file: File) => Promise<ProfileUploadResult>;
 }
 
+function getInitials(firstName: string, lastName: string): string {
+  return `${firstName.trim().charAt(0)}${lastName.trim().charAt(0)}`.toUpperCase() || '?';
+}
+
 export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }: ProfileSettingsProps) {
   const [firstName, setFirstName] = useState(user.firstName);
   const [middleName, setMiddleName] = useState(user.middleName || '');
@@ -133,11 +137,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex items-center gap-4">
-          <img
-            src={previewImageUrl || profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent((firstName || 'User') + ' ' + (lastName || ''))}&background=ede9fe&color=5b21b6`}
-            alt="Profile"
-            className="h-20 w-20 rounded-full object-cover border border-violet-100"
-          />
+          {(previewImageUrl || profileImageUrl) ? <><img src={previewImageUrl || profileImageUrl || ''} alt="Profile" onError={(event) => { event.currentTarget.style.display = 'none'; event.currentTarget.nextElementSibling?.classList.remove('hidden'); }} className="h-20 w-20 rounded-full object-cover border border-violet-100" /><span className="hidden h-20 w-20 rounded-full border border-violet-100 bg-violet-50 text-violet-700 flex items-center justify-center text-xl font-bold">{getInitials(firstName, lastName)}</span></> : <span className="h-20 w-20 rounded-full border border-violet-100 bg-violet-50 text-violet-700 flex items-center justify-center text-xl font-bold">{getInitials(firstName, lastName)}</span>}
           <div className="space-y-2">
             <label className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg text-sm cursor-pointer transition">
               <ImagePlus className="h-4 w-4" />
