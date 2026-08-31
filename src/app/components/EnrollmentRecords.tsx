@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { apiClient } from '@/app/services/apiClient';
 import { AuthUser, EnrollmentRecordItem, EnrollmentStatus, UserRole } from '@/app/types/models';
 import { UsersView } from './Users';
+import { PrintButton, TableFilter, TablePagination, TableSearch, printTableReport, DEFAULT_TABLE_PAGE_SIZE } from './ui/table-tools';
 interface EnrollmentRecordsProps {
   role: UserRole;
   onAddUser?: (input: any) => Promise<void>;
@@ -12,7 +13,6 @@ interface EnrollmentRecordsProps {
   onUploadProfileImage?: (file: File) => Promise<{ secureUrl: string; publicId: string }>;
   onChangeUserStatus?: (id: string, input: { status: any; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => Promise<void>;
 }
-
 function DropDetailsModal({ title, form, setForm, onCancel, onSave }: { title: string; form: { reason: string; dropDate: string; actionTaken: string; pullOutReason: string; notes: string }; setForm: React.Dispatch<React.SetStateAction<typeof form>>; onCancel: () => void; onSave: () => void }) {
   const field = (key: keyof typeof form, label: string, required = false) => <label className="block text-sm text-gray-700"><span className="font-medium">{label}{required && <span className="text-red-500"> *</span>}</span>{key === 'dropDate' ? <input type="date" value={form[key]} onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))} className="mt-1 w-full border rounded-lg px-3 py-2" /> : <textarea value={form[key]} onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))} className="mt-1 w-full border rounded-lg px-3 py-2 resize-none" rows={key === 'reason' ? 2 : 3} />}</label>;
   return <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-5"><div className="flex justify-between items-start gap-4 mb-4"><div><h2 className="text-lg font-bold text-gray-800">{title}</h2><p className="text-sm text-gray-500 mt-1">Record the reason and action taken for this status change.</p></div><button onClick={onCancel} className="text-gray-400 hover:text-gray-700"><X /></button></div><div className="space-y-3">{field('reason', 'Reason for dropping', true)}{field('dropDate', 'Date of drop', true)}{field('actionTaken', 'Action taken')}{field('pullOutReason', 'Pull-out reason')}{field('notes', 'Other relevant notes')}</div><div className="flex justify-end gap-2 mt-5"><button onClick={onCancel} className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100">Cancel</button><button onClick={onSave} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white">Save Dropped Status</button></div></div></div>;
@@ -45,6 +45,10 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   const [filterGroup, setFilterGroup] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterGradeLevel, setFilterGradeLevel] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [statusTarget, setStatusTarget] = useState<EnrollmentRecordItem | null>(null);
   const [dropForm, setDropForm] = useState({ reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' });
 
@@ -159,13 +163,19 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
     if (filterGroup && r.tutorialGroup !== filterGroup) return false;
     if (filterStatus && r.status !== filterStatus) return false;
     if (filterGradeLevel && (r as any).gradeLevel && !(r as any).gradeLevel.toLowerCase().includes(filterGradeLevel.toLowerCase())) return false;
+    const createdDate = r.createdAt?.slice(0, 10) || '';
+    if (dateFrom && createdDate < dateFrom) return false;
+    if (dateTo && createdDate > dateTo) return false;
     return true;
-  }), [rows, searchTerm, filterSubject, filterTeacher, filterGroup, filterStatus, filterGradeLevel]);
+  }), [rows, searchTerm, filterSubject, filterTeacher, filterGroup, filterStatus, filterGradeLevel, dateFrom, dateTo]);
 
   const teacherOptions = Array.from(new Set(rows.map((row) => row.teacherName).filter(Boolean))).sort();
   const subjectOptions = Array.from(new Set(rows.map((row) => row.subject).filter(Boolean))).sort();
   const groupOptions = Array.from(new Set(rows.map((row) => row.tutorialGroup || '').filter(Boolean))).sort();
   const gradeLevelOptions = Array.from(new Set(rows.map((row) => row.gradeLevel || '').filter(Boolean))).sort();
+  useEffect(() => { setPage(1); }, [searchTerm, filterSubject, filterTeacher, filterGroup, filterStatus, filterGradeLevel, dateFrom, dateTo]);
+  const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
+  const printEnrollments = () => printTableReport({ title: 'Enrollment Records', subtitle: `Filters: ${filterStatus || 'All statuses'} · ${filterTeacher || 'All teachers'} · ${filterSubject || 'All subjects'} · ${dateFrom || 'Any date'} to ${dateTo || 'Any date'} · ${searchTerm || 'No search'}`, columns: ['Student', 'Teacher', 'Subject', 'Group', 'Grade Level', 'Status', 'Created'], rows: filteredRows.map((r) => [r.studentName, r.teacherName, r.subject, r.tutorialGroup || '—', r.gradeLevel || '—', r.status, new Date(r.createdAt).toLocaleString()]) });
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -204,18 +214,22 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
 
       {/* Filter bar */}
       <div className={`flex flex-wrap gap-2 mb-4 items-center ${isAdmin && activeTab === 'users' ? 'hidden' : ''}`}>
-        <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search students, teachers, subjects..." className="border border-gray-200 rounded-lg px-3 py-2 text-sm flex-1 min-w-[220px]" />
-        <select value={filterTeacher} onChange={(e) => setFilterTeacher(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm"><option value="">All teachers</option>{teacherOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select>
-        <select value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm"><option value="">All subjects</option>{subjectOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select>
-        <select value={filterGradeLevel} onChange={(e) => setFilterGradeLevel(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm"><option value="">All grade levels</option>{gradeLevelOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select>
-        <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm"><option value="">All groups</option>{groupOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select>
+        <TableSearch value={searchTerm} onChange={setSearchTerm} placeholder="Search students, teachers, subjects..." />
+        <TableFilter label="Teachers" value={filterTeacher} options={teacherOptions} onChange={setFilterTeacher} />
+        <TableFilter label="Subjects" value={filterSubject} options={subjectOptions} onChange={setFilterSubject} />
+        <TableFilter label="Grade levels" value={filterGradeLevel} options={gradeLevelOptions} onChange={setFilterGradeLevel} />
+        <TableFilter label="Groups" value={filterGroup} options={groupOptions} onChange={setFilterGroup} />
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option value="">All statuses</option>
           <option value="active">Active</option>
-                    <option value="completed">Completed</option>
-                    <option value="dropped">Dropped</option>
-                    <option value="archived">Archived</option>
+          <option value="completed">Completed</option>
+          <option value="dropped">Dropped</option>
+          <option value="archived">Archived</option>
         </select>
+        <input aria-label="Created from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+        <input aria-label="Created to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+        <PrintButton onClick={printEnrollments} />
+        
         {(searchTerm || filterSubject || filterTeacher || filterGroup || filterStatus || filterGradeLevel) && (
           <button
             onClick={() => { setSearchTerm(''); setFilterSubject(''); setFilterTeacher(''); setFilterGroup(''); setFilterStatus(''); setFilterGradeLevel(''); }}
@@ -321,11 +335,12 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
               <th className="px-4 py-3">Group</th>
               <th className="px-4 py-3">Grade Level</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Created</th>
               {isAdmin && <th className="px-4 py-3 text-right">Actions</th>}
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((row) => (
+            {paginatedRows.map((row) => (
               <tr key={row.id} className="border-b border-gray-100 last:border-b-0">
                 <td className="px-4 py-3">{row.studentName}</td>
                 <td className="px-4 py-3">{row.teacherName}</td>
@@ -343,6 +358,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
                     <span className={`capitalize text-sm font-medium border rounded-full px-2 py-1 ${statusClass(row.status)}`}>{row.status}</span>
                   )}
                 </td>
+                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{new Date(row.createdAt).toLocaleDateString()}</td>
                 {isAdmin && (
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => remove(row.id)} className="inline-flex items-center gap-1 text-rose-600 hover:text-rose-700 text-sm">
@@ -353,15 +369,16 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
                 )}
               </tr>
             ))}
-            {filteredRows.length === 0 && (
+            {paginatedRows.length === 0 && (
               <tr>
-                <td className="px-4 py-8 text-center text-gray-500" colSpan={isAdmin ? 7 : 6}>
+                <td className="px-4 py-8 text-center text-gray-500" colSpan={isAdmin ? 8 : 7}>
                   No enrollment records found.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        <TablePagination page={page} pageSize={pageSize} total={filteredRows.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
       </div>
       {statusTarget && <DropDetailsModal title={`Drop ${statusTarget.studentName} from ${statusTarget.subject}?`} form={dropForm} setForm={setDropForm} onCancel={() => setStatusTarget(null)} onSave={() => { if (!dropForm.reason.trim()) { toast.error('A reason is required.'); return; } void updateStatus(statusTarget.id, 'dropped', dropForm); }} />}
     </div>
