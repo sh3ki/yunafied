@@ -10,8 +10,14 @@ interface EnrollmentRecordsProps {
   onEditUser?: (id: string, input: any) => Promise<void>;
   onDeleteUser?: (id: string) => Promise<void>;
   onUploadProfileImage?: (file: File) => Promise<{ secureUrl: string; publicId: string }>;
+  onChangeUserStatus?: (id: string, input: { status: any; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => Promise<void>;
 }
-export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, onUploadProfileImage }: EnrollmentRecordsProps) {
+
+function DropDetailsModal({ title, form, setForm, onCancel, onSave }: { title: string; form: { reason: string; dropDate: string; actionTaken: string; pullOutReason: string; notes: string }; setForm: React.Dispatch<React.SetStateAction<typeof form>>; onCancel: () => void; onSave: () => void }) {
+  const field = (key: keyof typeof form, label: string, required = false) => <label className="block text-sm text-gray-700"><span className="font-medium">{label}{required && <span className="text-red-500"> *</span>}</span>{key === 'dropDate' ? <input type="date" value={form[key]} onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))} className="mt-1 w-full border rounded-lg px-3 py-2" /> : <textarea value={form[key]} onChange={(e) => setForm((p) => ({ ...p, [key]: e.target.value }))} className="mt-1 w-full border rounded-lg px-3 py-2 resize-none" rows={key === 'reason' ? 2 : 3} />}</label>;
+  return <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-5"><div className="flex justify-between items-start gap-4 mb-4"><div><h2 className="text-lg font-bold text-gray-800">{title}</h2><p className="text-sm text-gray-500 mt-1">Record the reason and action taken for this status change.</p></div><button onClick={onCancel} className="text-gray-400 hover:text-gray-700"><X /></button></div><div className="space-y-3">{field('reason', 'Reason for dropping', true)}{field('dropDate', 'Date of drop', true)}{field('actionTaken', 'Action taken')}{field('pullOutReason', 'Pull-out reason')}{field('notes', 'Other relevant notes')}</div><div className="flex justify-end gap-2 mt-5"><button onClick={onCancel} className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100">Cancel</button><button onClick={onSave} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white">Save Dropped Status</button></div></div></div>;
+}
+export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, onUploadProfileImage, onChangeUserStatus }: EnrollmentRecordsProps) {
   const isAdmin = role === 'admin';
   const [rows, setRows] = useState<EnrollmentRecordItem[]>([]);
   const [users, setUsers] = useState<AuthUser[]>([]);
@@ -39,6 +45,8 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   const [filterGroup, setFilterGroup] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterGradeLevel, setFilterGradeLevel] = useState('');
+  const [statusTarget, setStatusTarget] = useState<EnrollmentRecordItem | null>(null);
+  const [dropForm, setDropForm] = useState({ reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' });
 
   const students = useMemo(() => users.filter((u) => u.role === 'student' && u.status === 'active'), [users]);
   const teachers = useMemo(() => users.filter((u) => u.role === 'teacher' && u.status === 'active'), [users]);
@@ -108,14 +116,23 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
     finally { setSaving(false); }
   };
 
-  const updateStatus = async (id: string, status: EnrollmentStatus) => {
+  const updateStatus = async (id: string, status: EnrollmentStatus, details?: typeof dropForm) => {
     try {
-      const updated = await apiClient.updateEnrollment(id, { status });
+      const updated = await apiClient.updateEnrollment(id, { status, ...(status === 'dropped' && details ? { dropReason: details.reason, dropDate: details.dropDate, actionTaken: details.actionTaken, pullOutReason: details.pullOutReason, statusNotes: details.notes } : {}) });
       setRows((prev) => prev.map((row) => (row.id === id ? updated : row)));
+      setStatusTarget(null);
+      toast.success('Enrollment status updated.');
     } catch (error: any) {
       toast.error(error.message || 'Failed to update enrollment status.');
     }
   };
+
+  const requestStatus = (row: EnrollmentRecordItem, status: EnrollmentStatus) => {
+    if (status === 'dropped') { setDropForm({ reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' }); setStatusTarget(row); return; }
+    void updateStatus(row.id, status);
+  };
+
+  const statusClass = (value: EnrollmentStatus) => value === 'active' ? 'bg-blue-50 text-blue-700 border-blue-200' : value === 'completed' ? 'bg-green-50 text-green-700 border-green-200' : value === 'dropped' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200';
 
   const remove = async (id: string) => {
     try {
@@ -212,7 +229,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
 
       {isAdmin && (
         <>
-        {activeTab === 'users' && onEditUser && onDeleteUser && onUploadProfileImage && <UsersView users={users} onAddUser={onAddUser || (async () => undefined)} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUploadProfileImage={onUploadProfileImage} />}
+        {activeTab === 'users' && onEditUser && onDeleteUser && onUploadProfileImage && <UsersView users={users} onAddUser={onAddUser || (async () => undefined)} onEditUser={onEditUser} onDeleteUser={onDeleteUser} onUploadProfileImage={onUploadProfileImage} onChangeUserStatus={onChangeUserStatus} />}
         {isAccountModalOpen && <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsAccountModalOpen(false); }}>
         <div className="bg-white border border-indigo-100 rounded-2xl shadow-xl p-5 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <div className="flex items-start justify-between gap-4 mb-4"><div><h2 className="font-bold text-lg text-gray-800">Enroll New User</h2><p className="text-sm text-gray-500">Create a Student or Teacher account. A secure verification link will be emailed to them.</p></div><button onClick={() => setIsAccountModalOpen(false)} className="text-gray-400 hover:text-gray-700" aria-label="Close"><X className="h-5 w-5" /></button></div>
@@ -317,13 +334,13 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
                 <td className="px-4 py-3">{(row as any).gradeLevel || '-'}</td>
                 <td className="px-4 py-3">
                   {isAdmin ? (
-                    <select value={row.status} onChange={(e) => updateStatus(row.id, e.target.value as EnrollmentStatus)} className="border rounded px-2 py-1 text-sm">
+                    <select value={row.status} onChange={(e) => requestStatus(row, e.target.value as EnrollmentStatus)} className={`border rounded px-2 py-1 text-sm font-medium ${statusClass(row.status)}`}>
                       <option value="active">Active</option>
                       <option value="completed">Completed</option>
                       <option value="dropped">Dropped</option>
                     </select>
                   ) : (
-                    <span className="capitalize text-sm font-medium">{row.status}</span>
+                    <span className={`capitalize text-sm font-medium border rounded-full px-2 py-1 ${statusClass(row.status)}`}>{row.status}</span>
                   )}
                 </td>
                 {isAdmin && (
@@ -346,6 +363,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
           </tbody>
         </table>
       </div>
+      {statusTarget && <DropDetailsModal title={`Drop ${statusTarget.studentName} from ${statusTarget.subject}?`} form={dropForm} setForm={setDropForm} onCancel={() => setStatusTarget(null)} onSave={() => { if (!dropForm.reason.trim()) { toast.error('A reason is required.'); return; } void updateStatus(statusTarget.id, 'dropped', dropForm); }} />}
     </div>
   );
 }
