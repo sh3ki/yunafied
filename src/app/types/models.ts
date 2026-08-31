@@ -1,6 +1,6 @@
 export type UserRole = "admin" | "teacher" | "student";
 export type UserStatus = "active" | "inactive" | "pending" | "archived" | "completed" | "dropped";
-export type ScheduleStatus = "pending" | "accepted" | "declined" | "cancelled";
+export type ScheduleStatus = "scheduled" | "cancelled" | "pending" | "accepted" | "declined";
 export type EnrollmentStatus = "active" | "completed" | "dropped" | "archived";
 export type ChatType = "direct" | "group";
 export type MeetingRoomStatus = "calling" | "active" | "declined" | "ended";
@@ -51,6 +51,7 @@ export interface ScheduleItem {
   teacherName: string;
   studentId: string | null;
   studentName: string | null;
+  enrollmentId?: string | null;
   status: ScheduleStatus;
   requestNote: string | null;
   responseNote: string | null;
