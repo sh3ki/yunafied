@@ -346,6 +346,7 @@ class YunafiedApiClient {
     endTime: string;
     teacherId?: string;
     studentId?: string | null;
+    enrollmentId?: string;
     requestNote?: string;
   }): Promise<ScheduleItem> {
     return this.request<ScheduleItem>("/api/schedules", {
