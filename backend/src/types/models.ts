@@ -36,6 +36,7 @@ export interface AuthUser {
   profileImageUrl: string | null;
   profileImagePublicId: string | null;
   createdAt: string;
+  specializations?: string[];
 }
 
 export interface ScheduleItem {
