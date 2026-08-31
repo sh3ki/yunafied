@@ -21,8 +21,12 @@ function AvailabilityEditor({ blocks, setBlocks }: { blocks: { dayOfWeek: number
   const add = () => setBlocks((items) => [...items, { dayOfWeek: 1, startTime: '09:00', endTime: '10:00' }]);
   return <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3 md:col-span-2 lg:col-span-3"><div className="flex items-center justify-between"><div><p className="font-semibold text-gray-700">Weekly Availability</p><p className="text-xs text-gray-500">Choose any days and time ranges.</p></div><button type="button" onClick={add} className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white">Add day/time</button></div><div className="mt-2 space-y-2">{blocks.map((block, index) => <div key={`${block.dayOfWeek}-${index}`} className="flex flex-wrap gap-2"><select value={block.dayOfWeek} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, dayOfWeek: Number(e.target.value) } : item))} className="rounded-lg border px-2 py-2 text-sm">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, value) => <option key={day} value={value}>{day}</option>)}</select><input type="time" value={block.startTime} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, startTime: e.target.value } : item))} className="rounded-lg border px-2 py-2 text-sm" /><span className="self-center text-gray-400">to</span><input type="time" value={block.endTime} onChange={(e) => setBlocks((items) => items.map((item, i) => i === index ? { ...item, endTime: e.target.value } : item))} className="rounded-lg border px-2 py-2 text-sm" /><button type="button" onClick={() => setBlocks((items) => items.filter((_, i) => i !== index))} className="px-2 text-sm text-red-500">Remove</button></div>)}</div></div>;
 }
-function EditAssignmentModal({ target, form, setForm, teachers, students, saving, onCancel, onSave }: { target: EnrollmentRecordItem; form: { studentId: string; teacherId: string; subject: string; tutorialGroup: string; gradeLevel: string; note: string; status: EnrollmentStatus }; setForm: React.Dispatch<React.SetStateAction<typeof form>>; teachers: AuthUser[]; students: AuthUser[]; saving: boolean; onCancel: () => void; onSave: () => void }) {
-  return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-start justify-between"><div><h2 className="text-lg font-bold text-gray-800">Edit Class/Tutorial Assignment</h2><p className="text-sm text-gray-500">Update the assignment record for {target.studentName}.</p></div><button onClick={onCancel}><X /></button></div><div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2"><select value={form.studentId} onChange={(e) => setForm((p) => ({ ...p, studentId: e.target.value }))} className="rounded-lg border px-3 py-2">{students.map((student) => <option key={student.id} value={student.id}>{student.fullName}</option>)}</select><select value={form.teacherId} onChange={(e) => setForm((p) => ({ ...p, teacherId: e.target.value }))} className="rounded-lg border px-3 py-2">{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}</select><input value={form.subject} onChange={(e) => setForm((p) => ({ ...p, subject: e.target.value }))} placeholder="Subject" className="rounded-lg border px-3 py-2" /><input value={form.tutorialGroup} onChange={(e) => setForm((p) => ({ ...p, tutorialGroup: e.target.value }))} placeholder="Tutorial group" className="rounded-lg border px-3 py-2" /><input value={form.gradeLevel} onChange={(e) => setForm((p) => ({ ...p, gradeLevel: e.target.value }))} placeholder="Grade level" className="rounded-lg border px-3 py-2" /><select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as EnrollmentStatus }))} className="rounded-lg border px-3 py-2"><option value="active">Active</option><option value="completed">Completed</option><option value="dropped">Dropped</option><option value="archived">Archived</option></select><textarea value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} placeholder="Note" className="rounded-lg border px-3 py-2 md:col-span-2" /></div><div className="mt-5 flex justify-end gap-2"><button onClick={onCancel} className="rounded-lg px-4 py-2 text-gray-600">Cancel</button><button disabled={saving} onClick={onSave} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:opacity-50">Save Changes</button></div></div></div>;
+function ClassScheduleEditor({ slots, setSlots }: { slots: { dayOfWeek: number; startTime: string; endTime: string }[]; setSlots: React.Dispatch<React.SetStateAction<{ dayOfWeek: number; startTime: string; endTime: string }[]>> }) {
+  const add = () => setSlots((items) => [...items, { dayOfWeek: 1, startTime: '09:00', endTime: '10:00' }]);
+  return <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 md:col-span-2"><div className="flex items-center justify-between"><div><p className="font-semibold text-gray-700">Class Schedule</p><p className="text-xs text-gray-500">Add one or more recurring class time slots.</p></div><button type="button" onClick={add} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white">Add schedule slot</button></div><div className="mt-3 space-y-2">{slots.map((slot, index) => <div key={`${slot.dayOfWeek}-${index}`} className="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-2"><select value={slot.dayOfWeek} onChange={(e) => setSlots((items) => items.map((item, i) => i === index ? { ...item, dayOfWeek: Number(e.target.value) } : item))} className="rounded-lg border px-2 py-2 text-sm">{['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, value) => <option key={day} value={value}>{day}</option>)}</select><input type="time" value={slot.startTime} onChange={(e) => setSlots((items) => items.map((item, i) => i === index ? { ...item, startTime: e.target.value } : item))} className="rounded-lg border px-2 py-2 text-sm" /><span className="text-gray-400">to</span><div className="flex gap-2"><input type="time" value={slot.endTime} onChange={(e) => setSlots((items) => items.map((item, i) => i === index ? { ...item, endTime: e.target.value } : item))} className="w-full rounded-lg border px-2 py-2 text-sm" /><button type="button" onClick={() => setSlots((items) => items.filter((_, i) => i !== index))} className="px-1 text-sm text-red-500">Remove</button></div></div>)}</div></div>;
+}
+function EditAssignmentModal({ target, form, setForm, teachers, students, saving, onCancel, onSave }: { target: EnrollmentRecordItem; form: { studentId: string; teacherId: string; subject: string; tutorialGroup: string; gradeLevel: string; note: string; status: EnrollmentStatus; classSchedule: { dayOfWeek: number; startTime: string; endTime: string }[] }; setForm: React.Dispatch<React.SetStateAction<typeof form>>; teachers: AuthUser[]; students: AuthUser[]; saving: boolean; onCancel: () => void; onSave: () => void }) {
+  return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-2xl rounded-2xl bg-white p-5 shadow-xl"><div className="flex items-start justify-between"><div><h2 className="text-lg font-bold text-gray-800">Edit Class/Tutorial Assignment</h2><p className="text-sm text-gray-500">Update the assignment record for {target.studentName}.</p></div><button onClick={onCancel}><X /></button></div><div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2"><select value={form.studentId} onChange={(e) => setForm((p) => ({ ...p, studentId: e.target.value }))} className="rounded-lg border px-3 py-2">{students.map((student) => <option key={student.id} value={student.id}>{student.fullName}</option>)}</select><select value={form.teacherId} onChange={(e) => setForm((p) => ({ ...p, teacherId: e.target.value }))} className="rounded-lg border px-3 py-2">{teachers.map((teacher) => <option key={teacher.id} value={teacher.id}>{teacher.fullName}</option>)}</select><input value={form.subject} onChange={(e) => setForm((p) => ({ ...p, subject: e.target.value }))} placeholder="Subject" className="rounded-lg border px-3 py-2" /><input value={form.tutorialGroup} onChange={(e) => setForm((p) => ({ ...p, tutorialGroup: e.target.value }))} placeholder="Tutorial group" className="rounded-lg border px-3 py-2" /><input value={form.gradeLevel} onChange={(e) => setForm((p) => ({ ...p, gradeLevel: e.target.value }))} placeholder="Grade level" className="rounded-lg border px-3 py-2" /><select value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value as EnrollmentStatus }))} className="rounded-lg border px-3 py-2"><option value="active">Active</option><option value="completed">Completed</option><option value="dropped">Dropped</option><option value="archived">Archived</option></select><textarea value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} placeholder="Note" className="rounded-lg border px-3 py-2 md:col-span-2" /><ClassScheduleEditor slots={form.classSchedule} setSlots={(value) => setForm((p) => ({ ...p, classSchedule: typeof value === 'function' ? value(p.classSchedule) : value }))} /></div><div className="mt-5 flex justify-end gap-2"><button onClick={onCancel} className="rounded-lg px-4 py-2 text-gray-600">Cancel</button><button disabled={saving} onClick={onSave} className="rounded-lg bg-indigo-600 px-4 py-2 text-white disabled:opacity-50">Save Changes</button></div></div></div>;
 }
 export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, onUploadProfileImage, onChangeUserStatus }: EnrollmentRecordsProps) {
   const isAdmin = role === 'admin';
@@ -34,9 +38,9 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
   const [addAssignment, setAddAssignment] = useState(false);
   const [activeTab, setActiveTab] = useState<'users' | 'assignments'>('users');
-  const [accountForm, setAccountForm] = useState({ firstName: '', middleName: '', lastName: '', email: '', role: 'student' as 'student' | 'teacher', studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', mobileNumber: '', professionalTitle: '', employmentStatus: '', education: '', certifications: '', yearsExperience: '', specializations: '', availability: [] as { dayOfWeek: number; startTime: string; endTime: string }[] });
+  const [accountForm, setAccountForm] = useState({ firstName: '', middleName: '', lastName: '', email: '', role: 'student' as 'student' | 'teacher', studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', mobileNumber: '', professionalTitle: '', employmentStatus: '', education: '', certifications: '', yearsExperience: '', specializations: '', availability: [] as { dayOfWeek: number; startTime: string; endTime: string }[], classSchedule: [] as { dayOfWeek: number; startTime: string; endTime: string }[] });
   const [form, setForm] = useState({
-    studentIds: [] as string[],
+    studentId: '',
     teacherId: '',
     subject: '',
     tutorialGroup: '',
@@ -44,7 +48,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
     note: '',
     status: 'active' as EnrollmentStatus,
   });
-  const [availability, setAvailability] = useState<{ dayOfWeek: number; startTime: string; endTime: string }[]>([]);
+  const [classSchedule, setClassSchedule] = useState<{ dayOfWeek: number; startTime: string; endTime: string }[]>([]);
 
   // Filters
   const [filterSubject, setFilterSubject] = useState('');
@@ -60,7 +64,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   const [statusTarget, setStatusTarget] = useState<EnrollmentRecordItem | null>(null);
   const [dropForm, setDropForm] = useState({ reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' });
   const [editingAssignment, setEditingAssignment] = useState<EnrollmentRecordItem | null>(null);
-  const [editForm, setEditForm] = useState({ studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', status: 'active' as EnrollmentStatus });
+  const [editForm, setEditForm] = useState({ studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', status: 'active' as EnrollmentStatus, classSchedule: [] as { dayOfWeek: number; startTime: string; endTime: string }[] });
 
   const students = useMemo(() => users.filter((u) => u.role === 'student' && u.status === 'active'), [users]);
   const teachers = useMemo(() => users.filter((u) => u.role === 'teacher' && u.status === 'active'), [users]);
@@ -86,17 +90,16 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   }, [isAdmin]);
 
   const createEnrollment = async () => {
-    if (!form.studentIds.length || !form.teacherId || !form.subject.trim()) {
+    if (!form.studentId || !form.teacherId || !form.subject.trim()) {
       toast.error('Student, teacher, and subject are required.');
       return;
     }
 
     try {
       setSaving(true);
-      const created = await Promise.all(form.studentIds.map((studentId) => apiClient.createEnrollment({ studentId, teacherId: form.teacherId, subject: form.subject.trim(), tutorialGroup: form.tutorialGroup.trim() || undefined, gradeLevel: form.gradeLevel.trim() || undefined, note: form.note.trim() || undefined, status: form.status })));
-      if (availability.length) await Promise.all(availability.map((block) => apiClient.createTeacherAvailability({ ...block, teacherId: form.teacherId })));
-      setRows((prev) => [...created, ...prev]);
-      setForm({ studentIds: [], teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', status: 'active' }); setAvailability([]);
+      const created = await apiClient.createEnrollment({ studentId: form.studentId, teacherId: form.teacherId, subject: form.subject.trim(), tutorialGroup: form.tutorialGroup.trim() || undefined, gradeLevel: form.gradeLevel.trim() || undefined, note: form.note.trim() || undefined, status: form.status, classSchedule });
+      setRows((prev) => [created, ...prev]);
+      setForm({ studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', status: 'active' }); setClassSchedule([]);
       setIsAssignmentModalOpen(false);
       toast.success('Enrollment record created.');
     } catch (error: any) {
@@ -113,9 +116,9 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
     if (hasAssignment && (missingCounterpart || !accountForm.subject.trim())) { toast.error('Complete the class/tutorial assignment fields or leave them blank.'); return; }
     try {
       setSaving(true);
-      await apiClient.enrollAccount({ ...accountForm, middleName: accountForm.middleName || undefined, studentId: addAssignment ? accountForm.studentId || undefined : undefined, teacherId: addAssignment ? accountForm.teacherId || undefined : undefined, subject: addAssignment ? accountForm.subject || undefined : undefined, tutorialGroup: addAssignment ? accountForm.tutorialGroup || undefined : undefined, gradeLevel: addAssignment ? accountForm.gradeLevel || undefined : undefined, note: addAssignment ? accountForm.note || undefined : undefined, yearsExperience: accountForm.yearsExperience ? Number(accountForm.yearsExperience) : undefined, specializations: accountForm.specializations.split(',').map((item) => item.trim()).filter(Boolean), availability: accountForm.role === 'teacher' ? accountForm.availability : undefined });
+      await apiClient.enrollAccount({ ...accountForm, middleName: accountForm.middleName || undefined, studentId: addAssignment ? accountForm.studentId || undefined : undefined, teacherId: addAssignment ? accountForm.teacherId || undefined : undefined, subject: addAssignment ? accountForm.subject || undefined : undefined, tutorialGroup: addAssignment ? accountForm.tutorialGroup || undefined : undefined, gradeLevel: addAssignment ? accountForm.gradeLevel || undefined : undefined, note: addAssignment ? accountForm.note || undefined : undefined, yearsExperience: accountForm.yearsExperience ? Number(accountForm.yearsExperience) : undefined, specializations: accountForm.specializations.split(',').map((item) => item.trim()).filter(Boolean), availability: accountForm.role === 'teacher' ? accountForm.availability : undefined, classSchedule: addAssignment ? accountForm.classSchedule : undefined });
       toast.success('Account enrolled. Verification link sent.');
-      setAccountForm({ firstName: '', middleName: '', lastName: '', email: '', role: 'student', studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', mobileNumber: '', professionalTitle: '', employmentStatus: '', education: '', certifications: '', yearsExperience: '', specializations: '', availability: [] });
+      setAccountForm({ firstName: '', middleName: '', lastName: '', email: '', role: 'student', studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', mobileNumber: '', professionalTitle: '', employmentStatus: '', education: '', certifications: '', yearsExperience: '', specializations: '', availability: [], classSchedule: [] });
       setAddAssignment(false);
       setIsAccountModalOpen(false);
       await load();
@@ -150,7 +153,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
       toast.error(error.message || 'Failed to remove enrollment record.');
     }
   };
-  const openAssignmentEdit = (row: EnrollmentRecordItem) => { setEditingAssignment(row); setEditForm({ studentId: row.studentId, teacherId: row.teacherId, subject: row.subject, tutorialGroup: row.tutorialGroup || '', gradeLevel: row.gradeLevel || '', note: row.note || '', status: row.status }); };
+  const openAssignmentEdit = (row: EnrollmentRecordItem) => { setEditingAssignment(row); setEditForm({ studentId: row.studentId, teacherId: row.teacherId, subject: row.subject, tutorialGroup: row.tutorialGroup || '', gradeLevel: row.gradeLevel || '', note: row.note || '', status: row.status, classSchedule: row.classSchedule || [] }); };
   const saveAssignmentEdit = async () => { if (!editingAssignment || !editForm.subject.trim()) { toast.error('Subject is required.'); return; } try { setSaving(true); const updated = await apiClient.updateEnrollment(editingAssignment.id, editForm); setRows((prev) => prev.map((row) => row.id === updated.id ? updated : row)); setEditingAssignment(null); toast.success('Class/tutorial assignment updated.'); } catch (error: any) { toast.error(error.message || 'Failed to update assignment.'); } finally { setSaving(false); } };
 
   // Stat counts
@@ -180,7 +183,8 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   const gradeLevelOptions = Array.from(new Set(rows.map((row) => row.gradeLevel || '').filter(Boolean))).sort();
   useEffect(() => { setPage(1); }, [searchTerm, filterSubject, filterTeacher, filterGroup, filterStatus, filterGradeLevel, dateFrom, dateTo]);
   const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
-  const printEnrollments = () => printTableReport({ title: 'Enrollment Records', subtitle: `Filters: ${filterStatus || 'All statuses'} · ${filterTeacher || 'All teachers'} · ${filterSubject || 'All subjects'} · ${dateFrom || 'Any date'} to ${dateTo || 'Any date'} · ${searchTerm || 'No search'}`, columns: ['Student', 'Teacher', 'Subject', 'Group', 'Grade Level', 'Status', 'Created'], rows: filteredRows.map((r) => [r.studentName, r.teacherName, r.subject, r.tutorialGroup || '—', r.gradeLevel || '—', r.status, new Date(r.createdAt).toLocaleString()]) });
+  const scheduleLabel = (r: EnrollmentRecordItem) => (r.classSchedule || []).map((slot) => `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][slot.dayOfWeek]} ${slot.startTime.slice(0, 5)}-${slot.endTime.slice(0, 5)}`).join(', ') || '—';
+  const printEnrollments = () => printTableReport({ title: 'Enrollment Records', subtitle: `Filters: ${filterStatus || 'All statuses'} · ${filterTeacher || 'All teachers'} · ${filterSubject || 'All subjects'} · ${dateFrom || 'Any date'} to ${dateTo || 'Any date'} · ${searchTerm || 'No search'}`, columns: ['Student', 'Teacher', 'Subject', 'Group', 'Grade Level', 'Class Schedule', 'Status', 'Created'], rows: filteredRows.map((r) => [r.studentName, r.teacherName, r.subject, r.tutorialGroup || '—', r.gradeLevel || '—', scheduleLabel(r), r.status, new Date(r.createdAt).toLocaleString()]) });
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -269,16 +273,17 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
               <input value={accountForm.gradeLevel} onChange={(e) => setAccountForm((p) => ({ ...p, gradeLevel: e.target.value }))} placeholder="Grade level (optional)" className="border rounded-lg px-3 py-2" />
               <textarea value={accountForm.note} onChange={(e) => setAccountForm((p) => ({ ...p, note: e.target.value }))} placeholder="Note (optional)" className="border rounded-lg px-3 py-2 resize-none" />
             </div>
+            <ClassScheduleEditor slots={accountForm.classSchedule} setSlots={(value) => setAccountForm((p) => ({ ...p, classSchedule: typeof value === 'function' ? value(p.classSchedule) : value }))} />
           </div>}
           <div className="mt-4 flex justify-end gap-2"><button onClick={() => setIsAccountModalOpen(false)} className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100">Cancel</button><button onClick={enrollAccount} disabled={saving} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg px-4 py-2 disabled:opacity-60">Enroll Account &amp; Send Verification</button></div>
         </div>
         </div>}
         {isAssignmentModalOpen && <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsAssignmentModalOpen(false); }}>
         <div className="bg-white border border-gray-100 rounded-2xl shadow-xl p-5 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-4"><div><h2 className="text-lg font-bold text-gray-800">Assign Students to Class</h2><p className="text-sm text-gray-500">Connect a student to a teacher, subject, and tutorial group.</p></div><button onClick={() => setIsAssignmentModalOpen(false)} className="text-gray-400 hover:text-gray-700" aria-label="Close"><X className="h-5 w-5" /></button></div>
+          <div className="flex items-center justify-between mb-4"><div><h2 className="text-lg font-bold text-gray-800">Assign Student to Class</h2><p className="text-sm text-gray-500">Connect one student to one teacher, subject, and class schedule.</p></div><button onClick={() => setIsAssignmentModalOpen(false)} className="text-gray-400 hover:text-gray-700" aria-label="Close"><X className="h-5 w-5" /></button></div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <select multiple value={form.studentIds} onChange={(e) => setForm((p) => ({ ...p, studentIds: Array.from(e.target.selectedOptions, (option) => option.value) }))} className="min-h-24 border rounded-lg px-3 py-2">
-            <option value="" disabled>Select students (Ctrl/Cmd-click for multiple)</option>
+          <select value={form.studentId} onChange={(e) => setForm((p) => ({ ...p, studentId: e.target.value }))} className="border rounded-lg px-3 py-2">
+            <option value="">Select student</option>
             {students.map((user) => (
               <option key={user.id} value={user.id}>{user.fullName}</option>
             ))}
@@ -291,7 +296,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
             ))}
           </select>
 
-          <AvailabilityEditor blocks={availability} setBlocks={setAvailability} />
+          <ClassScheduleEditor slots={classSchedule} setSlots={setClassSchedule} />
 
           <input
             value={form.subject}
@@ -327,7 +332,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
             className="md:col-span-2 lg:col-span-3 border rounded-lg px-3 py-2 h-20 resize-none"
           />
           </div>
-          <div className="flex justify-end gap-2 mt-4"><button onClick={() => setIsAssignmentModalOpen(false)} className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100">Cancel</button><button onClick={createEnrollment} disabled={saving} className="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 inline-flex items-center justify-center gap-2 disabled:opacity-60"><Plus className="h-4 w-4" />Assign Students to Class</button></div>
+          <div className="flex justify-end gap-2 mt-4"><button onClick={() => setIsAssignmentModalOpen(false)} className="px-4 py-2 rounded-lg text-gray-600 hover:bg-gray-100">Cancel</button><button onClick={createEnrollment} disabled={saving} className="bg-violet-600 hover:bg-violet-700 text-white rounded-lg px-4 py-2 inline-flex items-center justify-center gap-2 disabled:opacity-60"><Plus className="h-4 w-4" />Assign Student to Class</button></div>
         </div>
         </div>}
         </>
@@ -342,6 +347,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
               <th className="px-4 py-3">Subject</th>
               <th className="px-4 py-3">Group</th>
               <th className="px-4 py-3">Grade Level</th>
+              <th className="px-4 py-3">Class Schedule</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Created</th>
               {isAdmin && <th className="px-4 py-3 text-right">Actions</th>}
@@ -355,6 +361,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
                 <td className="px-4 py-3">{row.subject}</td>
                 <td className="px-4 py-3">{row.tutorialGroup || '-'}</td>
                 <td className="px-4 py-3">{(row as any).gradeLevel || '-'}</td>
+                <td className="px-4 py-3 text-sm">{scheduleLabel(row)}</td>
                 <td className="px-4 py-3">
                   {isAdmin ? (
                     <select value={row.status} onChange={(e) => requestStatus(row, e.target.value as EnrollmentStatus)} className={`border rounded px-2 py-1 text-sm font-medium ${statusClass(row.status)}`}>
@@ -382,7 +389,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
             ))}
             {paginatedRows.length === 0 && (
               <tr>
-                <td className="px-4 py-8 text-center text-gray-500" colSpan={isAdmin ? 8 : 7}>
+                <td className="px-4 py-8 text-center text-gray-500" colSpan={isAdmin ? 9 : 8}>
                   No enrollment records found.
                 </td>
               </tr>
