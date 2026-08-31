@@ -3376,10 +3376,30 @@ const adminAnalyticsQuerySchema = z.object({
   status: z.string().optional(),
 });
 
+function materiallyDifferent(previous: unknown, current: unknown): boolean {
+  if (!Array.isArray(previous) || !Array.isArray(current) || previous.length !== current.length) return true;
+  const oldRows = previous as Array<Record<string, unknown>>;
+  const newRows = current as Array<Record<string, unknown>>;
+  for (let index = 0; index < newRows.length; index += 1) {
+    const oldRow = oldRows[index];
+    const newRow = newRows[index];
+    if (!oldRow || !newRow || Object.keys(oldRow).some((key) => typeof oldRow[key] !== 'number' && oldRow[key] !== newRow[key])) return true;
+    for (const key of Object.keys(newRow)) {
+      if (typeof newRow[key] === 'number') {
+        const oldValue = Number(oldRow[key] || 0);
+        const newValue = Number(newRow[key] || 0);
+        if (Math.abs(newValue - oldValue) > Math.max(3, Math.abs(oldValue) * 0.2)) return true;
+      }
+    }
+  }
+  return false;
+}
+
 app.get("/api/admin/analytics", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const filters = adminAnalyticsQuerySchema.parse(req.query);
     const analytics = await service.getFilteredAdminAnalytics(filters);
+    const performanceGraphs = await service.getAdminPerformanceGraphs();
     const snapshot = { ...analytics, interpretation: undefined, interpretationGeneratedAt: undefined };
     const graphInputs: Record<string, unknown> = {
       enrollmentTrends: analytics.enrollmentTrends || analytics.monthlySessionCounts,
@@ -3387,8 +3407,17 @@ app.get("/api/admin/analytics", requireAuth, requireRole("admin"), async (req: A
       monthlySessions: analytics.monthlySessionCounts,
       teacherActivity: analytics.teacherActivity,
       studentProgress: analytics.studentProgress || analytics.topStudents,
+      performanceAnalytics: [
+        { metric: "submissions", value: analytics.totalSubmissions },
+        { metric: "sessions", value: analytics.totalSessions },
+        { metric: "students", value: analytics.totalStudents },
+      ],
+      ...performanceGraphs,
+      performanceGradeDistribution: analytics.gradeDistribution,
+      performanceStudentProgress: analytics.studentProgress || analytics.topStudents,
     };
     const interpretations: Record<string, { text: string; generatedAt: string | null }> = {};
+    const missing: Record<string, unknown> = {};
     for (const [graphKey, graphData] of Object.entries(graphInputs)) {
       if (!Array.isArray(graphData) || graphData.length === 0) {
         interpretations[graphKey] = { text: "No data is available for this period.", generatedAt: null };
@@ -3397,18 +3426,33 @@ app.get("/api/admin/analytics", requireAuth, requireRole("admin"), async (req: A
       const fingerprint = createHash("sha256").update(JSON.stringify({ graphKey, filters, graphData })).digest("hex");
       let saved = await service.getAdminDashboardInterpretation(fingerprint);
       if (!saved) {
-        const interpretation = await requestGroqChat({
-          messages: [
-            { role: "system", content: "You interpret one Admin dashboard graph for YUNAfied. Return only 1 or 2 short sentences based strictly on the supplied graph data. Mention the most important trend, comparison, or action. Never invent facts, headings, bullets, or percentages not present in the data." },
-            { role: "user", content: JSON.stringify({ graph: graphKey, filters, data: graphData }) },
-          ],
-          temperature: 0.2,
-          maxTokens: 90,
-          reasoningEffort: "low",
-        });
-        saved = await service.saveAdminDashboardInterpretation({ fingerprint, filters, snapshot: { graphKey, graphData }, interpretation });
+        const latest = await service.getLatestAdminDashboardInterpretation(graphKey);
+        const previousData = latest && typeof latest.snapshot === 'object' && latest.snapshot !== null ? (latest.snapshot as { graphData?: unknown }).graphData : null;
+        if (latest && !materiallyDifferent(previousData, graphData)) {
+          saved = await service.saveAdminDashboardInterpretation({ fingerprint, filters, snapshot: { graphKey, graphData }, interpretation: latest.interpretation });
+        } else {
+          missing[graphKey] = graphData;
+        }
       }
-      interpretations[graphKey] = { text: saved.interpretation, generatedAt: saved.createdAt };
+      if (saved) interpretations[graphKey] = { text: saved.interpretation, generatedAt: saved.createdAt };
+    }
+    if (Object.keys(missing).length > 0) {
+      const answer = await requestGroqChat({
+        messages: [
+          { role: "system", content: "You interpret multiple Admin dashboard graphs for YUNAfied. Return valid JSON only, with exactly one property for each graph key. Each value must be only 1 or 2 short sentences based strictly on that graph's data. Mention the most important trend, comparison, or action. Never invent facts, headings, bullets, or unsupported percentages." },
+          { role: "user", content: JSON.stringify({ filters, graphs: missing }) },
+        ],
+        temperature: 0.2,
+        maxTokens: 360,
+        reasoningEffort: "low",
+      });
+      const generated = parseFirstJsonObject(answer) as Record<string, unknown>;
+      for (const [graphKey, graphData] of Object.entries(missing)) {
+        const text = typeof generated?.[graphKey] === 'string' ? generated[graphKey] as string : "The graph shows the current distribution of the available data.";
+        const fingerprint = createHash("sha256").update(JSON.stringify({ graphKey, filters, graphData })).digest("hex");
+        const saved = await service.saveAdminDashboardInterpretation({ fingerprint, filters, snapshot: { graphKey, graphData }, interpretation: text });
+        interpretations[graphKey] = { text: saved.interpretation, generatedAt: saved.createdAt };
+      }
     }
     res.json({ ...analytics, interpretation: undefined, interpretationGeneratedAt: undefined, interpretations, filters });
   } catch (error) { next(error); }
