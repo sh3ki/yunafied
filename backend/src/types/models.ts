@@ -1,7 +1,7 @@
 export type UserRole = "admin" | "teacher" | "student";
-export type UserStatus = "active" | "inactive";
+export type UserStatus = "active" | "inactive" | "pending" | "archived";
 export type ScheduleStatus = "pending" | "accepted" | "declined" | "cancelled";
-export type EnrollmentStatus = "active" | "completed" | "dropped";
+export type EnrollmentStatus = "active" | "completed" | "dropped" | "archived";
 export type ChatType = "direct" | "group";
 export type MeetingRoomStatus = "calling" | "active" | "declined" | "ended";
 
@@ -142,6 +142,7 @@ export interface EnrollmentRecordItem {
   teacherName: string;
   subject: string;
   tutorialGroup: string | null;
+  gradeLevel: string | null;
   status: EnrollmentStatus;
   note: string | null;
   createdById: string;
