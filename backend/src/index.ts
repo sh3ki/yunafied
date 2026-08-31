@@ -1591,6 +1591,14 @@ app.post("/api/users", requireAuth, requireRole("admin"), async (req, res, next)
   }
 });
 
+app.get("/api/student-records", requireAuth, requireRole("admin", "teacher"), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    res.json(await service.listStudentRecords({ id: req.auth?.sub || "", role: req.auth?.role || "teacher" }));
+  } catch (error) {
+    next(error);
+  }
+});
+
 const updateUserSchema = z.object({
   email: z.string().email(),
   firstName: z.string().min(2),
