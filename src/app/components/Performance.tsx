@@ -4,6 +4,7 @@ import {
   PieChart, Pie, Cell, Legend, LineChart, Line,
 } from 'recharts';
 import { AssignmentItem, AuthUser, ScheduleItem, SubmissionItem } from '@/app/types/models';
+import { PrintButton, TableFilter, TablePagination, TableSearch, printTableReport, DEFAULT_TABLE_PAGE_SIZE } from './ui/table-tools';
 
 interface PerformanceProps {
   submissions: SubmissionItem[];
@@ -42,6 +43,10 @@ function gradeCategory(grade: string | null): string {
 
 export function Performance({ submissions, assignments = [], users = [], schedules = [], role, userId, showHeader = true, title, subtitle, interpretations = {} }: PerformanceProps) {
   const [selectedStudentId, setSelectedStudentId] = useState<string>('all');
+  const [tableSearch, setTableSearch] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('');
+  const [tablePage, setTablePage] = useState(1);
+  const [tablePageSize, setTablePageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
 
   const students = useMemo(() => users.filter((u) => u.role === 'student'), [users]);
 
@@ -118,6 +123,13 @@ export function Performance({ submissions, assignments = [], users = [], schedul
     }),
     [students, mySubmissions, myAssignments]
   );
+  const visibleStudentSummary = useMemo(() => studentSummary.filter((student) => {
+    const query = tableSearch.trim().toLowerCase();
+    return (!query || student.name.toLowerCase().includes(query)) && (!gradeFilter || student.best === gradeFilter) && (selectedStudentId === 'all' || student.id === selectedStudentId);
+  }), [studentSummary, tableSearch, gradeFilter, selectedStudentId]);
+  const paginatedStudentSummary = visibleStudentSummary.slice((tablePage - 1) * tablePageSize, tablePage * tablePageSize);
+  const printPerformance = () => printTableReport({ title: 'Student Progress', subtitle: `Filters: ${selectedStudentId === 'all' ? 'All students' : students.find((student) => student.id === selectedStudentId)?.fullName || ''} · ${gradeFilter || 'All grades'} · ${tableSearch || 'No search'}`, columns: ['Student', 'Submitted', 'Graded', 'Total Assignments', 'Avg Score', 'Best Grade'], rows: visibleStudentSummary.map((s) => [s.name, s.submitted, s.graded, s.total, s.avg, s.best]) });
+  React.useEffect(() => { setTablePage(1); }, [tableSearch, gradeFilter, selectedStudentId]);
 
   // Schedule stats
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -258,16 +270,9 @@ export function Performance({ submissions, assignments = [], users = [], schedul
       {/* Student Leaderboard Table */}
       {studentSummary.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden print:hidden">
-          <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div className="p-5 border-b border-gray-100 flex flex-wrap gap-2 items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700">Student Progress</h3>
-            <select
-              className="text-xs border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none"
-              value={selectedStudentId}
-              onChange={(e) => setSelectedStudentId(e.target.value)}
-            >
-              <option value="all">All Students</option>
-              {students.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}
-            </select>
+            <div className="flex flex-wrap gap-2 items-center"><TableSearch value={tableSearch} onChange={setTableSearch} placeholder="Search students..." /><TableFilter label="Students" value={selectedStudentId === 'all' ? '' : selectedStudentId} options={students.map((s) => ({ value: s.id, label: s.fullName }))} onChange={(value) => setSelectedStudentId(value || 'all')} /><TableFilter label="Best grades" value={gradeFilter} options={studentSummary.map((s) => s.best)} onChange={setGradeFilter} /><PrintButton onClick={printPerformance} /></div>
           </div>
           <div className="overflow-x-auto max-h-64 overflow-y-auto">
             <table className="w-full text-sm">
@@ -279,7 +284,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {(selectedStudentId === 'all' ? studentSummary : studentSummary.filter((s) => s.id === selectedStudentId)).map((s) => (
+                {paginatedStudentSummary.map((s) => (
                   <tr key={s.id} className="hover:bg-gray-50 transition">
                     <td className="px-4 py-3 font-medium text-gray-800">{s.name}</td>
                     <td className="px-4 py-3 text-gray-600">{s.submitted}</td>
@@ -299,6 +304,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
               </tbody>
             </table>
           </div>
+          <TablePagination page={tablePage} pageSize={tablePageSize} total={visibleStudentSummary.length} onPageChange={setTablePage} onPageSizeChange={(size) => { setTablePageSize(size); setTablePage(1); }} />
         </div>
       )}
     </div>
