@@ -143,7 +143,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
       )}
 
       {/* Top stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 print:hidden">
         {[
           { label: 'Total Submissions', value: mySubmissions.length, color: 'text-indigo-600', bg: 'bg-indigo-50' },
           { label: 'Graded', value: graded.length, color: 'text-emerald-600', bg: 'bg-emerald-50' },
@@ -257,7 +257,7 @@ export function Performance({ submissions, assignments = [], users = [], schedul
 
       {/* Student Leaderboard Table */}
       {studentSummary.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden print:hidden">
           <div className="p-5 border-b border-gray-100 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-700">Student Progress</h3>
             <select
