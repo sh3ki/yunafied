@@ -22,6 +22,9 @@ import {
   ScheduleItem,
   ScheduleStatus,
   SubmissionItem,
+  StudentRecordItem,
+  StudentRecordAssignment,
+  StudentRecordGamifiedAttempt,
   TranslationHistoryItem,
   UserRole,
   UserStatus,
@@ -1270,6 +1273,126 @@ export class YunafiedService {
 
     const result = await pool.query(`${baseSql} WHERE e.student_id = $1 ORDER BY e.updated_at DESC`, [requester.id]);
     return result.rows as EnrollmentRecordItem[];
+  }
+
+  async listStudentRecords(requester: { id: string; role: UserRole }): Promise<StudentRecordItem[]> {
+    const studentFilter = requester.role === "admin"
+      ? "u.role = 'student'"
+      : "u.role = 'student' AND EXISTS (SELECT 1 FROM enrollment_records er_scope WHERE er_scope.student_id = u.id AND er_scope.teacher_id = $1)";
+    const studentParams = requester.role === "admin" ? [] : [requester.id];
+    const studentsResult = await pool.query(
+      `SELECT u.id,
+              u.first_name AS "firstName",
+              u.middle_name AS "middleName",
+              u.last_name AS "lastName",
+              u.full_name AS "fullName",
+              u.role,
+              u.status,
+              u.profile_image_url AS "profileImageUrl",
+              u.created_at AS "createdAt"
+         FROM users u
+        WHERE ${studentFilter}
+        ORDER BY u.full_name ASC`,
+      studentParams,
+    );
+    const students = studentsResult.rows as StudentRecordItem["student"][];
+    if (students.length === 0) return [];
+
+    const studentIds = students.map((student) => student.id);
+    const [enrollments, schedulesResult, assignmentsResult, submissionsResult, attemptsResult, meetingsResult] = await Promise.all([
+      this.listEnrollmentRecords(requester),
+      pool.query(
+        `SELECT s.id, s.title, s.description,
+                to_char(s.scheduled_date, 'YYYY-MM-DD') AS date,
+                trim(to_char(s.scheduled_date, 'FMDay')) AS day,
+                to_char(s.start_time, 'HH24:MI') AS "startTime",
+                to_char(s.end_time, 'HH24:MI') AS "endTime",
+                s.teacher_id AS "teacherId", t.full_name AS "teacherName",
+                s.student_id AS "studentId", st.full_name AS "studentName",
+                s.status, s.request_note AS "requestNote", s.response_note AS "responseNote",
+                s.updated_at AS "updatedAt", s.created_at AS "createdAt"
+           FROM schedules s
+           JOIN users t ON t.id = s.teacher_id
+      LEFT JOIN users st ON st.id = s.student_id
+          WHERE s.student_id = ANY($1::uuid[])
+          ORDER BY s.scheduled_date DESC, s.start_time DESC`,
+        [studentIds],
+      ),
+      pool.query(
+        `SELECT a.id, a.title, a.description,
+                to_char(a.due_at, 'YYYY-MM-DD') AS "dueDate",
+                a.teacher_id AS "teacherId", t.full_name AS "teacherName",
+                a.created_at AS "createdAt",
+                a.attachment_file_name AS "attachmentFileName", a.attachment_url AS "attachmentUrl",
+                a.rubric_file_name AS "rubricFileName", a.rubric_url AS "rubricUrl",
+                COALESCE(a.is_closed, false) AS "isClosed"
+           FROM assignments a
+           JOIN users t ON t.id = a.teacher_id
+          WHERE a.teacher_id IN (SELECT DISTINCT er.teacher_id FROM enrollment_records er WHERE er.student_id = ANY($1::uuid[]))
+             OR EXISTS (SELECT 1 FROM submissions sx WHERE sx.assignment_id = a.id AND sx.student_id = ANY($1::uuid[]))
+          ORDER BY a.created_at DESC`,
+        [studentIds],
+      ),
+      pool.query(
+        `SELECT s.id, s.assignment_id AS "assignmentId", a.title AS "assignmentTitle",
+                s.student_id AS "studentId", u.full_name AS "studentName",
+                s.file_name AS "fileName", s.content_url AS "fileUrl", s.content_text AS "contentText",
+                s.grade_value AS grade, s.feedback, s.submitted_at AS "submittedAt", s.graded_at AS "gradedAt"
+           FROM submissions s
+           JOIN assignments a ON a.id = s.assignment_id
+           JOIN users u ON u.id = s.student_id
+          WHERE s.student_id = ANY($1::uuid[])
+          ORDER BY s.submitted_at DESC`,
+        [studentIds],
+      ),
+      pool.query(
+        `SELECT a.id, a.quiz_id AS "quizId", q.title AS "quizTitle", c.name AS "categoryName",
+                a.total_questions AS "totalQuestions", a.correct_answers AS "correctAnswers",
+                a.total_score AS "totalScore", a.completed_at AS "completedAt"
+           FROM gamified_attempts a
+           JOIN gamified_quizzes q ON q.id = a.quiz_id
+           JOIN gamified_categories c ON c.id = a.category_id
+          WHERE a.student_id = ANY($1::uuid[])
+          ORDER BY a.completed_at DESC`,
+        [studentIds],
+      ),
+      pool.query(
+        `SELECT ch.id, ch.room_token AS "roomToken", ch.teacher_id AS "teacherId",
+                t.full_name AS "teacherName", ch.student_id AS "studentId", st.full_name AS "studentName",
+                COALESCE(ch.started_at, ch.created_at) AS "startedAt", ch.ended_at AS "endedAt",
+                ch.duration_seconds AS "durationSeconds", ch.ended_by AS "endedBy"
+           FROM call_history ch
+           JOIN users t ON t.id = ch.teacher_id
+      LEFT JOIN users st ON st.id = ch.student_id
+          WHERE ch.student_id = ANY($1::uuid[])
+          ORDER BY COALESCE(ch.started_at, ch.created_at) DESC`,
+        [studentIds],
+      ),
+    ]);
+
+    const enrollmentRows = enrollments;
+    const schedules = schedulesResult.rows as import("../types/models.js").ScheduleItem[];
+    const assignments = assignmentsResult.rows as AssignmentItem[];
+    const submissions = submissionsResult.rows as SubmissionItem[];
+    const attempts = attemptsResult.rows as StudentRecordGamifiedAttempt[];
+    const meetings = meetingsResult.rows as import("../types/models.js").CallHistoryItem[];
+    const submissionByAssignmentStudent = new Map(submissions.map((submission) => [`${submission.studentId}:${submission.assignmentId}`, submission]));
+
+    return students.map((student) => {
+      const studentEnrollments = enrollmentRows.filter((row) => row.studentId === student.id);
+      const teacherIds = new Set(studentEnrollments.map((row) => row.teacherId));
+      const studentAssignments: StudentRecordAssignment[] = assignments
+        .filter((assignment) => teacherIds.has(assignment.teacherId) || submissions.some((submission) => submission.studentId === student.id && submission.assignmentId === assignment.id))
+        .map((assignment) => ({ assignment, submission: submissionByAssignmentStudent.get(`${student.id}:${assignment.id}`) || null }));
+      return {
+        student,
+        enrollments: studentEnrollments,
+        schedules: schedules.filter((schedule) => schedule.studentId === student.id),
+        assignments: studentAssignments,
+        gamifiedAttempts: attempts.filter((attempt) => attempt.studentId === student.id),
+        meetingHistory: meetings.filter((meeting) => meeting.studentId === student.id),
+      };
+    });
   }
 
   async createEnrollmentRecord(input: {
