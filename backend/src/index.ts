@@ -3368,10 +3368,49 @@ app.get("/api/admin/meeting-history", requireAuth, requireRole("admin"), async (
   } catch (error) { next(error); }
 });
 
-app.get("/api/admin/analytics", requireAuth, requireRole("admin"), async (_req: Request, res: Response, next: NextFunction) => {
+const adminAnalyticsQuerySchema = z.object({
+  dateFrom: z.string().date().optional(),
+  dateTo: z.string().date().optional(),
+  academicYear: z.string().regex(/^\d{4}$/).optional(),
+  classFilter: z.string().optional(),
+  status: z.string().optional(),
+});
+
+app.get("/api/admin/analytics", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const analytics = await service.getAdminAnalytics();
-    res.json(analytics);
+    const filters = adminAnalyticsQuerySchema.parse(req.query);
+    const analytics = await service.getFilteredAdminAnalytics(filters);
+    const snapshot = { ...analytics, interpretation: undefined, interpretationGeneratedAt: undefined };
+    const graphInputs: Record<string, unknown> = {
+      enrollmentTrends: analytics.enrollmentTrends || analytics.monthlySessionCounts,
+      gradeDistribution: analytics.gradeDistribution,
+      monthlySessions: analytics.monthlySessionCounts,
+      teacherActivity: analytics.teacherActivity,
+      studentProgress: analytics.studentProgress || analytics.topStudents,
+    };
+    const interpretations: Record<string, { text: string; generatedAt: string | null }> = {};
+    for (const [graphKey, graphData] of Object.entries(graphInputs)) {
+      if (!Array.isArray(graphData) || graphData.length === 0) {
+        interpretations[graphKey] = { text: "No data is available for this period.", generatedAt: null };
+        continue;
+      }
+      const fingerprint = createHash("sha256").update(JSON.stringify({ graphKey, filters, graphData })).digest("hex");
+      let saved = await service.getAdminDashboardInterpretation(fingerprint);
+      if (!saved) {
+        const interpretation = await requestGroqChat({
+          messages: [
+            { role: "system", content: "You interpret one Admin dashboard graph for YUNAfied. Return only 1 or 2 short sentences based strictly on the supplied graph data. Mention the most important trend, comparison, or action. Never invent facts, headings, bullets, or percentages not present in the data." },
+            { role: "user", content: JSON.stringify({ graph: graphKey, filters, data: graphData }) },
+          ],
+          temperature: 0.2,
+          maxTokens: 90,
+          reasoningEffort: "low",
+        });
+        saved = await service.saveAdminDashboardInterpretation({ fingerprint, filters, snapshot: { graphKey, graphData }, interpretation });
+      }
+      interpretations[graphKey] = { text: saved.interpretation, generatedAt: saved.createdAt };
+    }
+    res.json({ ...analytics, interpretation: undefined, interpretationGeneratedAt: undefined, interpretations, filters });
   } catch (error) { next(error); }
 });
 
