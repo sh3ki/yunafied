@@ -38,6 +38,11 @@ interface SidebarProps {
   };
 }
 
+function getInitials(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  return `${parts[0]?.charAt(0) || ''}${parts.length > 1 ? parts[parts.length - 1].charAt(0) : ''}`.toUpperCase() || '?';
+}
+
 export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, user, chatUnreadTotal = 0, schedulePendingCount = 0, assignmentPendingCount = 0, meetingsTodayCount = 0, notificationUnreadCount = 0, gradingPendingCount = 0 }: SidebarProps) {
   const [showLogoutConfirm, setShowLogoutConfirm] = React.useState(false);
 
@@ -59,7 +64,6 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
     { id: 'chats', label: 'Chats', icon: MessageCircle, roles: ['admin', 'teacher', 'student'] },
     { id: 'announcements', label: 'Announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student'] },
     { id: 'notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'teacher', 'student'] },
-    { id: 'users', label: 'Users', icon: Users, roles: ['admin'] },
     { id: 'audit-logs', label: 'Audit Logs', icon: ShieldCheck, roles: ['admin'] },
     { id: 'meeting-history', label: 'Meeting History', icon: Video, roles: ['admin'] },
     { id: 'profile', label: 'Profile Settings', icon: UserRound, roles: ['admin', 'teacher', 'student'] },
@@ -75,11 +79,7 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
       <div className="p-6 border-b border-slate-800">
         <SystemLogo compact showText imageClassName="ring-1 ring-white/10 shadow-lg shadow-violet-900/20" textClassName="text-white" />
         <div className="mt-4 p-3 rounded-xl bg-slate-800/70 border border-slate-700 flex items-center gap-3">
-          <img
-            src={user.profileImageUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || 'User')}&background=ede9fe&color=5b21b6`}
-            alt="Profile"
-            className="h-10 w-10 rounded-full object-cover border border-violet-300/30"
-          />
+          {user.profileImageUrl ? <><img src={user.profileImageUrl} alt="Profile" onError={(event) => { event.currentTarget.style.display = 'none'; event.currentTarget.nextElementSibling?.classList.remove('hidden'); }} className="h-10 w-10 rounded-full object-cover border border-violet-300/30" /><span className="hidden h-10 w-10 rounded-full border border-violet-300/30 bg-violet-500/20 text-violet-200 flex items-center justify-center text-sm font-bold">{getInitials(user.fullName)}</span></> : <span className="h-10 w-10 rounded-full border border-violet-300/30 bg-violet-500/20 text-violet-200 flex items-center justify-center text-sm font-bold">{getInitials(user.fullName)}</span>}
           <div className="min-w-0">
             <p className="text-sm text-white font-semibold truncate">{user.fullName}</p>
             <p className="text-xs text-slate-400 truncate">{user.email || userEmail}</p>
