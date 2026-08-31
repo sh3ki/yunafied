@@ -1,5 +1,5 @@
 export type UserRole = "admin" | "teacher" | "student";
-export type UserStatus = "active" | "inactive" | "pending" | "archived";
+export type UserStatus = "active" | "inactive" | "pending" | "archived" | "completed" | "dropped";
 export type ScheduleStatus = "pending" | "accepted" | "declined" | "cancelled";
 export type EnrollmentStatus = "active" | "completed" | "dropped" | "archived";
 export type ChatType = "direct" | "group";
@@ -148,6 +148,26 @@ export interface EnrollmentRecordItem {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  dropReason?: string | null;
+  dropDate?: string | null;
+  actionTaken?: string | null;
+  pullOutReason?: string | null;
+  statusNotes?: string | null;
+}
+
+export interface StatusChangeHistoryItem {
+  id: string;
+  entityType: "user" | "enrollment";
+  entityId: string;
+  previousStatus: string | null;
+  newStatus: string;
+  reason: string | null;
+  dropDate: string | null;
+  actionTaken: string | null;
+  pullOutReason: string | null;
+  notes: string | null;
+  changedById: string | null;
+  createdAt: string;
 }
 
 export interface LearningMaterialItem {
@@ -437,4 +457,5 @@ export interface StudentRecordItem {
   assignments: StudentRecordAssignment[];
   gamifiedAttempts: StudentRecordGamifiedAttempt[];
   meetingHistory: CallHistoryItem[];
+  statusHistory: StatusChangeHistoryItem[];
 }
