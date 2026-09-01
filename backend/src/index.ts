@@ -837,6 +837,15 @@ const updateProfileSchema = z
     profileImagePublicId: z.string().nullable().optional(),
     currentPassword: z.string().min(1).optional(),
     newPassword: z.string().min(6).optional(),
+    mobileNumber: z.string().max(40).nullable().optional(),
+    professionalTitle: z.string().max(160).nullable().optional(),
+    employmentStatus: z.string().max(80).nullable().optional(),
+    education: z.string().max(500).nullable().optional(),
+    certifications: z.string().max(1000).nullable().optional(),
+    yearsExperience: z.coerce.number().int().min(0).max(80).nullable().optional(),
+    specializations: z.array(z.string().min(1).max(120)).optional(),
+    notes: z.string().max(2000).nullable().optional(),
+    availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.newPassword && !value.currentPassword) {
@@ -1070,6 +1079,14 @@ app.get("/api/auth/me", requireAuth, async (req: AuthenticatedRequest, res: Resp
   }
 });
 
+app.get("/api/profile/details", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    res.json({ user: await service.getProfileDetails(userId) });
+  } catch (error) { next(error); }
+});
+
 app.patch("/api/profile", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const userId = req.auth?.sub;
@@ -1113,6 +1130,7 @@ app.patch("/api/profile", requireAuth, async (req: AuthenticatedRequest, res: Re
       lastName: payload.lastName,
       role: currentUser.role,
       status: currentUser.status,
+      mobileNumber: payload.mobileNumber,
       profileImageUrl:
         payload.profileImageUrl === undefined ? currentUser.profile_image_url : payload.profileImageUrl,
       profileImagePublicId:
@@ -1125,6 +1143,11 @@ app.patch("/api/profile", requireAuth, async (req: AuthenticatedRequest, res: Re
     if (!updated) {
       res.status(404).json({ message: "User not found." });
       return;
+    }
+
+    if (currentUser.role === "teacher") {
+      await service.upsertTeacherRecord(userId, payload);
+      if (payload.availability) await service.replaceTeacherAvailability(userId, payload.availability);
     }
 
     res.json({ user: updated });
@@ -1660,6 +1683,7 @@ app.put("/api/users/:id", requireAuth, requireRole("admin"), async (req: Authent
     if (payload.status === "dropped" && existing.status !== "dropped") {
       res.status(400).json({ message: "Use the Change Status action to mark a student as dropped and provide the required details." }); return;
     }
+
     if (existing.role === "admin" && (payload.role !== "admin" || payload.status === "archived")) {
       res.status(400).json({ message: "The designated Admin account cannot be demoted or archived." }); return;
     }
