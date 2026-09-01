@@ -80,7 +80,7 @@ export function Notifications({ onNavigate }: NotificationsProps) {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="alerts-header flex items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
             <Bell className="h-7 w-7 text-violet-600" />
