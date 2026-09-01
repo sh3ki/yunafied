@@ -13,6 +13,7 @@ import {
   UserRound,
   Video,
   ClipboardList
+  ,ClipboardCheck
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -29,6 +30,7 @@ export function BottomNav({ role, currentView, onNavigate, chatUnreadTotal = 0 }
     { id: 'schedule', label: 'Schedule', icon: Calendar, roles: ['admin', 'teacher', 'student'] },
     { id: 'meetings', label: 'Meetings', icon: Video, roles: ['teacher'] },
     { id: 'assignments', label: 'Tasks', icon: BookOpen, roles: ['teacher', 'student'] },
+    { id: 'assessments', label: 'Assessments', icon: ClipboardCheck, roles: ['admin', 'teacher', 'student'] },
     { id: 'announcements', label: 'Announcements', icon: Megaphone, roles: ['admin', 'teacher', 'student'] },
     { id: 'chats', label: 'Chats', icon: MessageCircle, roles: ['admin', 'teacher', 'student'] },
     { id: 'notifications', label: 'Alerts', icon: Bell, roles: ['admin', 'teacher', 'student'] },
