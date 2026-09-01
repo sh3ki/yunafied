@@ -85,6 +85,8 @@ interface AuthenticatedShellProps {
     profileImageUrl?: string | null;
     profileImagePublicId?: string | null;
     password: string;
+    mobileNumber?: string;
+    birthdate?: string;
   }) => Promise<void>;
   onEditUser: (
     id: string,
@@ -98,6 +100,8 @@ interface AuthenticatedShellProps {
       profileImageUrl?: string | null;
       profileImagePublicId?: string | null;
       password?: string;
+      mobileNumber?: string;
+      birthdate?: string;
     },
   ) => Promise<void>;
   onChangeUserStatus: (id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => Promise<void>;
