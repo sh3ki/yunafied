@@ -38,6 +38,7 @@ export interface AuthUser {
   profileImagePublicId: string | null;
   createdAt: string;
   mobileNumber?: string | null;
+  birthdate?: string | null;
   specializations?: string[];
   professionalTitle?: string | null;
   employmentStatus?: string | null;
