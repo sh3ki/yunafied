@@ -54,16 +54,16 @@ export function AIGuide({ onAsk }: AIGuideProps) {
   };
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="p-6 border-b border-gray-100 flex items-center gap-4 bg-gradient-to-r from-violet-50 to-indigo-50">
+    <div className="ai-guide-container h-full flex flex-col bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="ai-guide-header p-6 border-b border-gray-100 flex items-center gap-4 bg-gradient-to-r from-violet-50 to-indigo-50">
         <div className="bg-white p-3 rounded-full shadow-sm">
           <Bot className="h-8 w-8 text-violet-600" />
         </div>
-        <div>
+        <div className="ai-guide-title">
           <h2 className="text-xl font-bold text-gray-800">AI English Guide</h2>
           <p className="text-sm text-gray-500">Get guided, step-by-step English learning support.</p>
         </div>
-        <div className="ml-auto">
+        <div className="ai-guide-subject ml-auto">
           <select
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
@@ -80,7 +80,7 @@ export function AIGuide({ onAsk }: AIGuideProps) {
         </div>
       </div>
 
-      <div className="flex-1 p-6 overflow-y-auto space-y-6 bg-gray-50/30">
+      <div className="ai-guide-messages flex-1 p-6 overflow-y-auto space-y-6 bg-gray-50/30">
         {messages.map((message, index) => {
           const isUser = message.role === 'user';
           return (
