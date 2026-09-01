@@ -1,3 +1,15 @@
+# Build the Vite app in the same image as the API.  The API serves the SPA from
+# backend/public, so the frontend assets must be present in the runtime image.
+FROM node:20-bullseye-slim AS frontend-build
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps --silent
+COPY index.html vite.config.ts postcss.config.mjs .env.production ./
+COPY src ./src
+COPY public ./public
+RUN npm run build:frontend
+
 FROM node:20-bullseye-slim
 
 # Install system packages: Python3, pip, ffmpeg and build tools needed by some Python packages
@@ -25,6 +37,9 @@ RUN npm install --legacy-peer-deps --production=false --silent
 # Copy backend source and build
 COPY backend/ .
 RUN npm run build
+
+# Replace the source-only backend/public directory with the compiled Vite app.
+COPY --from=frontend-build /app/dist ./public
 
 # Install Python requirements for transcription helper
 COPY backend/python/requirements.txt /tmp/requirements.txt
