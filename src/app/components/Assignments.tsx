@@ -606,7 +606,7 @@ export function Assignments({
                         : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                     }`}
                   >
-                    All Students
+                    {role === 'teacher' ? 'All Assigned Students' : 'All Students'}
                   </button>
                   <button
                     type="button"
@@ -641,7 +641,7 @@ export function Assignments({
                           .map((s) => ({ ...s, ...fuzzyMatch(s.name, studentSearch) }))
                           .filter((s) => s.match);
                         if (filtered.length === 0) {
-                          return <div className="text-center text-gray-400 text-sm py-4">No students found</div>;
+                          return <div className="text-center text-gray-400 text-sm py-4">{students.length ? 'No students found' : 'No students are assigned to you.'}</div>;
                         }
                         return filtered.map((student) => {
                           const checked = selectedStudentIds.includes(student.id);
