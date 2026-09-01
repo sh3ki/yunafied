@@ -81,6 +81,7 @@ export interface AccountEnrollmentPayload {
   profileImageUrl?: string | null;
   profileImagePublicId?: string | null;
   mobileNumber?: string;
+  birthdate?: string;
   professionalTitle?: string;
   employmentStatus?: string;
   education?: string;
@@ -119,6 +120,8 @@ interface UpdateProfilePayload {
   currentPassword?: string;
   newPassword?: string;
   mobileNumber?: string | null;
+  birthdate?: string | null;
+  birthdate?: string | null;
   professionalTitle?: string | null;
   employmentStatus?: string | null;
   education?: string | null;
