@@ -129,6 +129,15 @@ def download_youtube_audio(video_url: str, output_dir: str) -> str:
             "ignoreerrors": False,
             "noplaylist": True,
         }
+        if js_runtimes:
+            # YouTube increasingly requires its JavaScript challenge solver.
+            # Configure this for the Python API as well as the CLI fallback.
+            ydl_opts["js_runtimes"] = {
+                runtime.strip(): {}
+                for runtime in js_runtimes.split(",")
+                if runtime.strip()
+            }
+            ydl_opts["remote_components"] = ["ejs:github"]
         if cookies_path:
             ydl_opts["cookiefile"] = cookies_path
         if proxy:
