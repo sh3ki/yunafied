@@ -38,6 +38,7 @@ import { AuditLogs } from '@/app/components/AuditLogs';
 import { MeetingHistory } from '@/app/components/MeetingHistory';
 import { Analytics } from '@/app/components/Analytics';
 import { TeacherDashboard } from '@/app/components/TeacherDashboard';
+import { Assessments } from '@/app/components/Assessments';
 import { apiClient } from '@/app/services/apiClient';
 import {
   AnnouncementItem,
@@ -181,8 +182,8 @@ interface AuthenticatedShellProps {
 const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
 const roleViews: Record<UserRole, string[]> = {
-  admin: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'enrollments', 'teacher-records', 'student-records', 'materials', 'gamified-learning', 'grades', 'audit-logs', 'meeting-history', 'profile'],
-  teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'grades', 'materials', 'enrollments', 'student-records', 'gamified-learning', 'video-summarizer', 'profile'],
+  admin: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'enrollments', 'teacher-records', 'student-records', 'materials', 'gamified-learning', 'assessments', 'grades', 'audit-logs', 'meeting-history', 'profile'],
+  teacher: ['dashboard', 'schedule', 'meetings', 'announcements', 'chats', 'notifications', 'assignments', 'assessments', 'grades', 'materials', 'enrollments', 'student-records', 'gamified-learning', 'video-summarizer', 'profile'],
   student: [
     'dashboard',
     'schedule',
@@ -192,6 +193,7 @@ const roleViews: Record<UserRole, string[]> = {
     'enrollments',
     'materials',
     'assignments',
+    'assessments',
     'grades',
     'gamified-learning',
     'video-summarizer',
@@ -476,6 +478,24 @@ function AuthenticatedShell({
                             </ResponsiveContainer>
                           </div>
                         </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-6">
+                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                            <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold text-gray-700">Latest announcements</h3><button onClick={() => onNavigateView('announcements')} className="text-xs text-violet-600 font-semibold">View all</button></div>
+                            {data.announcements.slice(0, 3).map((item) => <div key={item.id} className="border-b border-gray-100 last:border-0 py-3 first:pt-0"><p className="font-semibold text-gray-800 text-sm truncate">{item.title}</p><p className="text-xs text-gray-500 mt-1 line-clamp-2">{item.content}</p></div>)}
+                            {!data.announcements.length && <p className="text-sm text-gray-400 py-5">No announcements yet.</p>}
+                          </div>
+                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                            <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold text-gray-700">Assigned assessments</h3><button onClick={() => onNavigateView('assessments')} className="text-xs text-violet-600 font-semibold">Open center</button></div>
+                            <div className="rounded-xl bg-violet-50 p-4"><p className="text-3xl font-extrabold text-violet-600">{data.assignments.filter((item) => /assessment|quiz/i.test(item.title)).length}</p><p className="text-sm text-violet-800 mt-1">assessment tasks to complete</p></div>
+                            <p className="text-xs text-gray-500 mt-3">Pre- and post-assessment results are diagnostic and do not affect grades.</p>
+                          </div>
+                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                            <div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold text-gray-700">Upcoming video meetings</h3><button onClick={() => onNavigateView('schedule')} className="text-xs text-violet-600 font-semibold">View schedule</button></div>
+                            {mySchedules.filter((item) => item.status === 'scheduled' || item.status === 'pending').slice(0, 3).map((item) => <div key={item.id} className="flex items-center justify-between gap-3 border-b border-gray-100 last:border-0 py-3 first:pt-0"><div><p className="font-semibold text-gray-800 text-sm truncate">{item.title}</p><p className="text-xs text-gray-500 mt-1">{item.date} · {item.startTime}</p></div><span className="text-[10px] uppercase font-bold text-blue-600">{item.status}</span></div>)}
+                            {!mySchedules.filter((item) => item.status === 'scheduled' || item.status === 'pending').length && <p className="text-sm text-gray-400 py-5">No upcoming meetings.</p>}
+                          </div>
+                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5"><div className="flex items-center justify-between mb-4"><h3 className="text-sm font-semibold text-gray-700">Assignments to finish</h3><button onClick={() => onNavigateView('assignments')} className="text-xs text-violet-600 font-semibold">View tasks</button></div>{data.assignments.filter((item) => !data.submissions.some((submission) => submission.assignmentId === item.id && submission.studentId === session.user.id)).slice(0, 3).map((item) => <div key={item.id} className="border-b border-gray-100 last:border-0 py-3 first:pt-0"><p className="font-semibold text-gray-800 text-sm truncate">{item.title}</p><p className="text-xs text-amber-600 mt-1">Due {item.dueDate}</p></div>)}{!data.assignments.filter((item) => !data.submissions.some((submission) => submission.assignmentId === item.id && submission.studentId === session.user.id)).length && <p className="text-sm text-gray-400 py-5">You are all caught up.</p>}</div>
+                        </div>
                       </>
                     );
                   })()}
@@ -587,6 +607,10 @@ function AuthenticatedShell({
                     backendBaseUrl={backendBaseUrl}
                   />
                 </div>
+              )}
+
+              {currentView === 'assessments' && (
+                <Assessments role={userRole} userId={session.user.id} users={data.users} />
               )}
 
               {currentView === 'grades' && (
