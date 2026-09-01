@@ -163,11 +163,11 @@ export function AIChatbot({ role, currentView }: AIChatbotProps) {
 
       <button
         onClick={() => setIsOpen((v) => !v)}
-        className="fixed bottom-20 md:bottom-8 right-4 bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-lg shadow-indigo-600/30 transition-transform active:scale-90 z-50 flex items-center gap-2 group"
+        className={`${isOpen ? 'hidden md:flex' : 'flex'} fixed bottom-20 md:bottom-8 right-4 bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-lg shadow-indigo-600/30 transition-transform active:scale-90 z-50 items-center group`}
       >
         <SystemLogo compact showText={false} imageClassName="h-6 w-6 rounded-full" />
         <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 ease-out font-medium whitespace-nowrap">
-          YUNA AI
+          <span className="pl-2">YUNA AI</span>
         </span>
       </button>
     </>
