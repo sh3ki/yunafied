@@ -268,7 +268,7 @@ function AuthenticatedShell({
           const nowTime = new Date().toTimeString().slice(0, 5); // "HH:MM"
           return data.schedules.filter(
             (s) =>
-              s.status === 'accepted' &&
+              s.status === 'scheduled' &&
               s.date === todayStr &&
               s.startTime >= nowTime &&
               (userRole === 'teacher' ? s.teacherId === session.user.id : s.studentId === session.user.id),
@@ -321,9 +321,9 @@ function AuthenticatedShell({
                     const totalTeachers = data.users.filter((u) => u.role === 'teacher').length;
                     const activeTeachers = data.users.filter((u) => u.role === 'teacher' && u.status === 'active').length;
                     const inactiveTeachers = totalTeachers - activeTeachers;
-                    const ongoingClasses = data.schedules.filter((s) => s.status === 'accepted' && s.date === today).length;
+                    const ongoingClasses = data.schedules.filter((s) => s.status === 'scheduled' && s.date === today).length;
                     const bookingsToday = data.schedules.filter((s) => s.date === today).length;
-                    const completedClasses = data.schedules.filter((s) => s.status === 'accepted').length;
+                    const completedClasses = data.schedules.filter((s) => s.status === 'scheduled').length;
                     const cancelledClasses = data.schedules.filter((s) => s.status === 'cancelled').length;
 
                     const completedVsCancelledData = [
@@ -399,7 +399,7 @@ function AuthenticatedShell({
                   {/* Student Dashboard */}
                   {userRole === 'student' && (() => {
                     const mySchedules = data.schedules.filter((s) => s.studentId === session.user.id);
-                    const acceptedSessions = mySchedules.filter((s) => s.status === 'accepted').length;
+                    const acceptedSessions = mySchedules.filter((s) => s.status === 'scheduled').length;
                     const pendingSessions = mySchedules.filter((s) => s.status === 'pending').length;
                     const mySubs = data.submissions.filter((s) => s.studentId === session.user.id);
                     const gradedSubs = mySubs.filter((s) => s.grade).length;
@@ -484,10 +484,8 @@ function AuthenticatedShell({
                     role={userRole}
                     userId={session.user.id}
                     onCreate={onCreateSchedule}
-                    onRespond={onRespondSchedule}
                     onMove={onMoveSchedule}
                     onCancel={onCancelSchedule}
-                    onAdminEdit={onAdminEditSchedule}
                     onStartMeeting={onStartMeeting}
                   />
                 </div>
