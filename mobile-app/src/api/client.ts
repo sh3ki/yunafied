@@ -80,17 +80,19 @@ function detectExpoHost(): string | null {
 function resolveApiUrl(): string {
   const rawConfigApiUrl = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
   const configApiUrl = rawConfigApiUrl?.trim();
+  const detectedHost = detectExpoHost();
+
+  // During Expo development, prefer the machine hosting Metro so both
+  // Expo Go and the browser preview reach the local backend consistently.
+  if (detectedHost) {
+    return `http://${detectedHost}:4000`;
+  }
 
   if (configApiUrl && configApiUrl.toLowerCase() !== 'auto') {
     return configApiUrl;
   }
 
-  const detectedHost = detectExpoHost();
-  if (detectedHost) {
-    return `http://${detectedHost}:4000`;
-  }
-
-  return 'http://localhost:4000';
+  return 'https://www.yunafied.online';
 }
 
 const API_URL = resolveApiUrl();
