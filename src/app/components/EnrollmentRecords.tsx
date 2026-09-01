@@ -204,7 +204,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between gap-3 mb-6">
+      <div className="enrollment-header flex items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
             <Users className="h-7 w-7 text-indigo-600" />
@@ -356,7 +356,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
         </>
       )}
 
-      <div className={`bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden ${isAdmin && activeTab === 'users' ? 'hidden' : ''}`}>
+      <div className={`enrollment-table-scroll bg-white border border-gray-100 rounded-2xl shadow-sm overflow-x-auto ${isAdmin && activeTab === 'users' ? 'hidden' : ''}`}>
         <table className="w-full text-left">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
