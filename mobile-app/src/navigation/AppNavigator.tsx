@@ -30,7 +30,6 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import * as DocumentPicker from 'expo-document-picker';
 import { mobileApiClient } from '../api/client';
-import VideoCallNative from '../screens/VideoCallNative';
 import { useAppContext } from '../context/AppContext';
 import MobileChart from '../components/MobileChart';
 import {
@@ -563,6 +562,7 @@ function LoginScreen() {
 
 function DashboardScreen() {
   const { session, data } = useAppContext();
+  const navigation = useNavigation<any>();
   const user = session!.user;
   const today = new Date().toISOString().slice(0, 10);
   const mySchedules = data.schedules.filter((item) => user.role === 'student' ? item.studentId === user.id : user.role === 'teacher' ? item.teacherId === user.id : true);
@@ -571,6 +571,7 @@ function DashboardScreen() {
   const graded = mySubmissions.filter((item) => Boolean(item.grade));
   const students = data.users.filter((item) => item.role === 'student');
   if (user.role === 'admin') return <AnalyticsScreen />;
+  const go = (screen: string) => navigation.navigate(screen);
   return <Shell title={`Welcome back, ${user.fullName}`} subtitle={`${user.role} Dashboard`}>
     <View style={styles.rowWrap}>
       {user.role === 'student' ? <><Card><Text style={styles.smallTitle}>Accepted Sessions</Text><Text style={styles.bigValue}>{mySchedules.filter((item) => item.status === 'scheduled').length}</Text></Card><Card><Text style={styles.smallTitle}>Pending Requests</Text><Text style={styles.bigValue}>{mySchedules.filter((item) => item.status === 'pending').length}</Text></Card><Card><Text style={styles.smallTitle}>Submitted Work</Text><Text style={styles.bigValue}>{mySubmissions.length}</Text></Card><Card><Text style={styles.smallTitle}>Graded</Text><Text style={styles.bigValue}>{graded.length}</Text></Card></> : <><Card><Text style={styles.smallTitle}>Assigned Students</Text><Text style={styles.bigValue}>{new Set([...mySubmissions.map((item) => item.studentId), ...mySchedules.map((item) => item.studentId).filter(Boolean)]).size}</Text></Card><Card><Text style={styles.smallTitle}>Average Grade</Text><Text style={styles.bigValue}>{graded.length ? `${Math.round(graded.reduce((sum, item) => sum + (Number.parseFloat(item.grade || '') || 0), 0) / graded.length)}%` : '—'}</Text></Card><Card><Text style={styles.smallTitle}>Pending Grading</Text><Text style={styles.bigValue}>{mySubmissions.length - graded.length}</Text></Card><Card><Text style={styles.smallTitle}>Upcoming Meetings</Text><Text style={styles.bigValue}>{mySchedules.filter((item) => item.date >= today && item.status !== 'cancelled' && item.status !== 'declined').length}</Text></Card></>}
@@ -579,6 +580,15 @@ function DashboardScreen() {
     <Card><Text style={styles.sectionTitle}>{user.role === 'teacher' ? 'Upcoming meetings' : 'Schedule requests'}</Text>{mySchedules.filter((item) => user.role === 'teacher' ? item.date >= today && item.status !== 'cancelled' : true).slice(0, 5).map((item) => <View key={item.id} style={styles.listItem}><Text style={styles.listTitle}>{item.title}</Text><Text style={styles.muted}>{item.date} · {item.startTime}–{item.endTime} · {item.status}</Text></View>)}{!mySchedules.length ? <Text style={styles.muted}>No upcoming meetings scheduled.</Text> : null}</Card>
     <Card><Text style={styles.sectionTitle}>Latest announcements</Text>{data.announcements.slice(0, 4).map((item) => <View key={item.id} style={styles.listItem}><Text style={styles.listTitle}>{item.title}</Text><Text style={styles.muted}>{item.content}</Text></View>)}{!data.announcements.length ? <Text style={styles.muted}>No announcements available.</Text> : null}</Card>
     {user.role === 'teacher' ? <Card><Text style={styles.sectionTitle}>Assigned work</Text><Text style={styles.muted}>{assigned.length} assignment{assigned.length === 1 ? '' : 's'} · {students.length} students in system</Text></Card> : <Card><Text style={styles.sectionTitle}>Assignments to finish</Text>{assigned.filter((item) => !mySubmissions.some((submission) => submission.assignmentId === item.id)).slice(0, 4).map((item) => <View key={item.id} style={styles.listItem}><Text style={styles.listTitle}>{item.title}</Text><Text style={styles.muted}>Due {item.dueDate}</Text></View>)}{!assigned.some((item) => !mySubmissions.some((submission) => submission.assignmentId === item.id)) ? <Text style={styles.muted}>You are all caught up.</Text> : null}</Card>}
+    <Card>
+      <Text style={styles.sectionTitle}>Quick actions</Text>
+      <View style={styles.quickActionGrid}>
+        <PillButton label="Scheduling" onPress={() => go('Scheduling')} style={styles.quickActionButton} />
+        <PillButton label="Assignments" onPress={() => go('Assignments')} style={styles.quickActionButton} />
+        <PillButton label="Announcements" onPress={() => go('Announcements')} style={styles.quickActionButton} />
+        <PillButton label="Notifications" onPress={() => go('Notifications')} style={styles.quickActionButton} />
+      </View>
+    </Card>
   </Shell>;
 }
 
@@ -4365,21 +4375,19 @@ function DrawerArea() {
       <Drawer.Screen name="Chats" component={ChatsScreen} />
       <Drawer.Screen name="Announcements" component={AnnouncementsScreen} />
       <Drawer.Screen name="Notifications" component={NotificationsScreen} />
+      <Drawer.Screen name="Enrollments" component={EnrollmentsScreen} />
 
-      {isStudent ? <Drawer.Screen name="Assignments" component={AssignmentsScreen} /> : null}
-      {isStudent ? <Drawer.Screen name="Grades/Feedback" component={GradesScreen} /> : null}
+      {isStudent || role === 'teacher' ? <Drawer.Screen name="Assignments" component={AssignmentsScreen} /> : null}
+      <Drawer.Screen name="Grades/Feedback" component={GradesScreen} />
       {isStudent ? <Drawer.Screen name="AI Guide Bot" component={AIGuideScreen} /> : null}
       {isStudent ? <Drawer.Screen name="Milestones" component={MilestonesScreen} /> : null}
       {isStudent ? <Drawer.Screen name="Video Summarizer" component={VideoSummarizerScreen} /> : null}
       {isStudent ? <Drawer.Screen name="Word Translator" component={WordTranslatorScreen} /> : null}
 
       {isTeacherOrAdmin && role === 'teacher' ? <Drawer.Screen name="Video Meetings" component={MeetingsScreen} /> : null}
-      {isTeacherOrAdmin && role === 'teacher' ? <Drawer.Screen name="Assignments" component={AssignmentsScreen} /> : null}
-      {isTeacherOrAdmin && role === 'teacher' ? <Drawer.Screen name="Grades/Feedback" component={GradesScreen} /> : null}
       {isTeacherOrAdmin && role === 'teacher' ? <Drawer.Screen name="Student Records" component={StudentRecordsScreen} /> : null}
       {isTeacherOrAdmin && role === 'teacher' ? <Drawer.Screen name="Video Summarizer" component={VideoSummarizerScreen} /> : null}
 
-      {isAdmin ? <Drawer.Screen name="Enrollments" component={EnrollmentsScreen} /> : null}
       {isAdmin ? <Drawer.Screen name="Teacher Records" component={TeacherRecordsScreen} /> : null}
       {isAdmin ? <Drawer.Screen name="Student Records" component={StudentRecordsScreen} /> : null}
       {isAdmin ? <Drawer.Screen name="Audit Logs" component={AuditLogsScreen} /> : null}
@@ -4681,7 +4689,17 @@ const styles = StyleSheet.create({
   },
   rowWrap: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
+  },
+  quickActionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  quickActionButton: {
+    flexGrow: 1,
+    minWidth: 132,
   },
   flexGrow: {
     flex: 1,
