@@ -36,7 +36,15 @@ export interface AuthUser {
   profileImageUrl: string | null;
   profileImagePublicId: string | null;
   createdAt: string;
+  mobileNumber?: string | null;
   specializations?: string[];
+  professionalTitle?: string | null;
+  employmentStatus?: string | null;
+  education?: string | null;
+  certifications?: string | null;
+  yearsExperience?: number | null;
+  notes?: string | null;
+  availability?: TeacherAvailabilityItem[];
 }
 
 export interface ScheduleItem {
