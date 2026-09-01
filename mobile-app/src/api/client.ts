@@ -3,6 +3,7 @@ import {
   AnnouncementItem,
   AssignmentItem,
   AuditLogItem,
+  AdminAnalyticsItem,
   AuthUser,
   BootstrapResponse,
   CallHistoryItem,
@@ -21,6 +22,9 @@ import {
   NotificationItem,
   ScheduleItem,
   SubmissionItem,
+  StudentRecordItem,
+  TeacherRecordItem,
+  TeacherAvailabilityItem,
   TranslationHistoryItem,
   UserRole,
   UserStatus,
@@ -196,6 +200,10 @@ class MobileApiClient {
     return data.user;
   }
 
+  getProfileDetails() {
+    return this.request<AuthUser & { professionalTitle?: string | null; employmentStatus?: string | null; education?: string | null; certifications?: string | null; yearsExperience?: number | null; specializations?: string[]; notes?: string | null; availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }> }>('/api/profile/details');
+  }
+
   bootstrap() {
     return this.request<BootstrapResponse>('/api/bootstrap');
   }
@@ -209,6 +217,16 @@ class MobileApiClient {
     profileImagePublicId?: string | null;
     currentPassword?: string;
     newPassword?: string;
+    mobileNumber?: string | null;
+    birthdate?: string | null;
+    professionalTitle?: string | null;
+    employmentStatus?: string | null;
+    education?: string | null;
+    certifications?: string | null;
+    yearsExperience?: number | null;
+    specializations?: string[];
+    notes?: string | null;
+    availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
   }) {
     return this.request<{ user: AuthUser }>('/api/profile', {
       method: 'PATCH',
@@ -218,6 +236,30 @@ class MobileApiClient {
 
   listUsers() {
     return this.request<AuthUser[]>('/api/users');
+  }
+
+  getAdminAnalytics(filters: { dateFrom?: string; dateTo?: string; status?: string } = {}, refresh = false) {
+    const query = Object.entries(filters).filter(([, value]) => Boolean(value)).map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value as string)}`).join('&');
+    const fullQuery = refresh ? `${query ? `${query}&` : ''}refresh=true` : query;
+    return this.request<AdminAnalyticsItem>(`/api/admin/analytics${fullQuery ? `?${fullQuery}` : ''}`);
+  }
+
+  uploadProfileImage(file: { uri: string; name: string; type?: string | null }) {
+    const form = new FormData();
+    form.append('file', { uri: file.uri, name: file.name, type: file.type || 'image/jpeg' } as any);
+    return this.request<{ secureUrl: string; publicId: string }>('/api/uploads/profile-image', { method: 'POST', body: form });
+  }
+
+  listTeacherRecords() {
+    return this.request<TeacherRecordItem[]>('/api/admin/teacher-records');
+  }
+
+  updateTeacherRecord(id: string, payload: Partial<TeacherRecordItem>) {
+    return this.request<void>(`/api/admin/teacher-records/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+  }
+
+  listStudentRecords() {
+    return this.request<StudentRecordItem[]>('/api/student-records');
   }
 
   createUser(input: {
@@ -242,9 +284,11 @@ class MobileApiClient {
       middleName?: string;
       lastName: string;
       email: string;
-      role: UserRole;
-      status: UserStatus;
-      password?: string;
+    role: UserRole;
+    status: UserStatus;
+    mobileNumber?: string | null;
+    birthdate?: string | null;
+    password?: string;
     },
   ) {
     return this.request<AuthUser>(`/api/users/${id}`, {
@@ -255,6 +299,14 @@ class MobileApiClient {
 
   deleteUser(id: string) {
     return this.request<void>(`/api/users/${id}`, { method: 'DELETE' });
+  }
+
+  changeUserStatus(id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) {
+    return this.request<AuthUser>(`/api/users/${id}/status`, { method: 'PATCH', body: JSON.stringify(input) });
+  }
+
+  resendVerification(userId: string) {
+    return this.request<{ message: string }>('/api/auth/resend-verification', { method: 'POST', body: JSON.stringify({ userId }) });
   }
 
   listSchedules() {
@@ -268,7 +320,8 @@ class MobileApiClient {
     startTime: string;
     endTime: string;
     teacherId?: string;
-    studentId?: string | null;
+    studentId: string;
+    enrollmentId: string;
     requestNote?: string;
   }) {
     return this.request<ScheduleItem>('/api/schedules', {
@@ -328,7 +381,7 @@ class MobileApiClient {
       endTime?: string;
       teacherId?: string;
       studentId?: string | null;
-      status?: 'pending' | 'accepted' | 'declined' | 'cancelled';
+      status?: 'scheduled' | 'pending' | 'accepted' | 'declined' | 'cancelled';
       requestNote?: string | null;
       responseNote?: string | null;
     },
@@ -452,8 +505,34 @@ class MobileApiClient {
     return this.request<AssignmentItem[]>('/api/assignments');
   }
 
-  createAssignment(input: { title: string; description: string; dueDate: string }) {
-    return this.request<AssignmentItem>('/api/assignments', {
+  createAssignment(input: { title: string; description: string; dueDate: string; attachmentFile?: { uri: string; name: string; type?: string | null } | null; rubricFile?: { uri: string; name: string; type?: string | null } | null; assignedStudentIds?: string[] }) {
+    const hasFiles = Boolean(input.attachmentFile || input.rubricFile);
+    if (!hasFiles) return this.request<AssignmentItem>('/api/assignments', { method: 'POST', body: JSON.stringify({ title: input.title, description: input.description, dueDate: input.dueDate, assignedStudentIds: input.assignedStudentIds }) });
+    const form = new FormData();
+    form.append('title', input.title); form.append('description', input.description); form.append('dueDate', input.dueDate);
+    if (input.assignedStudentIds?.length) form.append('assignedStudentIds', JSON.stringify(input.assignedStudentIds));
+    if (input.attachmentFile) form.append('attachmentFile', { uri: input.attachmentFile.uri, name: input.attachmentFile.name, type: input.attachmentFile.type || 'application/octet-stream' } as any);
+    if (input.rubricFile) form.append('rubricFile', { uri: input.rubricFile.uri, name: input.rubricFile.name, type: input.rubricFile.type || 'application/octet-stream' } as any);
+    return this.request<AssignmentItem>('/api/assignments', { method: 'POST', body: form });
+  }
+
+  enrollAccount(input: {
+    firstName: string;
+    middleName?: string;
+    lastName: string;
+    email: string;
+    role: 'teacher' | 'student';
+    mobileNumber?: string;
+    birthdate?: string;
+    professionalTitle?: string;
+    employmentStatus?: string;
+    education?: string;
+    certifications?: string;
+    yearsExperience?: number;
+    specializations?: string[];
+    availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
+  }) {
+    return this.request<{ user: AuthUser; message: string }>('/api/enrollments/account', {
       method: 'POST',
       body: JSON.stringify(input),
     });
@@ -463,11 +542,12 @@ class MobileApiClient {
     return this.request<SubmissionItem[]>('/api/submissions');
   }
 
-  submitAssignment(assignmentId: string, input: { contentText?: string }) {
+  submitAssignment(assignmentId: string, input: { contentText?: string; file?: { uri: string; name: string; type?: string | null } | null }) {
     const formData = new FormData();
     if (input.contentText) {
       formData.append('contentText', input.contentText);
     }
+    if (input.file) formData.append('file', { uri: input.file.uri, name: input.file.name, type: input.file.type || 'application/octet-stream' } as any);
 
     return this.request<SubmissionItem>(`/api/assignments/${assignmentId}/submissions`, {
       method: 'POST',
@@ -555,12 +635,28 @@ class MobileApiClient {
     return this.request<NotificationItem[]>(`/api/notifications?limit=${encodeURIComponent(String(limit))}`);
   }
 
+  markNotificationRead(id: string) {
+    return this.request<void>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
+  }
+
+  markAllNotificationsRead() {
+    return this.request<void>('/api/notifications/read-all', { method: 'PATCH' });
+  }
+
+  deleteNotification(id: string) {
+    return this.request<void>(`/api/notifications/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
   listLearningMaterials() {
     return this.request<LearningMaterialItem[]>('/api/materials');
   }
 
   listEnrollments() {
     return this.request<EnrollmentRecordItem[]>('/api/enrollments');
+  }
+
+  listTeacherAvailability(teacherId?: string) {
+    return this.request<TeacherAvailabilityItem[]>(`/api/teacher/availability${teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''}`);
   }
 
   listChats() {
@@ -614,18 +710,27 @@ class MobileApiClient {
     });
   }
 
+  createLearningMaterialFile(input: { title: string; subject: string; description?: string; file: { uri: string; name: string; type?: string | null } }) {
+    const form = new FormData();
+    form.append('title', input.title);
+    form.append('subject', input.subject);
+    if (input.description) form.append('description', input.description);
+    form.append('file', { uri: input.file.uri, name: input.file.name, type: input.file.type || 'application/octet-stream' } as any);
+    return this.request<LearningMaterialItem>('/api/materials/file', { method: 'POST', body: form });
+  }
+
   deleteLearningMaterial(id: string) {
     return this.request<void>(`/api/materials/${id}`, { method: 'DELETE' });
   }
 
-  createEnrollment(input: { studentId: string; teacherId: string; subject: string; tutorialGroup?: string; note?: string; status?: string }) {
+  createEnrollment(input: { studentId: string; teacherId: string; subject: string; tutorialGroup?: string; gradeLevel?: string; note?: string; status?: string; classSchedule?: Array<{ dayOfWeek: number; startTime: string; endTime: string }> }) {
     return this.request<EnrollmentRecordItem>('/api/enrollments', {
       method: 'POST',
       body: JSON.stringify(input),
     });
   }
 
-  updateEnrollment(id: string, input: { status: string; subject?: string; tutorialGroup?: string; note?: string }) {
+  updateEnrollment(id: string, input: { studentId?: string; teacherId?: string; status?: string; subject?: string; tutorialGroup?: string | null; gradeLevel?: string | null; note?: string | null; classSchedule?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>; dropReason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; statusNotes?: string }) {
     return this.request<EnrollmentRecordItem>(`/api/enrollments/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(input),
