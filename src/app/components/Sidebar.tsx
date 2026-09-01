@@ -16,6 +16,7 @@ import {
   Video,
   ClipboardList
   ,BriefcaseBusiness
+  ,ClipboardCheck
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { SystemLogo } from '@/app/components/SystemLogo';
@@ -53,6 +54,7 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
     { id: 'meetings', label: 'Video Meetings', icon: Video, roles: ['teacher'] },
     { id: 'materials', label: 'Learning Materials', icon: Library, roles: ['admin', 'teacher', 'student'] },
     { id: 'assignments', label: 'Assignments', icon: BookOpen, roles: ['teacher', 'student'] },
+    { id: 'assessments', label: 'Assessments', icon: ClipboardCheck, roles: ['admin', 'teacher', 'student'] },
     { id: 'grades', label: 'Grades/Feedback', icon: BookOpen, roles: ['teacher', 'student'] },
     { id: 'enrollments', label: 'Enrollments', icon: Users, roles: ['admin'] },
     { id: 'teacher-records', label: 'Teacher Records', icon: BriefcaseBusiness, roles: ['admin'] },
