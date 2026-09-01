@@ -269,6 +269,59 @@ async function fetchYoutubeTranscriptByVideoId(videoId: string): Promise<string>
   return result.transcript!.trim();
 }
 
+/**
+ * TranscriptAPI is the primary hosted transcript provider. Keep its key on
+ * the server only; never expose it through the frontend bundle.
+ */
+async function fetchYoutubeTranscriptFromTranscriptApi(videoUrl: string): Promise<string> {
+  const apiKey = process.env.TRANSCRIPT_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error("TRANSCRIPT_API_KEY is not configured.");
+  }
+
+  const endpoint = new URL("https://transcriptapi.com/api/v2/youtube/transcript");
+  endpoint.searchParams.set("video_url", videoUrl);
+  endpoint.searchParams.set("format", "text");
+  endpoint.searchParams.set("include_timestamp", "false");
+  endpoint.searchParams.set("language", "en,asr");
+
+  const response = await fetch(endpoint, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      Accept: "application/json",
+    },
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!response.ok) {
+    const details = await response.text().catch(() => "");
+    throw new Error(`TranscriptAPI request failed (${response.status})${details ? `: ${details.slice(0, 300)}` : "."}`);
+  }
+
+  const payload = await response.json() as {
+    transcript?: unknown;
+  };
+  const transcript = Array.isArray(payload.transcript)
+    ? payload.transcript
+        .map((segment) => {
+          if (typeof segment === "string") return segment;
+          if (segment && typeof segment === "object" && "text" in segment) {
+            return String((segment as { text?: unknown }).text || "");
+          }
+          return "";
+        })
+        .join(" ")
+    : typeof payload.transcript === "string"
+      ? payload.transcript
+      : "";
+
+  if (!transcript.trim()) {
+    throw new Error("TranscriptAPI returned an empty transcript.");
+  }
+
+  return transcript.trim();
+}
+
 async function transcribeUploadedVideoWithWhisper(filePath: string): Promise<string> {
   const result = await runPythonVideoTool("transcribe_video_file", ["--video-path", filePath]);
   return result.transcript!.trim();
@@ -1313,10 +1366,21 @@ app.post(
         return;
       }
 
+      // Prefer the hosted provider because Render's cloud IP can be blocked
+      // by YouTube. Fall back to the existing self-hosted transcript method.
       try {
-        transcript = await fetchYoutubeTranscriptByVideoId(videoId);
+        transcript = await fetchYoutubeTranscriptFromTranscriptApi(videoUrl);
       } catch (error) {
-        transcriptFetchError = error instanceof Error ? error.message : "Transcript fetch failed.";
+        transcriptFetchError = error instanceof Error ? error.message : "TranscriptAPI fetch failed.";
+      }
+
+      if (!transcript.trim()) {
+        try {
+          transcript = await fetchYoutubeTranscriptByVideoId(videoId);
+        } catch (error) {
+          const fallbackError = error instanceof Error ? error.message : "youtube-transcript-api fetch failed.";
+          transcriptFetchError = `${transcriptFetchError || "TranscriptAPI fetch failed."} Fallback: ${fallbackError}`;
+        }
       }
 
       if (!transcript.trim()) {
