@@ -288,7 +288,7 @@ function AuthenticatedShell({
           profileImageUrl: session.user.profileImageUrl,
         }}
       />
-      <BottomNav role={userRole} currentView={currentView} onNavigate={onNavigateView} chatUnreadTotal={chatUnreadTotal} />
+      <BottomNav role={userRole} currentView={currentView} onNavigate={onNavigateView} onLogout={onLogout} chatUnreadTotal={chatUnreadTotal} />
       <AIChatbot role={userRole} currentView={currentView} />
 
       <main className="flex-1 md:ml-64 overflow-y-auto">
@@ -303,8 +303,8 @@ function AuthenticatedShell({
             >
               {currentView === 'dashboard' && (
                 <div className="p-4 md:p-8">
-                  <h1 className="text-2xl md:text-3xl font-bold mb-2 text-gray-800 flex items-center gap-2">
-                    Welcome back,{' '}
+                  <h1 className="text-2xl md:text-3xl font-bold mb-2 text-gray-800 flex flex-col md:flex-row md:items-center gap-0 md:gap-3 leading-tight">
+                    <span>Welcome back,</span>
                     <span
                       className={clsx(
                         'bg-clip-text text-transparent bg-gradient-to-r capitalize',
