@@ -190,7 +190,7 @@ export function Meetings({ schedules, userId, onStartMeeting }: MeetingsProps) {
   const nowMin = nowMinutesPHT();
 
   const accepted = schedules
-    .filter((s) => s.status === 'accepted' && s.teacherId === userId)
+    .filter((s) => s.status === 'scheduled' && s.teacherId === userId)
     .sort((a, b) => {
       const d = a.date.localeCompare(b.date);
       return d !== 0 ? d : a.startTime.localeCompare(b.startTime);
