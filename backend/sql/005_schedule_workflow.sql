@@ -18,6 +18,7 @@ UPDATE schedules
  WHERE status IS NULL OR status NOT IN ('pending', 'accepted', 'declined', 'cancelled');
 
 UPDATE schedules SET status = 'scheduled' WHERE status = 'accepted';
+UPDATE schedules SET status = 'scheduled' WHERE status = 'pending';
 
 UPDATE schedules
    SET day_of_week = trim(to_char(scheduled_date, 'FMDay'))
