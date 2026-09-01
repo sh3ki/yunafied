@@ -327,6 +327,68 @@ async function transcribeUploadedVideoWithWhisper(filePath: string): Promise<str
   return result.transcript!.trim();
 }
 
+/**
+ * Render's free instance is too constrained to reliably load faster-whisper
+ * for every upload. Extract a compact mono audio track and use Groq's hosted
+ * Whisper endpoint instead. The free-tier request limit is 25 MB.
+ */
+async function transcribeUploadedVideoWithGroq(videoPath: string): Promise<string> {
+  const groqKey = process.env.GROQ_API_KEY?.trim();
+  if (!groqKey) {
+    throw new Error("Missing GROQ_API_KEY configuration.");
+  }
+
+  const audioDir = await fs.mkdtemp(path.join(os.tmpdir(), "yunafied-audio-"));
+  const audioPath = path.join(audioDir, "audio.mp3");
+  const ffmpegBinary = (ffmpegPath as unknown as string | undefined) || process.env.FFMPEG_BINARY || "ffmpeg";
+
+  try {
+    await execFileAsync(ffmpegBinary, [
+      "-y",
+      "-i", videoPath,
+      "-vn",
+      "-ac", "1",
+      "-ar", "16000",
+      "-c:a", "libmp3lame",
+      "-b:a", "64k",
+      audioPath,
+    ], { maxBuffer: 10 * 1024 * 1024 });
+
+    const audioBuffer = await fs.readFile(audioPath);
+    const freeUploadLimit = 25 * 1024 * 1024;
+    if (audioBuffer.length > freeUploadLimit) {
+      throw new Error("The extracted audio is larger than Groq's 25 MB upload limit. Use a shorter video.");
+    }
+
+    const form = new FormData();
+    form.append("file", new Blob([audioBuffer], { type: "audio/mpeg" }), "audio.mp3");
+    form.append("model", process.env.GROQ_TRANSCRIPTION_MODEL || "whisper-large-v3-turbo");
+    form.append("response_format", "json");
+    form.append("language", process.env.GROQ_TRANSCRIPTION_LANGUAGE || "en");
+
+    const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${groqKey}` },
+      body: form,
+      signal: AbortSignal.timeout(120000),
+    });
+
+    if (!response.ok) {
+      const details = await response.text().catch(() => "");
+      throw new Error(`Groq transcription failed (${response.status})${details ? `: ${details.slice(0, 300)}` : "."}`);
+    }
+
+    const payload = await response.json() as { text?: unknown };
+    const transcript = typeof payload.text === "string" ? payload.text.trim() : "";
+    if (!transcript) {
+      throw new Error("Groq transcription returned no text.");
+    }
+    return transcript;
+  } finally {
+    await fs.rm(audioDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 async function transcribeYoutubeWithWhisper(videoUrl: string): Promise<string> {
   const result = await runPythonVideoTool("transcribe_youtube_video", ["--video-url", videoUrl]);
   return result.transcript!.trim();
@@ -1350,11 +1412,11 @@ app.post(
       tmpVideoPath = path.join(os.tmpdir(), `yunafied_vid_${Date.now()}${safeExt}`);
       await fs.writeFile(tmpVideoPath, req.file.buffer);
       try {
-        transcript = await transcribeUploadedVideoWithWhisper(tmpVideoPath);
+        transcript = await transcribeUploadedVideoWithGroq(tmpVideoPath);
       } catch (err) {
-        console.error('[video-summary] Upload transcription failed:', err instanceof Error ? err.message : err);
+        console.error('[video-summary] Groq upload transcription failed:', err instanceof Error ? err.message : err);
         // Return a 502 with a helpful message rather than throwing to the global handler
-        res.status(502).json({ message: 'Transcription of uploaded video failed.', details: err instanceof Error ? err.message : String(err) });
+        res.status(502).json({ message: 'Upload transcription failed. The video audio could not be processed by Groq.', details: err instanceof Error ? err.message : String(err) });
         return;
       }
     } else if (videoUrl) {
