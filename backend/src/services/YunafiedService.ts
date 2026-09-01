@@ -3919,6 +3919,8 @@ export class YunafiedService {
       gradesRes,
       monthlyRes,
       topStudentsRes,
+      enrollmentTrendsRes,
+      teacherActivityRes,
     ] = await Promise.all([
       pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM users WHERE role = 'student'"),
       pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM users WHERE role = 'teacher'"),
@@ -3945,7 +3947,24 @@ export class YunafiedService {
           WHERE s.grade_value IS NOT NULL
           GROUP BY s.student_id, u.full_name
           ORDER BY "avgGrade" DESC NULLS LAST
-          LIMIT 5`,
+           LIMIT 5`,
+      ),
+      pool.query<{ period: string; count: string }>(
+        `SELECT TO_CHAR(date_trunc('month', created_at), 'Mon YYYY') AS period,
+                COUNT(*)::text AS count
+           FROM enrollment_records
+          WHERE created_at >= NOW() - INTERVAL '6 months'
+          GROUP BY 1 ORDER BY MIN(created_at)`,
+      ),
+      pool.query<{ teacherId: string; teacherName: string; sessions: string; assignments: string }>(
+        `SELECT u.id AS "teacherId", u.full_name AS "teacherName",
+                COUNT(DISTINCT s.id)::text AS sessions,
+                COUNT(DISTINCT a.id)::text AS assignments
+           FROM users u
+           LEFT JOIN schedules s ON s.teacher_id = u.id
+           LEFT JOIN assignments a ON a.teacher_id = u.id
+          WHERE u.role = 'teacher'
+          GROUP BY u.id, u.full_name ORDER BY u.full_name`,
       ),
     ]);
 
@@ -3958,6 +3977,8 @@ export class YunafiedService {
       totalEnrollments: Number(enrollmentsRes.rows[0]?.count || 0),
       gradeDistribution: gradesRes.rows.map((r) => ({ grade: r.grade, count: Number(r.count) })),
       monthlySessionCounts: monthlyRes.rows.map((r) => ({ month: r.month, count: Number(r.count) })),
+      enrollmentTrends: enrollmentTrendsRes.rows.map((r) => ({ period: r.period, count: Number(r.count) })),
+      teacherActivity: teacherActivityRes.rows.map((r) => ({ teacherId: r.teacherId, teacherName: r.teacherName, sessions: Number(r.sessions), assignments: Number(r.assignments) })),
       topStudents: topStudentsRes.rows.map((r) => ({
         studentId: r.studentId,
         studentName: r.studentName,
