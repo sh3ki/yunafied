@@ -307,7 +307,8 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
           <PrintButton onClick={printUsers} />
         </div>
 
-        <table className="w-full text-left">
+        <div className="user-management-table overflow-x-auto">
+        <table className="min-w-[760px] w-full text-left">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-6 py-4 font-semibold text-gray-600">Profile</th>
@@ -395,6 +396,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
             )}
           </tbody>
         </table>
+        </div>
 
         <TablePagination page={safePage} pageSize={pageSize} total={filteredUsers.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
       </div>
