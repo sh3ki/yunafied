@@ -1,8 +1,8 @@
 export type UserRole = 'admin' | 'teacher' | 'student';
-export type UserStatus = 'active' | 'inactive';
-export type ScheduleStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
+export type UserStatus = 'active' | 'inactive' | 'pending' | 'archived' | 'completed' | 'dropped';
+export type ScheduleStatus = 'scheduled' | 'pending' | 'accepted' | 'declined' | 'cancelled';
 export type MeetingRoomStatus = 'calling' | 'active' | 'declined' | 'ended';
-export type EnrollmentStatus = 'active' | 'completed' | 'dropped';
+export type EnrollmentStatus = 'active' | 'completed' | 'dropped' | 'archived';
 export type ChatType = 'direct' | 'group';
 
 export interface MeetingRoom {
@@ -16,8 +16,80 @@ export interface MeetingRoom {
   scheduleTitle: string | null;
   scheduleDescription: string | null;
   status: MeetingRoomStatus;
+  offer: Record<string, unknown> | null;
+  answer: Record<string, unknown> | null;
+  teacherIceCandidates: Record<string, unknown>[];
+  studentIceCandidates: Record<string, unknown>[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BadgeItem {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  icon: string;
+  earnedAt?: string;
+  createdAt?: string;
+}
+
+export interface StudentXpItem {
+  studentId: string;
+  totalXp: number;
+  level: string;
+  updatedAt: string;
+}
+
+export interface TeacherAvailabilityItem {
+  id: string;
+  teacherId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface TeacherRecordItem {
+  teacherId: string;
+  teacher: AuthUser;
+  mobileNumber: string | null;
+  professionalTitle: string | null;
+  employmentStatus: string | null;
+  education: string | null;
+  certifications: string | null;
+  yearsExperience: number | null;
+  specializations: string[];
+  notes: string | null;
+  availability: TeacherAvailabilityItem[];
+  updatedAt: string;
+}
+
+export interface StudentRecordItem {
+  student: AuthUser & { mobileNumber?: string | null; birthdate?: string | null };
+  enrollments: EnrollmentRecordItem[];
+  schedules: ScheduleItem[];
+  assignments: Array<{ assignment: AssignmentItem; submission: SubmissionItem | null }>;
+  gamifiedAttempts: Array<{ id: string; quizId: string; studentId: string; quizTitle: string; categoryName: string; totalQuestions: number; correctAnswers: number; totalScore: number; completedAt: string }>;
+  meetingHistory: CallHistoryItem[];
+  statusHistory: Array<{ id: string; entityId: string; previousStatus: string | null; newStatus: string; reason: string | null; createdAt: string }>;
+}
+
+export interface AdminAnalyticsItem {
+  totalStudents: number;
+  totalTeachers: number;
+  totalSessions: number;
+  totalSubmissions: number;
+  totalAnnouncements: number;
+  totalEnrollments: number;
+  gradeDistribution: Array<{ grade: string; count: number }>;
+  monthlySessionCounts: Array<{ month: string; count: number }>;
+  topStudents: Array<{ studentId: string; studentName: string; avgGrade: number; submissionCount: number }>;
+  enrollmentTrends?: Array<{ period: string; count: number }>;
+  teacherActivity?: Array<{ teacherId: string; teacherName: string; sessions: number; assignments: number }>;
+  studentProgress?: Array<{ studentId: string; studentName: string; firstAverage: number | null; latestAverage: number | null; change: number | null }>;
+  interpretations?: Record<string, { text: string; generatedAt: string | null }>;
 }
 
 export interface AuthUser {
@@ -32,6 +104,8 @@ export interface AuthUser {
   profileImageUrl: string | null;
   profileImagePublicId: string | null;
   createdAt: string;
+  mobileNumber?: string | null;
+  birthdate?: string | null;
 }
 
 export interface ScheduleItem {
@@ -64,6 +138,8 @@ export interface AssignmentItem {
   attachmentFileName?: string | null;
   attachmentUrl?: string | null;
   isClosed?: boolean;
+  rubricFileName?: string | null;
+  rubricUrl?: string | null;
 }
 
 export interface SubmissionItem {
@@ -206,6 +282,7 @@ export interface NotificationItem {
   priority: 'low' | 'medium' | 'high';
   createdAt: string;
   actionView: string;
+  isRead?: boolean;
 }
 
 export interface LearningMaterialItem {
@@ -235,6 +312,13 @@ export interface EnrollmentRecordItem {
   createdById: string;
   createdAt: string;
   updatedAt: string;
+  gradeLevel?: string | null;
+  dropReason?: string | null;
+  dropDate?: string | null;
+  actionTaken?: string | null;
+  pullOutReason?: string | null;
+  statusNotes?: string | null;
+  classSchedule?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
 }
 
 export interface MessageUserItem {
