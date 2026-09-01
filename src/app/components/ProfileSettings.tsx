@@ -53,6 +53,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mobileNumber, setMobileNumber] = useState(user.mobileNumber || '');
+  const [birthdate, setBirthdate] = useState(user.birthdate || '');
   const [professionalTitle, setProfessionalTitle] = useState(user.professionalTitle || '');
   const [employmentStatus, setEmploymentStatus] = useState(user.employmentStatus || '');
   const [education, setEducation] = useState(user.education || '');
@@ -72,6 +73,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
     setSelectedImageFile(null);
     setPreviewImageUrl(null);
     setMobileNumber(user.mobileNumber || '');
+    setBirthdate(user.birthdate || '');
     setProfessionalTitle(user.professionalTitle || ''); setEmploymentStatus(user.employmentStatus || '');
     setEducation(user.education || ''); setCertifications(user.certifications || '');
     setYearsExperience(user.yearsExperience == null ? '' : String(user.yearsExperience));
@@ -81,6 +83,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
 
   useEffect(() => { void apiClient.getProfileDetails().then((details) => {
     setMobileNumber(details.mobileNumber || ''); setProfessionalTitle(details.professionalTitle || ''); setEmploymentStatus(details.employmentStatus || '');
+    setBirthdate(details.birthdate || '');
     setEducation(details.education || ''); setCertifications(details.certifications || ''); setYearsExperience(details.yearsExperience == null ? '' : String(details.yearsExperience));
     setSpecializations((details.specializations || []).join(', ')); setNotes(details.notes || '');
     setAvailability(details.availability?.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
@@ -137,6 +140,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
         currentPassword: currentPassword.trim() || undefined,
         newPassword: newPassword.trim() || undefined,
         mobileNumber: mobileNumber.trim() || null,
+        birthdate: user.role === 'student' ? (birthdate || null) : undefined,
         ...(user.role === 'teacher' ? {
           professionalTitle: professionalTitle.trim() || null, employmentStatus: employmentStatus.trim() || null,
           education: education.trim() || null, certifications: certifications.trim() || null,
@@ -250,7 +254,8 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
         </div>
 
         <div className="px-6 pb-6 grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div className={user.role === 'student' ? 'md:col-span-2' : ''}><label className="text-sm font-medium text-gray-700 mb-2 block">Mobile Number</label><input value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="09XX XXX XXXX" /></div>
+          <div><label className="text-sm font-medium text-gray-700 mb-2 block">Mobile Number</label><input value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="09XX XXX XXXX" /></div>
+          {user.role === 'student' && <div><label className="text-sm font-medium text-gray-700 mb-2 block">Birthdate</label><input type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" /></div>}
           {user.role === 'teacher' && <>
             <div><label className="text-sm font-medium text-gray-700 mb-2 block">Professional Title</label><input value={professionalTitle} onChange={(e) => setProfessionalTitle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="e.g. English Teacher" /></div>
             <div><label className="text-sm font-medium text-gray-700 mb-2 block">Employment Status</label><input value={employmentStatus} onChange={(e) => setEmploymentStatus(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="e.g. Full-time" /></div>
