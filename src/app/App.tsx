@@ -43,6 +43,7 @@ import {
   AnnouncementItem,
   AssignmentItem,
   AuthUser,
+  EnrollmentRecordItem,
   MeetingRoom,
   ScheduleItem,
   SubmissionItem,
@@ -52,6 +53,7 @@ import {
 
 interface AppData {
   users: AuthUser[];
+  enrollments: EnrollmentRecordItem[];
   schedules: ScheduleItem[];
   assignments: AssignmentItem[];
   submissions: SubmissionItem[];
@@ -574,7 +576,10 @@ function AuthenticatedShell({
                     submissions={data.submissions}
                     role={userRole}
                     userId={session.user.id}
-                    students={data.users.filter((u) => u.role === 'student').map((u) => ({ id: u.id, name: u.fullName }))}
+                    students={data.users
+                      .filter((u) => u.role === 'student')
+                      .filter((u) => userRole !== 'teacher' || data.enrollments.some((enrollment) => enrollment.teacherId === session.user.id && enrollment.studentId === u.id && enrollment.status === 'active'))
+                      .map((u) => ({ id: u.id, name: u.fullName }))}
                     onCreateAssignment={onCreateAssignment}
                     onSubmitAssignment={onSubmitAssignment}
                     onGradeSubmission={onGradeSubmission}
@@ -611,6 +616,7 @@ export default function App() {
   const [session, setSession] = useState<SessionState | null>(null);
   const [data, setData] = useState<AppData>({
     users: [],
+    enrollments: [],
     schedules: [],
     assignments: [],
     submissions: [],
@@ -631,8 +637,8 @@ export default function App() {
   }, [data]);
 
   const loadData = async () => {
-    const payload = await apiClient.bootstrap();
-    setData(payload);
+    const [payload, enrollments] = await Promise.all([apiClient.bootstrap(), apiClient.listEnrollments()]);
+    setData({ ...payload, enrollments });
   };
 
   useEffect(() => {
@@ -714,7 +720,7 @@ export default function App() {
     apiClient.setToken(null);
     localStorage.removeItem('yunafied_token');
     setSession(null);
-    setData({ users: [], schedules: [], assignments: [], submissions: [], announcements: [] });
+    setData({ users: [], enrollments: [], schedules: [], assignments: [], submissions: [], announcements: [] });
     navigate('/login', { replace: true });
   };
 
