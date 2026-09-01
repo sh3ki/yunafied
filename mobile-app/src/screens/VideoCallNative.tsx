@@ -22,7 +22,7 @@ export default function VideoCallNative({ roomToken, onClose, role }: { roomToke
   const createPc = useCallback(() => {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS } as any);
 
-    pc.onicecandidate = ({ candidate }) => {
+    pc.onicecandidate = ({ candidate }: any) => {
       if (!candidate || !roomToken) return;
       const json = candidate.toJSON();
       const key = JSON.stringify(json);
@@ -31,7 +31,7 @@ export default function VideoCallNative({ roomToken, onClose, role }: { roomToke
       mobileApiClient.sendMeetingSignal(roomToken, { addIceCandidate: json }).catch(() => {});
     };
 
-    pc.onaddstream = (event: any) => {
+    (pc as any).onaddstream = (event: any) => {
       if (event.stream && event.stream.toURL) {
         try {
           setRemoteStreamUrl(event.stream.toURL());
@@ -64,7 +64,7 @@ export default function VideoCallNative({ roomToken, onClose, role }: { roomToke
     pcRef.current = pc;
     // add tracks
     try {
-      pc.addStream(stream as any);
+      (pc as any).addStream(stream as any);
     } catch (_) {}
 
     const offer = await pc.createOffer();
@@ -77,7 +77,7 @@ export default function VideoCallNative({ roomToken, onClose, role }: { roomToke
     const stream = await getLocal();
     const pc = createPc();
     pcRef.current = pc;
-    try { pc.addStream(stream as any); } catch (_) {}
+    try { (pc as any).addStream(stream as any); } catch (_) {}
     await pc.setRemoteDescription(new RTCSessionDescription(room.offer as any) as any);
     // add existing teacher ICE
     for (const c of room.teacherIceCandidates || []) {
