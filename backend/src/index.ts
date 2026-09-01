@@ -662,10 +662,16 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
         "http://127.0.0.1:19006",
         "https://www.yunafied.online",
       ];
+  const isAllowedOrigin = (origin?: string) => {
+    if (!origin) return true;
+    if (allowedOrigins.includes(origin)) return true;
+    if (process.env.NODE_ENV === "production") return false;
+    return /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}):\d+$/.test(origin);
+  };
 
   app.use(
     cors({
-      origin: allowedOrigins,
+      origin: (origin, callback) => callback(null, isAllowedOrigin(origin) ? origin : false),
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
       credentials: true,
