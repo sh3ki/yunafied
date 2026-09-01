@@ -1,0 +1,19 @@
+import React from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { ClipboardCheck } from 'lucide-react';
+import { AssignmentItem, SubmissionItem } from '@/app/types/models';
+
+export function AssessmentAnalytics({ assignments, submissions, onOpen }: { assignments: AssignmentItem[]; submissions: SubmissionItem[]; onOpen?: () => void }) {
+  const assessmentAssignments = assignments.filter((item) => /assessment|quiz/i.test(item.title));
+  const ids = new Set(assessmentAssignments.map((item) => item.id));
+  const rows = submissions.filter((item) => ids.has(item.assignmentId));
+  const graded = rows.filter((item) => item.grade);
+  const numeric = graded.map((item) => Number.parseFloat(item.grade || '')).filter((value) => !Number.isNaN(value));
+  const average = numeric.length ? Math.round(numeric.reduce((sum, value) => sum + value, 0) / numeric.length) : 0;
+  const completion = assessmentAssignments.length ? Math.round((rows.length / Math.max(1, assessmentAssignments.length)) * 100) : 0;
+  const distribution = [{ name: '80–100%', value: numeric.filter((v) => v >= 80).length }, { name: '60–79%', value: numeric.filter((v) => v >= 60 && v < 80).length }, { name: 'Below 60%', value: numeric.filter((v) => v < 60).length }];
+  const progress = [{ name: 'Pre-assessment', value: assessmentAssignments.filter((a) => /pre/i.test(a.title)).length }, { name: 'Post-assessment', value: assessmentAssignments.filter((a) => /post/i.test(a.title)).length }];
+  return <section className="mt-8 border-t border-gray-200 pt-7"><div className="flex items-center justify-between mb-4"><div><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><ClipboardCheck className="h-5 w-5 text-indigo-600" />Assessment Overview</h2><p className="text-sm text-gray-500 mt-1">Diagnostic assessments support performance monitoring and do not affect grades.</p></div>{onOpen && <button onClick={onOpen} className="text-sm font-semibold text-indigo-600">Open assessments →</button>}</div><div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"><Metric label="Templates / assigned" value={assessmentAssignments.length} /><Metric label="Completed" value={rows.length} /><Metric label="Average score" value={average ? `${average}%` : '—'} /><Metric label="Completion rate" value={assessmentAssignments.length ? `${Math.min(100, completion)}%` : '—'} /></div><div className="grid grid-cols-1 lg:grid-cols-2 gap-5"><ChartBox title="Pre- and Post-assessments"><ResponsiveContainer width="100%" height={210}><BarChart data={progress}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" tick={{ fontSize: 11 }} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="value" fill="#6366f1" radius={[5, 5, 0, 0]} /></BarChart></ResponsiveContainer></ChartBox><ChartBox title="Assessment score distribution"><ResponsiveContainer width="100%" height={210}><PieChart><Pie data={distribution} dataKey="value" nameKey="name" innerRadius={55} outerRadius={78} label>{distribution.map((item, index) => <Cell key={item.name} fill={['#10b981', '#f59e0b', '#ef4444'][index]} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></ChartBox></div></section>;
+}
+function Metric({ label, value }: { label: string; value: string | number }) { return <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm"><p className="text-xs uppercase tracking-wide text-gray-500">{label}</p><p className="text-2xl font-extrabold text-indigo-600 mt-1">{value}</p></div>; }
+function ChartBox({ title, children }: { title: string; children: React.ReactNode }) { return <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm"><h3 className="font-semibold text-gray-700 mb-2">{title}</h3>{children}</div>; }
