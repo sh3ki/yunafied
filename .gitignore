@@ -5,4 +5,5 @@ backend/.env
 backend/node_modules/
 backend/dist/
 .expo/
+android/local.properties
 cookies.b64
