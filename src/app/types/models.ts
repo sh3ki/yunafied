@@ -37,6 +37,7 @@ export interface AuthUser {
   profileImagePublicId: string | null;
   createdAt: string;
   mobileNumber?: string | null;
+  birthdate?: string | null;
   specializations?: string[];
   professionalTitle?: string | null;
   employmentStatus?: string | null;
@@ -503,7 +504,7 @@ export interface StudentRecordGamifiedAttempt {
 }
 
 export interface StudentRecordItem {
-  student: Pick<AuthUser, 'id' | 'firstName' | 'middleName' | 'lastName' | 'fullName' | 'role' | 'status' | 'profileImageUrl' | 'createdAt'>;
+  student: Pick<AuthUser, 'id' | 'firstName' | 'middleName' | 'lastName' | 'fullName' | 'role' | 'status' | 'profileImageUrl' | 'createdAt' | 'mobileNumber' | 'birthdate'>;
   enrollments: EnrollmentRecordItem[];
   schedules: ScheduleItem[];
   assignments: StudentRecordAssignment[];
