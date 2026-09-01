@@ -55,7 +55,10 @@ function detectExpoHost(): string | null {
     manifest?: { debuggerHost?: string };
   };
 
-  const browserHost = typeof window !== 'undefined' ? window.location.hostname : null;
+  const runtime = globalThis as typeof globalThis & {
+    location?: { hostname?: string };
+  };
+  const browserHost = runtime.location?.hostname || null;
   const candidates = [
     browserHost,
     constantsAny.expoConfig?.hostUri,
@@ -81,17 +84,21 @@ function detectExpoHost(): string | null {
 
 function resolveApiUrl(): string {
   const rawConfigApiUrl = (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl;
-  const configApiUrl = rawConfigApiUrl?.trim();
-  const detectedHost = detectExpoHost();
+  const runtime = globalThis as typeof globalThis & {
+    process?: { env?: { EXPO_PUBLIC_API_URL?: string } };
+  };
+  const envApiUrl = runtime.process?.env?.EXPO_PUBLIC_API_URL?.trim();
+  const configApiUrl = (envApiUrl || rawConfigApiUrl)?.trim();
 
-  // During Expo development, prefer the machine hosting Metro so both
-  // Expo Go and the browser preview reach the local backend consistently.
-  if (detectedHost) {
-    return `http://${detectedHost}:4000`;
-  }
-
+  // Production is the default. Set EXPO_PUBLIC_API_URL=auto or a LAN URL
+  // when intentionally running the backend locally during development.
   if (configApiUrl && configApiUrl.toLowerCase() !== 'auto') {
     return configApiUrl;
+  }
+
+  const detectedHost = detectExpoHost();
+  if (detectedHost) {
+    return `http://${detectedHost}:4000`;
   }
 
   return 'https://www.yunafied.online';
