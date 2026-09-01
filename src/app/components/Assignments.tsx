@@ -203,8 +203,8 @@ export function Assignments({
   };
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      <div className="flex justify-between items-center mb-6">
+    <div className="assignments-page p-6 h-full flex flex-col">
+      <div className="assignment-header flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Assignment Management</h2>
           <p className="text-gray-500">Post, submit, grade, and view feedback</p>
@@ -212,7 +212,7 @@ export function Assignments({
         {(role === 'teacher' || role === 'admin') && (
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition"
+            className="assignment-create-button flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition"
           >
             <Plus className="h-4 w-4" />
             Create Assignment
@@ -220,8 +220,8 @@ export function Assignments({
         )}
       </div>
 
-      <div className="flex gap-6 h-full min-h-[520px]">
-        <div className="w-1/3 border-r border-gray-200 pr-6 overflow-y-auto h-full">
+      <div className="assignment-layout flex gap-6 h-full min-h-[520px]">
+        <div className="assignment-sidebar w-1/3 border-r border-gray-200 pr-6 overflow-y-auto h-full">
           <div className="space-y-3">
             {assignments.map((assignment) => {
               const count = submissions.filter((s) => s.assignmentId === assignment.id).length;
@@ -259,7 +259,7 @@ export function Assignments({
           </div>
         </div>
 
-        <div className="flex-1">
+        <div className={clsx('assignment-detail flex-1', selectedAssignment && 'assignment-detail-open')}>
           {!selectedAssignment && (
             <div className="h-full flex flex-col items-center justify-center text-gray-400 border-2 border-dashed border-gray-100 rounded-xl">
               <FileText className="h-12 w-12 mb-2 opacity-20" />
@@ -285,8 +285,16 @@ export function Assignments({
                       }`}
                     >
                       {selectedAssignment.isClosed ? '🔓 Re-open' : '🔒 Close Submissions'}
-                    </button>
+                      </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAssignmentId(null)}
+                    className="assignment-mobile-close hidden md:hidden text-gray-500 hover:text-gray-800"
+                    aria-label="Close assignment details"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3 text-sm items-center">
                   <span className="text-indigo-600 font-medium">Due: {selectedAssignment.dueDate}</span>
