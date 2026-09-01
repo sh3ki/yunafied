@@ -700,6 +700,10 @@ const generalLimiter = rateLimit({
   // seconds. Set `max` high enough and return a `Retry-After` header on 429.
   windowMs: 60 * 1000,
   max: 200,
+  // Incoming-call polling is a long-poll-style heartbeat (one request every
+  // few seconds). It must not consume the shared API budget, especially when
+  // several students are behind the same Render/ISP proxy IP.
+  skip: (req) => req.path === "/meetings/incoming",
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
