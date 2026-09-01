@@ -50,6 +50,7 @@ interface DbUserRow {
   verification_token_hash: string | null;
   verification_token_expires_at: string | null;
   mobile_number?: string | null;
+  birthdate?: string | null;
   specializations?: string[];
 }
 
@@ -217,7 +218,7 @@ export class YunafiedService {
 
   async findUserWithPasswordByEmail(email: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE email = $1",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, birthdate, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE email = $1",
       [email],
     );
 
@@ -226,7 +227,7 @@ export class YunafiedService {
 
   async findUserWithPasswordById(userId: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE id = $1",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, birthdate, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE id = $1",
       [userId],
     );
 
@@ -278,6 +279,7 @@ export class YunafiedService {
       profileImagePublicId: row.profile_image_public_id,
       createdAt: row.created_at,
       mobileNumber: row.mobile_number || null,
+      birthdate: row.birthdate || null,
       specializations: row.specializations || [],
     };
   }
@@ -375,15 +377,17 @@ export class YunafiedService {
     role: "teacher" | "student";
     profileImageUrl?: string | null;
     profileImagePublicId?: string | null;
+    mobileNumber?: string | null;
+    birthdate?: string | null;
     tokenHash: string;
     tokenExpiresAt: Date;
   }): Promise<AuthUser> {
     const fullName = [input.firstName, input.middleName, input.lastName].filter(Boolean).join(" ");
     const result = await pool.query<DbUserRow>(
-      `INSERT INTO users (email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, is_verified, verification_token_hash, verification_token_expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, '', FALSE, $9, $10)
-       RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at`,
-      [input.email.trim().toLowerCase(), input.firstName, input.middleName || null, input.lastName, fullName, input.role, input.profileImageUrl || null, input.profileImagePublicId || null, input.tokenHash, input.tokenExpiresAt.toISOString()],
+      `INSERT INTO users (email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, birthdate, password_hash, is_verified, verification_token_hash, verification_token_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, '', FALSE, $11, $12)
+       RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, birthdate, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at`,
+      [input.email.trim().toLowerCase(), input.firstName, input.middleName || null, input.lastName, fullName, input.role, input.profileImageUrl || null, input.profileImagePublicId || null, input.mobileNumber || null, input.birthdate || null, input.tokenHash, input.tokenExpiresAt.toISOString()],
     );
     return this.toAuthUser(result.rows[0]);
   }
@@ -427,6 +431,7 @@ export class YunafiedService {
       profileImageUrl?: string | null;
       profileImagePublicId?: string | null;
       mobileNumber?: string | null;
+      birthdate?: string | null;
       passwordHash?: string;
     },
   ): Promise<AuthUser | null> {
@@ -442,12 +447,13 @@ export class YunafiedService {
       input.profileImageUrl || null,
       input.profileImagePublicId || null,
       input.mobileNumber || null,
+      input.birthdate || null,
     ];
     let passwordSetSql = "";
 
     if (input.passwordHash) {
       values.push(input.passwordHash);
-      passwordSetSql = ",\n              password_hash = $11";
+      passwordSetSql = ",\n              password_hash = $12";
     }
 
     values.push(userId);
@@ -464,10 +470,11 @@ export class YunafiedService {
               status = $7,
               profile_image_url = $8,
               profile_image_public_id = $9,
-              mobile_number = $10${passwordSetSql},
+              mobile_number = $10,
+              birthdate = $11${passwordSetSql},
               updated_at = NOW()
         WHERE id = $${userIdParam}
-      RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, password_hash, created_at, is_verified, otp_code, otp_expires_at`,
+      RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, birthdate, password_hash, created_at, is_verified, otp_code, otp_expires_at`,
       values,
     );
 
@@ -1386,6 +1393,8 @@ export class YunafiedService {
               u.role,
               u.status,
               u.profile_image_url AS "profileImageUrl",
+              u.mobile_number AS "mobileNumber",
+              u.birthdate AS "birthdate",
               u.created_at AS "createdAt"
          FROM users u
         WHERE ${studentFilter}
