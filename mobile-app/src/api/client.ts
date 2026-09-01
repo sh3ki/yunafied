@@ -55,7 +55,9 @@ function detectExpoHost(): string | null {
     manifest?: { debuggerHost?: string };
   };
 
+  const browserHost = typeof window !== 'undefined' ? window.location.hostname : null;
   const candidates = [
+    browserHost,
     constantsAny.expoConfig?.hostUri,
     constantsAny.expoGoConfig?.debuggerHost,
     constantsAny.manifest2?.extra?.expoClient?.hostUri,
