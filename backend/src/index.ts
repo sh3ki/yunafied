@@ -838,6 +838,7 @@ const updateProfileSchema = z
     currentPassword: z.string().min(1).optional(),
     newPassword: z.string().min(6).optional(),
     mobileNumber: z.string().max(40).nullable().optional(),
+    birthdate: z.string().date().nullable().optional(),
     professionalTitle: z.string().max(160).nullable().optional(),
     employmentStatus: z.string().max(80).nullable().optional(),
     education: z.string().max(500).nullable().optional(),
@@ -1131,6 +1132,7 @@ app.patch("/api/profile", requireAuth, async (req: AuthenticatedRequest, res: Re
       role: currentUser.role,
       status: currentUser.status,
       mobileNumber: payload.mobileNumber,
+      birthdate: payload.birthdate,
       profileImageUrl:
         payload.profileImageUrl === undefined ? currentUser.profile_image_url : payload.profileImageUrl,
       profileImagePublicId:
@@ -1661,6 +1663,8 @@ const updateUserSchema = z.object({
   lastName: z.string().min(2),
   role: z.enum(["admin", "teacher", "student"]),
   status: z.enum(["active", "inactive", "pending", "archived", "completed", "dropped"]),
+  mobileNumber: z.string().max(40).nullable().optional(),
+  birthdate: z.string().date().nullable().optional(),
   profileImageUrl: z.string().url().nullable().optional(),
   profileImagePublicId: z.string().nullable().optional(),
   password: z.string().min(6).optional(),
@@ -1699,6 +1703,8 @@ app.put("/api/users/:id", requireAuth, requireRole("admin"), async (req: Authent
       lastName: payload.lastName,
       role: payload.role,
       status: payload.status,
+      mobileNumber: payload.mobileNumber,
+      birthdate: payload.birthdate,
       profileImageUrl: payload.profileImageUrl || null,
       profileImagePublicId: payload.profileImagePublicId || null,
       passwordHash,
@@ -2577,7 +2583,7 @@ const accountEnrollmentSchema = z.object({
   email: z.string().email(), firstName: z.string().min(2), middleName: z.string().optional(), lastName: z.string().min(2),
   role: z.enum(["teacher", "student"]), profileImageUrl: z.string().url().nullable().optional(), profileImagePublicId: z.string().nullable().optional(),
   studentId: z.string().uuid().optional(), teacherId: z.string().uuid().optional(), subject: z.string().min(2).max(200).optional(), tutorialGroup: z.string().max(120).optional(), gradeLevel: z.string().max(120).optional(), note: z.string().max(1000).optional(),
-  mobileNumber: z.string().max(40).optional(), professionalTitle: z.string().max(160).optional(), employmentStatus: z.string().max(80).optional(), education: z.string().max(500).optional(), certifications: z.string().max(1000).optional(), yearsExperience: z.coerce.number().int().min(0).max(80).optional(), specializations: z.array(z.string().min(1).max(120)).optional(), notes: z.string().max(2000).optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(), classSchedule: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
+  mobileNumber: z.string().max(40).optional(), birthdate: z.string().date().optional(), professionalTitle: z.string().max(160).optional(), employmentStatus: z.string().max(80).optional(), education: z.string().max(500).optional(), certifications: z.string().max(1000).optional(), yearsExperience: z.coerce.number().int().min(0).max(80).optional(), specializations: z.array(z.string().min(1).max(120)).optional(), notes: z.string().max(2000).optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(), classSchedule: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
 });
 
 app.post("/api/enrollments/account", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
