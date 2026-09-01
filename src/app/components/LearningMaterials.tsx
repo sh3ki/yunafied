@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, ExternalLink, FileText, Link as LinkIcon, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Download, ExternalLink, FileText, Link as LinkIcon, Plus, Trash2 } from 'lucide-react';
 
 /** Resolve a file URL: absolute URLs (Cloudinary) are used as-is; relative paths get backendBaseUrl prepended. */
 function resolveFileUrl(url: string, backendBaseUrl: string): string {
@@ -110,18 +110,14 @@ export function LearningMaterials({ role, backendBaseUrl }: LearningMaterialsPro
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between gap-3 mb-6">
+      <div className="materials-header flex items-start justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
+          <h1 className="materials-title text-3xl font-bold text-gray-800 flex items-start gap-2">
             <FileText className="h-7 w-7 text-indigo-600" />
             Learning Materials
           </h1>
           <p className="text-gray-500 mt-1">Share and access instructional resources by subject.</p>
         </div>
-        <button onClick={load} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg inline-flex items-center gap-2">
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
       </div>
 
       {canManage && (
@@ -178,16 +174,16 @@ export function LearningMaterials({ role, backendBaseUrl }: LearningMaterialsPro
             ? toDownloadUrl(resolveFileUrl(item.resourceUrl, backendBaseUrl))
             : item.resourceUrl;
           return (
-            <article key={item.id} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+            <article key={item.id} className="material-card bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
-                <div>
+                <div className="material-content min-w-0">
                   <p className="font-semibold text-gray-800">{item.title}</p>
                   <p className="text-xs text-gray-500 mt-1">{item.subject} • {item.materialType === 'file' ? item.fileName || 'File' : 'External Link'}</p>
                   {item.description ? <p className="text-sm text-gray-700 mt-2">{item.description}</p> : null}
                   <p className="text-xs text-gray-500 mt-2">By {item.createdByName} • {new Date(item.createdAt).toLocaleString()}</p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="material-actions flex items-center gap-2 shrink-0">
                   <a
                     href={resolvedUrl}
                     target="_blank"
