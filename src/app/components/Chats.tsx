@@ -202,9 +202,9 @@ export function Chats({ role, currentUserId }: ChatsProps) {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto h-full">
+    <div className="chat-layout p-4 md:p-6 max-w-7xl mx-auto h-full">
       <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-8rem)]">
-        <aside className="lg:w-[23rem] bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+        <aside className="chat-sidebar lg:w-[23rem] bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -218,7 +218,7 @@ export function Chats({ role, currentUserId }: ChatsProps) {
               className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
             >
               <RefreshCw className={`h-4 w-4 ${loadingChats ? 'animate-spin' : ''}`} />
-              Refresh
+              <span className="chat-refresh-label">Refresh</span>
             </button>
           </div>
 
@@ -339,7 +339,7 @@ export function Chats({ role, currentUserId }: ChatsProps) {
           </div>
         </aside>
 
-        <section className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+        <section className="chat-panel flex-1 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
           <div className="p-4 border-b border-gray-100 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-gray-800">{selectedChat ? getChatTitle(selectedChat) : 'Select a chat'}</h2>
