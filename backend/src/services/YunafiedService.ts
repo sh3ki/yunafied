@@ -217,7 +217,7 @@ export class YunafiedService {
 
   async findUserWithPasswordByEmail(email: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE email = $1",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE email = $1",
       [email],
     );
 
@@ -226,7 +226,7 @@ export class YunafiedService {
 
   async findUserWithPasswordById(userId: string): Promise<DbUserRow | null> {
     const result = await pool.query<DbUserRow>(
-      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE id = $1",
+      "SELECT id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, password_hash, created_at, is_verified, otp_code, otp_expires_at, verification_token_hash, verification_token_expires_at FROM users WHERE id = $1",
       [userId],
     );
 
@@ -356,6 +356,17 @@ export class YunafiedService {
     await pool.query(`INSERT INTO teacher_records (teacher_id, mobile_number, professional_title, employment_status, education, certifications, years_experience, specializations, notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (teacher_id) DO UPDATE SET mobile_number=EXCLUDED.mobile_number, professional_title=EXCLUDED.professional_title, employment_status=EXCLUDED.employment_status, education=EXCLUDED.education, certifications=EXCLUDED.certifications, years_experience=EXCLUDED.years_experience, specializations=EXCLUDED.specializations, notes=EXCLUDED.notes, updated_at=NOW()`, [teacherId, input.mobileNumber || null, input.professionalTitle || null, input.employmentStatus || null, input.education || null, input.certifications || null, input.yearsExperience ?? null, input.specializations || [], input.notes || null]);
   }
 
+  async getProfileDetails(userId: string): Promise<AuthUser> {
+    const user = await this.findUserWithPasswordById(userId);
+    if (!user) throw new Error("User not found.");
+    const profile = this.toAuthUser(user);
+    if (user.role !== "teacher") return profile;
+    const records = await this.listTeacherRecords();
+    const record = records.find((item: any) => item.teacherId === userId) as any;
+    if (!record) return profile;
+    return { ...profile, ...record, teacher: undefined };
+  }
+
   async createPendingUser(input: {
     email: string;
     firstName: string;
@@ -415,6 +426,7 @@ export class YunafiedService {
       email: string;
       profileImageUrl?: string | null;
       profileImagePublicId?: string | null;
+      mobileNumber?: string | null;
       passwordHash?: string;
     },
   ): Promise<AuthUser | null> {
@@ -429,12 +441,13 @@ export class YunafiedService {
       input.status,
       input.profileImageUrl || null,
       input.profileImagePublicId || null,
+      input.mobileNumber || null,
     ];
     let passwordSetSql = "";
 
     if (input.passwordHash) {
       values.push(input.passwordHash);
-      passwordSetSql = ",\n              password_hash = $10";
+      passwordSetSql = ",\n              password_hash = $11";
     }
 
     values.push(userId);
@@ -450,10 +463,11 @@ export class YunafiedService {
               role = $6,
               status = $7,
               profile_image_url = $8,
-              profile_image_public_id = $9${passwordSetSql},
+              profile_image_public_id = $9,
+              mobile_number = $10${passwordSetSql},
               updated_at = NOW()
         WHERE id = $${userIdParam}
-      RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, password_hash, created_at, is_verified, otp_code, otp_expires_at`,
+      RETURNING id, email, first_name, middle_name, last_name, full_name, role, status, profile_image_url, profile_image_public_id, mobile_number, password_hash, created_at, is_verified, otp_code, otp_expires_at`,
       values,
     );
 
