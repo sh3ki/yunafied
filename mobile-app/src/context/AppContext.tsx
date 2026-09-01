@@ -36,13 +36,26 @@ interface AppContextValue {
     profileImagePublicId?: string | null;
     currentPassword?: string;
     newPassword?: string;
+    mobileNumber?: string | null;
+    birthdate?: string | null;
+    professionalTitle?: string | null;
+    employmentStatus?: string | null;
+    education?: string | null;
+    certifications?: string | null;
+    yearsExperience?: number | null;
+    specializations?: string[];
+    notes?: string | null;
+    availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
   }) => Promise<AuthUser>;
+  uploadProfileImage: (file: { uri: string; name: string; type?: string | null }) => Promise<{ secureUrl: string; publicId: string }>;
   addUser: (input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; password: string }) => Promise<void>;
+  enrollAccount: (input: { firstName: string; middleName?: string; lastName: string; email: string; role: 'teacher' | 'student'; mobileNumber?: string; birthdate?: string; professionalTitle?: string; employmentStatus?: string; education?: string; certifications?: string; yearsExperience?: number; specializations?: string[]; availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }> }) => Promise<void>;
   editUser: (
     id: string,
-    input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; password?: string },
+    input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; mobileNumber?: string | null; birthdate?: string | null; password?: string },
   ) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
+  changeUserStatus: (id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => Promise<void>;
   createSchedule: (input: {
     title: string;
     description: string;
@@ -50,7 +63,8 @@ interface AppContextValue {
     startTime: string;
     endTime: string;
     teacherId?: string;
-    studentId?: string | null;
+    studentId: string;
+    enrollmentId: string;
     requestNote?: string;
   }) => Promise<void>;
   respondToSchedule: (
@@ -86,13 +100,13 @@ interface AppContextValue {
       endTime?: string;
       teacherId?: string;
       studentId?: string | null;
-      status?: 'pending' | 'accepted' | 'declined' | 'cancelled';
+      status?: 'scheduled' | 'pending' | 'accepted' | 'declined' | 'cancelled';
       requestNote?: string | null;
       responseNote?: string | null;
     },
   ) => Promise<void>;
-  createAssignment: (input: { title: string; description: string; dueDate: string }) => Promise<void>;
-  submitAssignment: (assignmentId: string, input: { contentText?: string }) => Promise<void>;
+  createAssignment: (input: { title: string; description: string; dueDate: string; attachmentFile?: { uri: string; name: string; type?: string | null } | null; rubricFile?: { uri: string; name: string; type?: string | null } | null; assignedStudentIds?: string[] }) => Promise<void>;
+  submitAssignment: (assignmentId: string, input: { contentText?: string; file?: { uri: string; name: string; type?: string | null } | null }) => Promise<void>;
   gradeSubmission: (submissionId: string, input: { grade: string; feedback: string }) => Promise<void>;
   createAnnouncement: (input: { title: string; content: string }) => Promise<void>;
   toggleAssignmentClosed: (assignmentId: string, isClosed: boolean) => Promise<void>;
@@ -210,6 +224,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     profileImagePublicId?: string | null;
     currentPassword?: string;
     newPassword?: string;
+    mobileNumber?: string | null;
+    birthdate?: string | null;
+    professionalTitle?: string | null;
+    employmentStatus?: string | null;
+    education?: string | null;
+    certifications?: string | null;
+    yearsExperience?: number | null;
+    specializations?: string[];
+    notes?: string | null;
+    availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
   }) => {
     const response = await mobileApiClient.updateProfile(input);
     setSession((prev) => (prev ? { ...prev, user: response.user } : prev));
@@ -220,14 +244,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return response.user;
   };
 
+  const uploadProfileImage = (file: { uri: string; name: string; type?: string | null }) => mobileApiClient.uploadProfileImage(file);
+
   const addUser = async (input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; password: string }) => {
     const user = await mobileApiClient.createUser(input);
     setData((prev) => ({ ...prev, users: [user, ...prev.users] }));
   };
 
+  const enrollAccount = async (input: { firstName: string; middleName?: string; lastName: string; email: string; role: 'teacher' | 'student'; mobileNumber?: string; birthdate?: string; professionalTitle?: string; employmentStatus?: string; education?: string; certifications?: string; yearsExperience?: number; specializations?: string[]; availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }> }) => {
+    const response = await mobileApiClient.enrollAccount(input);
+    setData((prev) => ({ ...prev, users: [response.user, ...prev.users] }));
+  };
+
   const editUser = async (
     id: string,
-    input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; password?: string },
+    input: { firstName: string; middleName?: string; lastName: string; email: string; role: UserRole; status: UserStatus; mobileNumber?: string | null; birthdate?: string | null; password?: string },
   ) => {
     const user = await mobileApiClient.updateUser(id, input);
     setData((prev) => ({ ...prev, users: prev.users.map((u) => (u.id === id ? user : u)) }));
@@ -236,6 +267,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteUser = async (id: string) => {
     await mobileApiClient.deleteUser(id);
     setData((prev) => ({ ...prev, users: prev.users.filter((u) => u.id !== id) }));
+  };
+
+  const changeUserStatus = async (id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => {
+    const user = await mobileApiClient.changeUserStatus(id, input);
+    setData((prev) => ({ ...prev, users: prev.users.map((item) => item.id === id ? user : item) }));
   };
 
   const upsertSchedule = (schedule: ScheduleItem) => {
@@ -255,7 +291,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     startTime: string;
     endTime: string;
     teacherId?: string;
-    studentId?: string | null;
+    studentId: string;
+    enrollmentId: string;
     requestNote?: string;
   }) => {
     const created = await mobileApiClient.createSchedule(input);
@@ -307,7 +344,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       endTime?: string;
       teacherId?: string;
       studentId?: string | null;
-      status?: 'pending' | 'accepted' | 'declined' | 'cancelled';
+      status?: 'scheduled' | 'pending' | 'accepted' | 'declined' | 'cancelled';
       requestNote?: string | null;
       responseNote?: string | null;
     },
@@ -316,12 +353,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     upsertSchedule(updated);
   };
 
-  const createAssignment = async (input: { title: string; description: string; dueDate: string }) => {
+  const createAssignment = async (input: { title: string; description: string; dueDate: string; attachmentFile?: { uri: string; name: string; type?: string | null } | null; rubricFile?: { uri: string; name: string; type?: string | null } | null; assignedStudentIds?: string[] }) => {
     const created = await mobileApiClient.createAssignment(input);
     setData((prev) => ({ ...prev, assignments: [created, ...prev.assignments] }));
   };
 
-  const submitAssignment = async (assignmentId: string, input: { contentText?: string }) => {
+  const submitAssignment = async (assignmentId: string, input: { contentText?: string; file?: { uri: string; name: string; type?: string | null } | null }) => {
     const submission = await mobileApiClient.submitAssignment(assignmentId, input);
     setData((prev) => {
       const filtered = prev.submissions.filter((s) => s.id !== submission.id);
@@ -477,9 +514,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     logout,
     refresh,
     updateProfile,
+    uploadProfileImage,
     addUser,
+    enrollAccount,
     editUser,
     deleteUser,
+    changeUserStatus,
     createSchedule,
     respondToSchedule,
     moveSchedule,
