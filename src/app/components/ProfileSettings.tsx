@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ImagePlus, Lock, Mail, Save, UserRound, Plus, Trash2 } from 'lucide-react';
+import { ImagePlus, Lock, Mail, Save, UserRound, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthUser } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
@@ -38,6 +38,9 @@ interface ProfileSettingsProps {
 function getInitials(firstName: string, lastName: string): string {
   return `${firstName.trim().charAt(0)}${lastName.trim().charAt(0)}`.toUpperCase() || '?';
 }
+function ParentPolicyModal({ onClose }: { onClose: () => void }) {
+  return <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4"><div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"><div className="flex items-start justify-between"><div><h2 className="text-lg font-bold text-gray-900">Parent/Guardian Guidance Policy</h2><p className="text-sm text-gray-500">For students under 18 years old</p></div><button onClick={onClose} aria-label="Close policy"><X /></button></div><p className="mt-5 text-sm leading-6 text-gray-700">Students under 18 should be guided and supervised by a parent or legal guardian while navigating and using the YUNAfied system. Parents or guardians should help students understand system activities, communications, schedules, and learning content, and be available when support or consent is needed.</p><div className="mt-5 flex justify-end"><button onClick={onClose} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white">I understand</button></div></div></div>;
+}
 
 export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }: ProfileSettingsProps) {
   const [firstName, setFirstName] = useState(user.firstName);
@@ -62,6 +65,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
   const [specializations, setSpecializations] = useState((user.specializations || []).join(', '));
   const [notes, setNotes] = useState(user.notes || '');
   const [availability, setAvailability] = useState(user.availability?.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
+  const [policyOpen, setPolicyOpen] = useState(false);
 
   useEffect(() => {
     setFirstName(user.firstName);
@@ -268,6 +272,8 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
           </>}
         </div>
 
+        {user.role === 'student' && <div className="mx-6 mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Students under 18 should be guided by a parent or legal guardian while navigating the system. <button type="button" onClick={() => setPolicyOpen(true)} className="font-semibold text-violet-700 underline">Read the parent/guardian guidance policy</button>.</div>}
+
         <div className="px-6 pb-6 grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
             <label className="text-sm font-medium text-gray-700 mb-2 block">Current Password</label>
@@ -309,6 +315,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
           </button>
         </div>
       </div>
+      {policyOpen && <ParentPolicyModal onClose={() => setPolicyOpen(false)} />}
     </div>
   );
 }
