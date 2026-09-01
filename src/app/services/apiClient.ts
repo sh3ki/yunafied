@@ -118,6 +118,15 @@ interface UpdateProfilePayload {
   profileImagePublicId?: string | null;
   currentPassword?: string;
   newPassword?: string;
+  mobileNumber?: string | null;
+  professionalTitle?: string | null;
+  employmentStatus?: string | null;
+  education?: string | null;
+  certifications?: string | null;
+  yearsExperience?: number | null;
+  specializations?: string[];
+  notes?: string | null;
+  availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
 }
 
 interface YunaAiMessage {
@@ -288,6 +297,11 @@ class YunafiedApiClient {
 
   async listUsers(): Promise<AuthUser[]> {
     return this.request<AuthUser[]>("/api/users");
+  }
+
+  async getProfileDetails(): Promise<AuthUser> {
+    const data = await this.request<{ user: AuthUser }>("/api/profile/details");
+    return data.user;
   }
 
   async listTeacherRecords(): Promise<TeacherRecordItem[]> {
