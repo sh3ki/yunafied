@@ -889,6 +889,15 @@ export default function App() {
     profileImagePublicId?: string | null;
     currentPassword?: string;
     newPassword?: string;
+    mobileNumber?: string | null;
+    professionalTitle?: string | null;
+    employmentStatus?: string | null;
+    education?: string | null;
+    certifications?: string | null;
+    yearsExperience?: number | null;
+    specializations?: string[];
+    notes?: string | null;
+    availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
   }) => {
     const updated = await apiClient.updateProfile(input);
     setSession((prev) => (prev ? { ...prev, user: updated } : prev));
