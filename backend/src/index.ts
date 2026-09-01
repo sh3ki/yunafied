@@ -1470,13 +1470,13 @@ app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res
     }
 
     for (const schedule of schedules.slice(0, 12)) {
-      if (schedule.status === "pending") {
-        const id = `schedule-pending:${schedule.id}`;
+      if (schedule.status === "scheduled") {
+        const id = `schedule-scheduled:${schedule.id}`;
         const createdAt = schedule.updatedAt || schedule.createdAt;
         notificationRows.push({
           id,
           type: "schedule",
-          title: "Schedule request pending",
+          title: "Video meeting scheduled",
           message: `${schedule.title} on ${schedule.date} ${schedule.startTime}-${schedule.endTime}`,
           priority: "medium",
           createdAt,
