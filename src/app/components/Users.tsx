@@ -33,6 +33,7 @@ interface UpdateUserInput {
   profileImagePublicId?: string | null;
   password?: string;
   mobileNumber?: string;
+  birthdate?: string;
   professionalTitle?: string;
   employmentStatus?: string;
   yearsExperience?: string;
@@ -120,7 +121,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
     profileImageUrl: null,
     profileImagePublicId: null,
     password: '',
-    mobileNumber: '', professionalTitle: '', employmentStatus: '', yearsExperience: '', specializations: [], education: '', certifications: '', availability: [],
+    mobileNumber: '', birthdate: '', professionalTitle: '', employmentStatus: '', yearsExperience: '', specializations: [], education: '', certifications: '', availability: [],
   });
 
   const sortedUsers = useMemo(
@@ -185,7 +186,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
       profileImageUrl: user.profileImageUrl,
       profileImagePublicId: user.profileImagePublicId,
       password: '',
-      mobileNumber: '', professionalTitle: '', employmentStatus: '', yearsExperience: '', specializations: user.specializations || [], education: '', certifications: '', availability: [],
+      mobileNumber: user.mobileNumber || '', birthdate: user.birthdate || '', professionalTitle: '', employmentStatus: '', yearsExperience: '', specializations: user.specializations || [], education: '', certifications: '', availability: [],
     });
     setIsEditOpen(true);
     if (user.role === 'teacher') void apiClient.listTeacherRecords().then((records) => {
@@ -601,6 +602,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                   </select>
                 </div>
               </div>
+              {editUser.role === 'student' && <div className="border-t pt-4 grid grid-cols-1 md:grid-cols-2 gap-3"><input className="border rounded-lg px-3 py-2" placeholder="Mobile number" value={editUser.mobileNumber || ''} onChange={(e) => setEditUser({ ...editUser, mobileNumber: e.target.value })} /><input type="date" className="border rounded-lg px-3 py-2" value={editUser.birthdate || ''} onChange={(e) => setEditUser({ ...editUser, birthdate: e.target.value })} /></div>}
               {editUser.role === 'teacher' && <div className="border-t pt-4 space-y-3">
                 <h4 className="font-semibold text-gray-800">Teacher Personnel Information</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
