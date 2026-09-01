@@ -957,7 +957,11 @@ export default function App() {
 
   useEffect(() => {
     if (!session || session.user.role !== 'student') return;
-    const poll = setInterval(async () => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let delay = 10000;
+
+    const poll = async () => {
       try {
         const call = await apiClient.getIncomingCall();
         if (call && call.status === 'calling' && !dismissedCallsRef.current.has(call.roomToken)) {
@@ -965,11 +969,24 @@ export default function App() {
         } else {
           setIncomingCall(null);
         }
+        // A successful heartbeat can use the normal polling interval.
+        delay = 10000;
       } catch (_e) {
-        // ignore network errors during polling
+        // Back off when the API/proxy is rate-limiting or restarting. This
+        // prevents a fleet of clients from amplifying a transient 429/503.
+        delay = Math.min(delay * 2, 60000);
       }
-    }, 4000);
-    return () => clearInterval(poll);
+
+      if (!cancelled) {
+        timer = setTimeout(poll, delay);
+      }
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [session]);
 
   // ── Chat unread total polling ──────────────────────────────────────────────
