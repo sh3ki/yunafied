@@ -49,6 +49,7 @@ interface DbUserRow {
   otp_expires_at: string | null;
   verification_token_hash: string | null;
   verification_token_expires_at: string | null;
+  mobile_number?: string | null;
   specializations?: string[];
 }
 
@@ -276,6 +277,7 @@ export class YunafiedService {
       profileImageUrl: row.profile_image_url,
       profileImagePublicId: row.profile_image_public_id,
       createdAt: row.created_at,
+      mobileNumber: row.mobile_number || null,
       specializations: row.specializations || [],
     };
   }
@@ -524,7 +526,7 @@ export class YunafiedService {
          FROM schedules s
         WHERE s.teacher_id = $1
           AND s.scheduled_date = $2::date
-          AND s.status IN ('pending', 'accepted')
+          AND s.status IN ('scheduled', 'pending', 'accepted')
           AND s.start_time < $4::time
           AND s.end_time > $3::time
           ${excludeSql}
@@ -550,6 +552,7 @@ export class YunafiedService {
               t.full_name AS "teacherName",
               s.student_id AS "studentId",
               st.full_name AS "studentName",
+              s.enrollment_id AS "enrollmentId",
               s.status,
               s.request_note AS "requestNote",
               s.response_note AS "responseNote",
@@ -595,7 +598,7 @@ export class YunafiedService {
       whereSql = `WHERE s.teacher_id = $${params.length}`;
     } else if (requester.role === "student") {
       params.push(requester.id);
-      whereSql = `WHERE s.status = 'scheduled' OR s.student_id = $${params.length}`;
+      whereSql = `WHERE s.status = 'scheduled' AND s.student_id = $${params.length}`;
     }
 
     const result = await pool.query(
@@ -746,10 +749,11 @@ export class YunafiedService {
           $2,
           $3,
           $4,
-          $5::date,
-          trim(to_char($5::date, 'FMDay')),
-          $6::time,
+          $5,
+          $6::date,
+          trim(to_char($6::date, 'FMDay')),
           $7::time,
+          $8::time,
           'scheduled',
           NOW()
        )
@@ -3895,7 +3899,7 @@ export class YunafiedService {
     ] = await Promise.all([
       pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM users WHERE role = 'student'"),
       pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM users WHERE role = 'teacher'"),
-      pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM schedules WHERE status = 'accepted'"),
+      pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM schedules WHERE status = 'scheduled'"),
       pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM submissions"),
       pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM announcements"),
       pool.query<{ count: string }>("SELECT COUNT(*)::text AS count FROM enrollment_records"),
