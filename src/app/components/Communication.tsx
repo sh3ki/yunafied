@@ -80,7 +80,7 @@ export function Communication({ role, userId, announcements, onCreateAnnouncemen
 
   return (
     <div className="p-4 md:p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between gap-4 mb-6">
+      <div className="announcements-header flex items-center justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 flex items-center gap-3">
             <Megaphone className="h-7 w-7 text-violet-600" />
