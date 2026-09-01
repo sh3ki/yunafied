@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ImagePlus, Lock, Mail, Save, UserRound } from 'lucide-react';
+import { ImagePlus, Lock, Mail, Save, UserRound, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AuthUser } from '@/app/types/models';
+import { apiClient } from '@/app/services/apiClient';
 
 interface ProfileUploadResult {
   secureUrl: string;
@@ -17,6 +18,15 @@ interface UpdateProfileInput {
   profileImagePublicId?: string | null;
   currentPassword?: string;
   newPassword?: string;
+  mobileNumber?: string | null;
+  professionalTitle?: string | null;
+  employmentStatus?: string | null;
+  education?: string | null;
+  certifications?: string | null;
+  yearsExperience?: number | null;
+  specializations?: string[];
+  notes?: string | null;
+  availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
 }
 
 interface ProfileSettingsProps {
@@ -42,6 +52,15 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
   const [newPassword, setNewPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [mobileNumber, setMobileNumber] = useState(user.mobileNumber || '');
+  const [professionalTitle, setProfessionalTitle] = useState(user.professionalTitle || '');
+  const [employmentStatus, setEmploymentStatus] = useState(user.employmentStatus || '');
+  const [education, setEducation] = useState(user.education || '');
+  const [certifications, setCertifications] = useState(user.certifications || '');
+  const [yearsExperience, setYearsExperience] = useState(user.yearsExperience == null ? '' : String(user.yearsExperience));
+  const [specializations, setSpecializations] = useState((user.specializations || []).join(', '));
+  const [notes, setNotes] = useState(user.notes || '');
+  const [availability, setAvailability] = useState(user.availability?.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
 
   useEffect(() => {
     setFirstName(user.firstName);
@@ -52,7 +71,20 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
     setProfileImagePublicId(user.profileImagePublicId || null);
     setSelectedImageFile(null);
     setPreviewImageUrl(null);
+    setMobileNumber(user.mobileNumber || '');
+    setProfessionalTitle(user.professionalTitle || ''); setEmploymentStatus(user.employmentStatus || '');
+    setEducation(user.education || ''); setCertifications(user.certifications || '');
+    setYearsExperience(user.yearsExperience == null ? '' : String(user.yearsExperience));
+    setSpecializations((user.specializations || []).join(', ')); setNotes(user.notes || '');
+    setAvailability(user.availability?.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
   }, [user]);
+
+  useEffect(() => { void apiClient.getProfileDetails().then((details) => {
+    setMobileNumber(details.mobileNumber || ''); setProfessionalTitle(details.professionalTitle || ''); setEmploymentStatus(details.employmentStatus || '');
+    setEducation(details.education || ''); setCertifications(details.certifications || ''); setYearsExperience(details.yearsExperience == null ? '' : String(details.yearsExperience));
+    setSpecializations((details.specializations || []).join(', ')); setNotes(details.notes || '');
+    setAvailability(details.availability?.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
+  }).catch(() => undefined); }, [user.id]);
 
   useEffect(() => {
     return () => {
@@ -104,6 +136,13 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
         profileImagePublicId: nextProfileImagePublicId,
         currentPassword: currentPassword.trim() || undefined,
         newPassword: newPassword.trim() || undefined,
+        mobileNumber: mobileNumber.trim() || null,
+        ...(user.role === 'teacher' ? {
+          professionalTitle: professionalTitle.trim() || null, employmentStatus: employmentStatus.trim() || null,
+          education: education.trim() || null, certifications: certifications.trim() || null,
+          yearsExperience: yearsExperience === '' ? null : Number(yearsExperience),
+          specializations: specializations.split(',').map((item) => item.trim()).filter(Boolean), notes: notes.trim() || null, availability,
+        } : {}),
       });
 
       if (selectedImageFile) {
@@ -208,6 +247,20 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
               />
             </div>
           </div>
+        </div>
+
+        <div className="px-6 pb-6 grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className={user.role === 'student' ? 'md:col-span-2' : ''}><label className="text-sm font-medium text-gray-700 mb-2 block">Mobile Number</label><input value={mobileNumber} onChange={(e) => setMobileNumber(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="09XX XXX XXXX" /></div>
+          {user.role === 'teacher' && <>
+            <div><label className="text-sm font-medium text-gray-700 mb-2 block">Professional Title</label><input value={professionalTitle} onChange={(e) => setProfessionalTitle(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="e.g. English Teacher" /></div>
+            <div><label className="text-sm font-medium text-gray-700 mb-2 block">Employment Status</label><input value={employmentStatus} onChange={(e) => setEmploymentStatus(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="e.g. Full-time" /></div>
+            <div><label className="text-sm font-medium text-gray-700 mb-2 block">Specializations</label><input value={specializations} onChange={(e) => setSpecializations(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="Separate subjects with commas" /></div>
+            <div><label className="text-sm font-medium text-gray-700 mb-2 block">Years of Experience</label><input type="number" min="0" value={yearsExperience} onChange={(e) => setYearsExperience(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" /></div>
+            <div><label className="text-sm font-medium text-gray-700 mb-2 block">Education</label><textarea value={education} onChange={(e) => setEducation(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="Degrees and institutions" /></div>
+            <div><label className="text-sm font-medium text-gray-700 mb-2 block">Certifications</label><textarea value={certifications} onChange={(e) => setCertifications(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" /></div>
+            <div className="md:col-span-2"><label className="text-sm font-medium text-gray-700 mb-2 block">Notes</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" /></div>
+            <div className="md:col-span-2"><div className="flex items-center justify-between mb-2"><label className="text-sm font-medium text-gray-700">Availability</label><button type="button" onClick={() => setAvailability((items) => [...items, { dayOfWeek: 1, startTime: '09:00', endTime: '17:00' }])} className="text-sm text-violet-700 inline-flex items-center gap-1"><Plus className="h-4 w-4" />Add time</button></div>{availability.map((item, index) => <div key={`${index}-${item.dayOfWeek}`} className="flex flex-wrap items-center gap-2 mb-2"><select value={item.dayOfWeek} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, dayOfWeek: Number(e.target.value) } : x))} className="border border-gray-200 rounded-lg px-2 py-2"><option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></select><input type="time" value={item.startTime} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, startTime: e.target.value } : x))} className="border border-gray-200 rounded-lg px-2 py-2" /><span>to</span><input type="time" value={item.endTime} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, endTime: e.target.value } : x))} className="border border-gray-200 rounded-lg px-2 py-2" /><button type="button" onClick={() => setAvailability((items) => items.filter((_, i) => i !== index))} className="p-2 text-gray-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>)}</div>
+          </>}
         </div>
 
         <div className="px-6 pb-6 grid grid-cols-1 md:grid-cols-2 gap-5">
