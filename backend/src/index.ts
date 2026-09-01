@@ -3470,6 +3470,7 @@ const adminAnalyticsQuerySchema = z.object({
   dateFrom: z.string().date().optional(),
   dateTo: z.string().date().optional(),
   status: z.string().optional(),
+  refresh: z.enum(["true", "false"]).optional(),
 });
 
 app.post("/api/admin/audit-logs/print", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -3503,7 +3504,8 @@ function materiallyDifferent(previous: unknown, current: unknown): boolean {
 
 app.get("/api/admin/analytics", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const filters = adminAnalyticsQuerySchema.parse(req.query);
+    const { refresh: refreshParam, ...filters } = adminAnalyticsQuerySchema.parse(req.query);
+    const forceRefresh = refreshParam === "true";
     const analytics = await service.getFilteredAdminAnalytics(filters);
     const performanceGraphs = await service.getAdminPerformanceGraphs();
     const snapshot = { ...analytics, interpretation: undefined, interpretationGeneratedAt: undefined };
@@ -3530,9 +3532,9 @@ app.get("/api/admin/analytics", requireAuth, requireRole("admin"), async (req: A
         continue;
       }
       const fingerprint = createHash("sha256").update(JSON.stringify({ graphKey, filters, graphData })).digest("hex");
-      let saved = await service.getAdminDashboardInterpretation(fingerprint);
+      let saved = forceRefresh ? null : await service.getAdminDashboardInterpretation(fingerprint);
       if (!saved) {
-        const latest = await service.getLatestAdminDashboardInterpretation(graphKey);
+        const latest = forceRefresh ? null : await service.getLatestAdminDashboardInterpretation(graphKey);
         const previousData = latest && typeof latest.snapshot === 'object' && latest.snapshot !== null ? (latest.snapshot as { graphData?: unknown }).graphData : null;
         if (latest && !materiallyDifferent(previousData, graphData)) {
           saved = await service.saveAdminDashboardInterpretation({ fingerprint, filters, snapshot: { graphKey, graphData }, interpretation: latest.interpretation });
