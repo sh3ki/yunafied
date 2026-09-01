@@ -211,6 +211,14 @@ class MobileApiClient {
     return data.user;
   }
 
+  verifyAccount(token: string) {
+    return this.request<any>(`/api/auth/verify-account?token=${encodeURIComponent(token)}`);
+  }
+
+  completeAccountSetup(input: { token: string; firstName: string; middleName?: string; lastName: string; password: string }) {
+    return this.request<LoginResponse>('/api/auth/complete-account-setup', { method: 'POST', body: JSON.stringify(input) });
+  }
+
   getProfileDetails() {
     return this.request<AuthUser & { professionalTitle?: string | null; employmentStatus?: string | null; education?: string | null; certifications?: string | null; yearsExperience?: number | null; specializations?: string[]; notes?: string | null; availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }> }>('/api/profile/details');
   }
@@ -269,6 +277,10 @@ class MobileApiClient {
     return this.request<void>(`/api/admin/teacher-records/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
   }
 
+  replaceTeacherAvailability(id: string, availability: Array<{ dayOfWeek: number; startTime: string; endTime: string }>) {
+    return this.request<void>(`/api/admin/teacher-records/${id}/availability`, { method: 'PUT', body: JSON.stringify({ availability }) });
+  }
+
   listStudentRecords() {
     return this.request<StudentRecordItem[]>('/api/student-records');
   }
@@ -314,6 +326,15 @@ class MobileApiClient {
 
   changeUserStatus(id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) {
     return this.request<AuthUser>(`/api/users/${id}/status`, { method: 'PATCH', body: JSON.stringify(input) });
+  }
+
+  importUsersFromCsv(file: { uri: string; name: string; type?: string | null }) {
+    const form = new FormData();
+    form.append('file', { uri: file.uri, name: file.name, type: file.type || 'text/csv' } as any);
+    return this.request<{ success: number; failed: number; errors: Array<{ row: number; reason: string }> }>('/api/admin/users/import-csv', {
+      method: 'POST',
+      body: form,
+    });
   }
 
   resendVerification(userId: string) {
@@ -512,6 +533,10 @@ class MobileApiClient {
     return this.request<any[]>('/api/student/store/purchases');
   }
 
+  useStoreItem(code: string) {
+    return this.request<any>('/api/store/use', { method: 'POST', body: JSON.stringify({ code }) });
+  }
+
   listAssignments() {
     return this.request<AssignmentItem[]>('/api/assignments');
   }
@@ -646,6 +671,18 @@ class MobileApiClient {
     return this.request<NotificationItem[]>(`/api/notifications?limit=${encodeURIComponent(String(limit))}`);
   }
 
+  listVideoSummaries(params: { page?: number; pageSize?: number } = {}) {
+    const query = [
+      params.page ? `page=${encodeURIComponent(String(params.page))}` : '',
+      params.pageSize ? `pageSize=${encodeURIComponent(String(params.pageSize))}` : '',
+    ].filter(Boolean).join('&');
+    return this.request<any>(`/api/ai/video-summaries${query ? `?${query}` : ''}`);
+  }
+
+  deleteVideoSummary(id: string) {
+    return this.request<void>(`/api/ai/video-summaries/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
   markNotificationRead(id: string) {
     return this.request<void>(`/api/notifications/${encodeURIComponent(id)}/read`, { method: 'PATCH' });
   }
@@ -670,12 +707,53 @@ class MobileApiClient {
     return this.request<TeacherAvailabilityItem[]>(`/api/teacher/availability${teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : ''}`);
   }
 
+  createTeacherAvailability(input: { dayOfWeek: number; startTime: string; endTime: string; teacherId?: string }) {
+    return this.request<TeacherAvailabilityItem>('/api/teacher/availability', { method: 'POST', body: JSON.stringify(input) });
+  }
+
+  deleteTeacherAvailability(id: string) {
+    return this.request<void>(`/api/teacher/availability/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  listMilestones(studentId?: string) {
+    return this.request<any[]>(`/api/milestones${studentId ? `?studentId=${encodeURIComponent(studentId)}` : ''}`);
+  }
+
+  listStudentTasks() { return this.request<any[]>('/api/student/tasks'); }
+  createStudentTask(input: { title: string; dueDate?: string | null; source?: string; assignmentId?: string | null }) {
+    return this.request<any>('/api/student/tasks', { method: 'POST', body: JSON.stringify(input) });
+  }
+  updateStudentTask(id: string, input: { title?: string; dueDate?: string | null; isCompleted?: boolean }) {
+    return this.request<any>(`/api/student/tasks/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(input) });
+  }
+  deleteStudentTask(id: string) { return this.request<void>(`/api/student/tasks/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+  listBadges() { return this.request<any[]>('/api/badges'); }
+  listStudentBadges() { return this.request<any[]>('/api/student/badges'); }
+  getStudentXp() { return this.request<any>('/api/student/xp'); }
+  saveVocabItem(input: { sourceText: string; translatedText: string; sourceLanguage: string; targetLanguage: string }) {
+    return this.request<any>('/api/translations/vocab', { method: 'POST', body: JSON.stringify(input) });
+  }
+  listVocabItems() { return this.request<any[]>('/api/translations/vocab'); }
+  deleteVocabItem(id: string) { return this.request<void>(`/api/translations/vocab/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+
   listChats() {
     return this.request<ChatSummaryItem[]>('/api/chats');
   }
 
   listChatUsers() {
     return this.request<MessageUserItem[]>('/api/chats/users');
+  }
+
+  listMessageUsers() {
+    return this.request<MessageUserItem[]>('/api/messages/users');
+  }
+
+  listMessages(withUserId: string) {
+    return this.request<any[]>(`/api/messages?withUserId=${encodeURIComponent(withUserId)}`);
+  }
+
+  sendMessage(input: { receiverId: string; body: string }) {
+    return this.request<any>('/api/messages', { method: 'POST', body: JSON.stringify(input) });
   }
 
   openDirectChat(otherUserId: string) {
@@ -719,6 +797,10 @@ class MobileApiClient {
       method: 'POST',
       body: JSON.stringify(input),
     });
+  }
+
+  markChatRead(chatId: string) {
+    return this.request<void>(`/api/chats/${encodeURIComponent(chatId)}/read`, { method: 'PATCH' });
   }
 
   createLearningMaterialFile(input: { title: string; subject: string; description?: string; file: { uri: string; name: string; type?: string | null } }) {
@@ -797,6 +879,21 @@ class MobileApiClient {
 
   getMeeting(roomToken: string) {
     return this.request<MeetingRoom>(`/api/meetings/${roomToken}`);
+  }
+
+  recordAuditLogPrint(filters: Record<string, string>) {
+    return this.request<void>('/api/admin/audit-logs/print', { method: 'POST', body: JSON.stringify({ filters }) });
+  }
+
+  listNotificationsDb(limit = 30) {
+    return this.request<any[]>(`/api/notifications?limit=${encodeURIComponent(String(limit))}`);
+  }
+
+  getMeetingsBySchedules(scheduleIds: string[]) {
+    return this.request<Record<string, MeetingRoom | null>>('/api/meetings/by-schedules', {
+      method: 'POST',
+      body: JSON.stringify({ scheduleIds }),
+    });
   }
 
   sendMeetingSignal(roomToken: string, payload: Record<string, unknown>) {
