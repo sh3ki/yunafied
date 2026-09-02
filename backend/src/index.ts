@@ -767,7 +767,13 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
 
   // CORS: allow www origin (DNS redirects www→apex, so preflight must not be redirected)
   const allowedOrigins = process.env.NODE_ENV === "production"
-    ? ["https://www.yunafied.online"]
+    ? [
+        "https://www.yunafied.online",
+        // Capacitor Android WebViews use localhost as their app origin.
+        "https://localhost",
+        "http://localhost",
+        "capacitor://localhost",
+      ]
     : [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
