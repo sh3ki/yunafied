@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Mic, MicOff, Video, VideoOff, PhoneOff, CameraOff, AlertTriangle, Phone, Settings, X } from 'lucide-react';
-import { MeetingRoom } from '@/app/types/models';
+import { Mic, MicOff, Video, VideoOff, PhoneOff, CameraOff, AlertTriangle, Phone, Settings, X, MessageCircle, Send } from 'lucide-react';
+import { MeetingChatMessage, MeetingRoom } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
 
 // STUN (discovery) + free TURN relay servers for cross-network calls
@@ -45,6 +45,13 @@ export function VideoCall({ userId, role }: VideoCallProps) {
   const [connectionState, setConnectionState] = useState<string>('');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState<MeetingChatMessage[]>([]);
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+  const [chatUnread, setChatUnread] = useState(0);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const knownChatIdsRef = useRef<Set<string>>(new Set());
 
   // Device lists & selected IDs
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
@@ -64,6 +71,7 @@ export function VideoCall({ userId, role }: VideoCallProps) {
   const mountedRef = useRef(true);
   const sentIceCandidatesRef = useRef<Set<string>>(new Set());
   const callStartTimeRef = useRef<number | null>(null);
+  const meetingEndedRef = useRef(false);
 
   const isTeacher = role === 'teacher';
 
@@ -120,19 +128,71 @@ export function VideoCall({ userId, role }: VideoCallProps) {
 
   const endCall = useCallback(
     async (reason: CallPhase = 'ended') => {
+      if (meetingEndedRef.current) return;
+      meetingEndedRef.current = true;
+      const durationSeconds = callStartTimeRef.current
+        ? Math.floor((Date.now() - callStartTimeRef.current) / 1000)
+        : 0;
       cleanup();
       setPhase(reason);
 
       if (roomToken) {
         try {
-          await apiClient.updateMeetingStatus(roomToken, 'ended');
+          await apiClient.updateMeetingStatus(roomToken, 'ended', durationSeconds);
         } catch (_e) {
           // Best-effort
         }
       }
-    },
+  },
     [cleanup, roomToken],
   );
+
+  const refreshChat = useCallback(async () => {
+    if (!roomToken || meetingEndedRef.current) return;
+    try {
+      const messages = await apiClient.getMeetingChat(roomToken);
+      if (!mountedRef.current || meetingEndedRef.current) return;
+      const newIncoming = messages.filter((message) =>
+        !knownChatIdsRef.current.has(message.id) && message.senderId !== userId,
+      ).length;
+      messages.forEach((message) => knownChatIdsRef.current.add(message.id));
+      setChatMessages(messages);
+      if (newIncoming > 0 && !showChat) setChatUnread((count) => count + newIncoming);
+    } catch (_e) {
+      // Chat polling is non-fatal to the video call.
+    }
+  }, [roomToken, userId, showChat]);
+
+  useEffect(() => {
+    if (!roomToken || phase === 'ended' || phase === 'declined' || phase === 'error') return;
+    void refreshChat();
+    const timer = setInterval(refreshChat, 1500);
+    return () => clearInterval(timer);
+  }, [roomToken, phase, refreshChat]);
+
+  useEffect(() => {
+    if (showChat) {
+      setChatUnread(0);
+      requestAnimationFrame(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
+    }
+  }, [showChat, chatMessages.length]);
+
+  const sendChatMessage = async (event?: React.FormEvent) => {
+    event?.preventDefault();
+    const content = chatDraft.trim();
+    if (!content || !roomToken || chatSending) return;
+    setChatSending(true);
+    try {
+      const message = await apiClient.sendMeetingChatMessage(roomToken, content);
+      knownChatIdsRef.current.add(message.id);
+      setChatMessages((messages) => [...messages, message]);
+      setChatDraft('');
+    } catch (_e) {
+      toast.error('Could not send chat message.');
+    } finally {
+      setChatSending(false);
+    }
+  };
 
   const createPeerConnection = useCallback((): RTCPeerConnection => {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -312,6 +372,7 @@ export function VideoCall({ userId, role }: VideoCallProps) {
 
       if (latestRoom.status === 'ended' || latestRoom.status === 'declined') {
         stopPolling();
+        meetingEndedRef.current = true;
         cleanup();
         setPhase(latestRoom.status === 'declined' ? 'declined' : 'ended');
         return;
@@ -379,6 +440,7 @@ export function VideoCall({ userId, role }: VideoCallProps) {
         setRoom(roomData);
 
         if (roomData.status === 'ended' || roomData.status === 'declined') {
+          meetingEndedRef.current = true;
           setPhase(roomData.status);
           return;
         }
@@ -409,6 +471,17 @@ export function VideoCall({ userId, role }: VideoCallProps) {
       cleanup();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomToken]);
+
+  // Persist the duration when the participant closes the call window or
+  // navigates away without pressing the end button.
+  useEffect(() => {
+    return () => {
+      if (!roomToken || !callStartTimeRef.current || meetingEndedRef.current) return;
+      meetingEndedRef.current = true;
+      const durationSeconds = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
+      void apiClient.updateMeetingStatus(roomToken, 'ended', durationSeconds).catch(() => undefined);
+    };
   }, [roomToken]);
 
   // Student: once offer arrives via polling, start WebRTC
@@ -661,6 +734,22 @@ export function VideoCall({ userId, role }: VideoCallProps) {
           {isMicOn ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
         </button>
 
+        {/* Meeting chat */}
+        <button
+          onClick={() => setShowChat((open) => !open)}
+          title={showChat ? 'Close chat' : 'Open chat'}
+          className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+            showChat ? 'bg-indigo-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'
+          }`}
+        >
+          <MessageCircle className="h-5 w-5" />
+          {!showChat && chatUnread > 0 && (
+            <span className="absolute -right-1 -top-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-slate-900">
+              {chatUnread > 9 ? '9+' : chatUnread}
+            </span>
+          )}
+        </button>
+
         {/* End call */}
         <button
           onClick={handleEndCall}
@@ -694,6 +783,58 @@ export function VideoCall({ userId, role }: VideoCallProps) {
           <Settings className="h-5 w-5" />
         </button>
       </div>
+
+      {/* Google Meet-style ephemeral chat sidebar */}
+      {showChat && (
+        <aside className="absolute top-16 right-4 bottom-24 w-[min(22rem,calc(100vw-2rem))] bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+            <div>
+              <p className="text-white font-semibold text-sm">In-call messages</p>
+              <p className="text-slate-500 text-xs mt-0.5">Only people in this meeting can see these messages</p>
+            </div>
+            <button onClick={() => setShowChat(false)} className="text-slate-400 hover:text-white transition" title="Close chat">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {chatMessages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                <MessageCircle className="h-8 w-8 text-slate-600 mb-3" />
+                <p className="text-slate-300 text-sm font-medium">No messages yet</p>
+                <p className="text-slate-500 text-xs mt-1">Send a message to everyone in the meeting.</p>
+              </div>
+            ) : chatMessages.map((message) => {
+              const mine = message.senderId === userId;
+              return (
+                <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] ${mine ? 'items-end' : 'items-start'} flex flex-col`}>
+                    {!mine && <span className="text-[10px] text-slate-500 mb-1 px-1">{message.senderName}</span>}
+                    <div className={`rounded-2xl px-3 py-2 text-sm break-words ${mine ? 'bg-indigo-600 text-white rounded-br-md' : 'bg-slate-700 text-slate-100 rounded-bl-md'}`}>
+                      {message.content}
+                    </div>
+                    <span className="text-[10px] text-slate-600 mt-1 px-1">
+                      {new Date(message.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={chatEndRef} />
+          </div>
+          <form onSubmit={sendChatMessage} className="p-3 border-t border-white/10 flex items-center gap-2">
+            <input
+              value={chatDraft}
+              onChange={(event) => setChatDraft(event.target.value)}
+              placeholder="Send a message"
+              maxLength={2000}
+              className="min-w-0 flex-1 bg-slate-800 text-white text-sm rounded-xl px-3 py-2.5 border border-white/10 focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-500"
+            />
+            <button type="submit" disabled={!chatDraft.trim() || chatSending} className="w-10 h-10 shrink-0 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white flex items-center justify-center transition" title="Send message">
+              <Send className="h-4 w-4" />
+            </button>
+          </form>
+        </aside>
+      )}
 
       {/* Settings panel */}
       {showSettings && (
