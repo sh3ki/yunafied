@@ -1027,7 +1027,9 @@ export default function App() {
     // Update DB status to active immediately so the backend won't return
     // this room as 'calling' on the next poll cycle.
     apiClient.updateMeetingStatus(roomToken, 'active').catch(() => undefined);
-    window.open(`/app/video-call/${roomToken}`, '_blank', 'noopener,noreferrer');
+    // Keep the call in the Capacitor WebView. Opening a new browser tab leaves
+    // Android users on a dead call-ended tab because window.close() is blocked.
+    navigate(`/app/video-call/${roomToken}`);
   };
 
   const handleDeclineCall = (roomToken: string) => {
@@ -1036,7 +1038,7 @@ export default function App() {
   };
 
   const handleStartMeeting = (roomToken: string) => {
-    window.open(`/app/video-call/${roomToken}`, '_blank', 'noopener,noreferrer');
+    navigate(`/app/video-call/${roomToken}`);
   };
 
   if (loading) {
