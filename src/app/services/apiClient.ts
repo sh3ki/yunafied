@@ -1,6 +1,8 @@
 import {
   AdminAnalyticsItem,
   AnnouncementItem,
+  ArcadeGameItem,
+  ArcadeGameDetail,
   AssignmentItem,
   AuditLogItem,
   AuthUser,
@@ -27,6 +29,7 @@ import {
   ScheduleItem,
   StudentTaskItem,
   StudentXpItem,
+  StudentProgressionItem,
   SubmissionItem,
   TeacherAvailabilityItem,
   TeacherRecordItem,
@@ -827,6 +830,32 @@ class YunafiedApiClient {
 
   async listLearningMaterials(): Promise<LearningMaterialItem[]> {
     return this.request<LearningMaterialItem[]>("/api/materials");
+  }
+
+  async listArcadeGames(gameType?: string): Promise<ArcadeGameItem[]> {
+    const query = gameType ? `?gameType=${encodeURIComponent(gameType)}` : '';
+    return this.request<ArcadeGameItem[]>(`/api/arcade/games${query}`);
+  }
+
+  async createArcadeGame(payload: { title: string; description?: string; gameType: string; difficulty?: string; isPublished?: boolean; content: Array<{ prompt?: string; answer?: string; leftText?: string; rightText?: string; cardText?: string; pairKey?: string; choices?: string[]; correctIndex?: number; timeLimitSeconds?: number; storyText?: string; bossDamage?: number }> }): Promise<{ id: string }> {
+    return this.request<{ id: string }>('/api/arcade/games', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async getArcadeGame(id: string): Promise<ArcadeGameDetail> { return this.request<ArcadeGameDetail>(`/api/arcade/games/${id}`); }
+  async submitArcadeAttempt(id: string, payload: { mode: 'practice' | 'assessed'; responses: Array<{ contentId?: string; answer?: string; choiceId?: string; pairKey?: string }> }): Promise<Record<string, any>> {
+    return this.request(`/api/arcade/games/${id}/attempts`, { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async getArcadeProgression(): Promise<StudentProgressionItem> {
+    return this.request<StudentProgressionItem>('/api/arcade/progression');
+  }
+
+  async listArcadeLeaderboard(input?: { gameId?: string; gameType?: string; limit?: number }): Promise<Array<{ studentId: string; studentName: string; bestScore: number; attemptCount: number }>> {
+    const params = new URLSearchParams();
+    if (input?.gameId) params.set('gameId', input.gameId);
+    if (input?.gameType) params.set('gameType', input.gameType);
+    if (input?.limit) params.set('limit', String(input.limit));
+    return this.request(`/api/arcade/leaderboard?${params.toString()}`);
   }
 
   async downloadLearningMaterial(id: string): Promise<Blob> {
