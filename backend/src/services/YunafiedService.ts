@@ -1480,6 +1480,9 @@ export class YunafiedService {
                   NULL::int AS "durationSeconds", mr.status AS "endedBy"
              FROM meeting_rooms mr
             WHERE mr.student_id = ANY($1::uuid[])
+              AND NOT EXISTS (
+                SELECT 1 FROM call_history ch WHERE ch.room_token::text = mr.room_token::text
+              )
          ) history
          ORDER BY "startedAt" DESC`,
         [studentIds],
@@ -3198,12 +3201,14 @@ export class YunafiedService {
   async updateMeetingStatus(
     roomToken: string,
     status: import("../types/models.js").MeetingRoomStatus,
+    durationSeconds?: number,
   ): Promise<import("../types/models.js").MeetingRoom | null> {
     const result = await pool.query(
       `UPDATE meeting_rooms
           SET status = $1,
               updated_at = NOW()
         WHERE room_token = $2
+          AND ($1 <> 'ended' OR status <> 'ended')
        RETURNING
           id,
           room_token AS "roomToken",
@@ -3223,6 +3228,25 @@ export class YunafiedService {
           updated_at AS "updatedAt"`,
       [status, roomToken],
     );
+
+    // Record the completed meeting once, even if both participants submit the
+    // end request at nearly the same time.
+    if (status === "ended" && result.rowCount) {
+      await pool.query(
+        `INSERT INTO call_history
+           (room_token, teacher_id, student_id, schedule_id, started_at, ended_at, duration_seconds, ended_by)
+         SELECT room_token::uuid, teacher_id, student_id, schedule_id, created_at, updated_at,
+                COALESCE($2::int, GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (updated_at - created_at))))::int), 'meeting'
+           FROM meeting_rooms
+          WHERE room_token = $1
+            AND NOT EXISTS (
+              SELECT 1 FROM call_history
+               WHERE call_history.room_token = meeting_rooms.room_token::uuid
+            )
+         ON CONFLICT (room_token) DO NOTHING`,
+        [roomToken, durationSeconds ?? null],
+      );
+    }
 
     return (result.rows[0] as import("../types/models.js").MeetingRoom) || null;
   }
@@ -3896,13 +3920,16 @@ export class YunafiedService {
 
   async listAllMeetingRoomsAdmin(): Promise<import("../types/models.js").CallHistoryItem[]> {
     const result = await pool.query(
-      `SELECT id, room_token AS "roomToken",
-              teacher_id AS "teacherId", teacher_name AS "teacherName",
-              student_id AS "studentId", student_name AS "studentName",
-              created_at AS "startedAt", updated_at AS "endedAt",
-              NULL::int AS "durationSeconds", NULL AS "endedBy"
-         FROM meeting_rooms
-         ORDER BY created_at DESC
+      `SELECT mr.id, mr.room_token AS "roomToken",
+              mr.teacher_id AS "teacherId", mr.teacher_name AS "teacherName",
+              mr.student_id AS "studentId", mr.student_name AS "studentName",
+              COALESCE(ch.started_at, mr.created_at) AS "startedAt",
+              COALESCE(ch.ended_at, CASE WHEN mr.status = 'ended' THEN mr.updated_at ELSE NULL END) AS "endedAt",
+              ch.duration_seconds AS "durationSeconds",
+              COALESCE(ch.ended_by, mr.status) AS "endedBy"
+         FROM meeting_rooms mr
+         LEFT JOIN call_history ch ON ch.room_token::text = mr.room_token::text
+         ORDER BY mr.created_at DESC
          LIMIT 200`,
     );
     return result.rows as import("../types/models.js").CallHistoryItem[];
