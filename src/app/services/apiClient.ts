@@ -18,6 +18,7 @@ import {
   LearningMaterialItem,
   MeetingRoom,
   MeetingRoomStatus,
+  MeetingChatMessage,
   MessageItem,
   MessageUserItem,
   MilestoneItem,
@@ -919,10 +920,10 @@ class YunafiedApiClient {
     });
   }
 
-  async updateMeetingStatus(roomToken: string, status: MeetingRoomStatus): Promise<MeetingRoom> {
+  async updateMeetingStatus(roomToken: string, status: MeetingRoomStatus, durationSeconds?: number): Promise<MeetingRoom> {
     return this.request<MeetingRoom>(`/api/meetings/${roomToken}/status`, {
       method: "PATCH",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...(durationSeconds === undefined ? {} : { durationSeconds }) }),
     });
   }
 
@@ -1050,6 +1051,17 @@ class YunafiedApiClient {
     qs.set("page", String(params.page || 1));
     qs.set("pageSize", String(params.pageSize || 20));
     return this.request(`/api/admin/audit-logs?${qs.toString()}`);
+  }
+
+  async getMeetingChat(roomToken: string): Promise<MeetingChatMessage[]> {
+    return this.request<MeetingChatMessage[]>(`/api/meetings/${roomToken}/chat`);
+  }
+
+  async sendMeetingChatMessage(roomToken: string, content: string): Promise<MeetingChatMessage> {
+    return this.request<MeetingChatMessage>(`/api/meetings/${roomToken}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    });
   }
 
   async recordAuditLogPrint(filters: Record<string, string>): Promise<void> {
