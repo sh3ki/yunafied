@@ -51,9 +51,11 @@ Set values at minimum:
 
 In `.env`:
 - `VITE_API_URL=http://localhost:4000`
+- `VITE_APP_URL=http://localhost:5173`
 
 In `backend/.env`:
 - `PORT=4000`
+- `APP_URL=http://localhost:5173` (use `https://www.yunafied.online` in production)
 - `DATABASE_URL=<your_postgres_connection_string>`
 - `JWT_SECRET=<your_strong_secret>`
 - `GROQ_API_KEY=<your_groq_api_key>`
