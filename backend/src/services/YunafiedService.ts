@@ -206,7 +206,7 @@ export class YunafiedService {
       this.listSchedulesForRole(requester),
       this.listAssignments(),
       this.listSubmissionsForRole(requester),
-      this.listAnnouncements(),
+      this.listAnnouncements(requester),
     ]);
 
     return {
@@ -1280,17 +1280,22 @@ export class YunafiedService {
     } as SubmissionItem;
   }
 
-  async listAnnouncements(): Promise<AnnouncementItem[]> {
+  async listAnnouncements(requester?: { id: string; role: UserRole }): Promise<AnnouncementItem[]> {
+    const targetRole = requester?.role ? `${requester.role}s` : null;
     const result = await pool.query(
       `SELECT a.id,
               a.title,
               a.content,
               a.posted_by_id AS "postedById",
               u.full_name AS "postedByName",
-              a.created_at AS "createdAt"
+              a.created_at AS "createdAt",
+              a.target_scope AS "targetScope"
          FROM announcements a
          JOIN users u ON u.id = a.posted_by_id
+        WHERE a.is_deleted = FALSE
+          AND ($1::text IS NULL OR a.target_scope = 'all' OR a.target_scope = $1::text)
          ORDER BY a.created_at DESC`,
+      [targetRole],
     );
 
     return result.rows as AnnouncementItem[];
@@ -1300,16 +1305,18 @@ export class YunafiedService {
     title: string;
     content: string;
     postedById: string;
+    targetScope: "all" | "admins" | "teachers" | "students";
   }): Promise<AnnouncementItem> {
     const result = await pool.query(
-      `INSERT INTO announcements (title, content, posted_by_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO announcements (title, content, posted_by_id, target_scope)
+       VALUES ($1, $2, $3, $4)
        RETURNING id,
                  title,
                  content,
                  posted_by_id AS "postedById",
-                 created_at AS "createdAt"`,
-      [input.title, input.content, input.postedById],
+                 created_at AS "createdAt",
+                 target_scope AS "targetScope"`,
+      [input.title, input.content, input.postedById, input.targetScope],
     );
 
     const announcement = result.rows[0] as Omit<AnnouncementItem, "postedByName">;
@@ -3909,7 +3916,7 @@ export class YunafiedService {
     id: string,
     actorId: string,
     actorRole: UserRole,
-    input: { title: string; content: string },
+    input: { title: string; content: string; targetScope: "all" | "admins" | "teachers" | "students" },
   ): Promise<import("../types/models.js").AnnouncementItem | null> {
     const where = actorRole === "admin" ? "WHERE id = $1" : "WHERE id = $1 AND posted_by_id = $2";
     const params = actorRole === "admin" ? [id] : [id, actorId];
@@ -3919,13 +3926,14 @@ export class YunafiedService {
 
     const result = await pool.query(
       `UPDATE announcements
-          SET title = $${params.length + 1}, content = $${params.length + 2}, edited_at = NOW()
+          SET title = $${params.length + 1}, content = $${params.length + 2}, target_scope = $${params.length + 3}, edited_at = NOW()
         WHERE id = $1
        RETURNING id, title, content,
                  posted_by_id AS "postedById",
                  posted_by_name AS "postedByName",
-                 created_at AS "createdAt"`,
-      [...params, input.title, input.content],
+                 created_at AS "createdAt",
+                 target_scope AS "targetScope"`,
+      [...params, input.title, input.content, input.targetScope],
     );
     return (result.rows[0] as import("../types/models.js").AnnouncementItem) || null;
   }
