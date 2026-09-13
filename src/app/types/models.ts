@@ -6,6 +6,16 @@ export type ScheduleStatus = "scheduled" | "cancelled" | "pending" | "accepted" 
 export type EnrollmentStatus = "active" | "completed" | "dropped" | "archived";
 export type ChatType = "direct" | "group";
 export type MeetingRoomStatus = "calling" | "active" | "declined" | "ended";
+export type AssessmentType = "pre" | "post";
+export type AssessmentStatus = "draft" | "published" | "archived";
+export type AssessmentQuestionType = "multiple-choice" | "true-false" | "identification";
+export interface AssessmentChoice { id: string; text: string; }
+export interface AssessmentQuestion { id: string; type: AssessmentQuestionType; prompt: string; points: number; choices: AssessmentChoice[]; acceptedAnswers?: string[]; }
+export interface AssessmentItem { id: string; title: string; subject: string; gradeLevel: string; assessmentType: AssessmentType; pairedAssessmentId: string | null; instructions: string; status: AssessmentStatus; version: number; createdById: string; createdByName: string; questionCount: number; assignedCount: number; completedCount: number; createdAt: string; updatedAt: string; }
+export interface AssessmentDetail extends AssessmentItem { questions: AssessmentQuestion[]; answerReviewEnabled: boolean; }
+export interface AssessmentAssignment { id: string; assessmentId: string; studentId: string; studentName: string; teacherId: string; teacherName: string; subject: string; gradeLevel: string; assessmentType: AssessmentType; title: string; dueAt: string | null; attemptStatus: "not_started" | "in_progress" | "submitted"; score: number | null; improvement: number | null; }
+export interface AssessmentResult { assignmentId: string; assessmentId: string; studentId: string; studentName: string; subject: string; gradeLevel: string; assessmentType: AssessmentType; score: number | null; totalPoints: number; submittedAt: string | null; pairedScore: number | null; improvement: number | null; }
+export interface AssessmentAnalyticsItem { totalAssessments: number; assignedCount: number; completedCount: number; averageScore: number | null; averageImprovement: number | null; preCount: number; postCount: number; results: AssessmentResult[]; }
 
 export interface ArcadeGameItem {
   id: string; slug: string; title: string; description: string; gameType: GamifiedGameType;
