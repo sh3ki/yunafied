@@ -319,6 +319,48 @@
   .student-records-print-report th, .student-records-print-report td { border: 1px solid #d8dee8; padding: 7px; text-align: left; vertical-align: top; }
   .student-records-print-report th { background: #eef2f7; font-weight: 700; }
   .student-records-print-empty { color: #536074; font-size: 12px; }
+  .teacher-records-print-report {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #172033;
+    font-family: Arial, sans-serif;
+  }
+  .teacher-records-print-report * { visibility: visible !important; }
+  .teacher-records-print-header { border-bottom: 2px solid #7c3aed; margin-bottom: 18px; padding-bottom: 10px; }
+  .teacher-records-print-header h1 { font-size: 22px; margin: 0 0 6px; }
+  .teacher-records-print-header p { color: #536074; font-size: 11px; margin: 3px 0; }
+  .teacher-records-print-report table { border-collapse: collapse; font-size: 10px; width: 100%; }
+  .teacher-records-print-report thead { display: table-header-group; }
+  .teacher-records-print-report tr { break-inside: avoid; page-break-inside: avoid; }
+  .teacher-records-print-report th, .teacher-records-print-report td { border: 1px solid #d8dee8; padding: 7px; text-align: left; vertical-align: top; }
+  .teacher-records-print-report th { background: #eef2f7; font-weight: 700; }
+  .teacher-print-muted, .teacher-records-print-empty { color: #536074; }
+  .audit-logs-print-report {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #172033;
+    font-family: Arial, sans-serif;
+  }
+  .audit-logs-print-report * { visibility: visible !important; }
+  .audit-logs-print-header { border-bottom: 2px solid #7c3aed; margin-bottom: 18px; padding-bottom: 10px; }
+  .audit-logs-print-header h1 { font-size: 22px; margin: 0 0 6px; }
+  .audit-logs-print-header p { color: #536074; font-size: 11px; margin: 3px 0; }
+  .audit-logs-print-report table { border-collapse: collapse; font-size: 9px; width: 100%; }
+  .audit-logs-print-report thead { display: table-header-group; }
+  .audit-logs-print-report tr { break-inside: avoid; page-break-inside: avoid; }
+  .audit-logs-print-report th, .audit-logs-print-report td { border: 1px solid #d8dee8; padding: 6px; text-align: left; vertical-align: top; }
+  .audit-logs-print-report th { background: #eef2f7; font-weight: 700; }
+  .audit-logs-print-empty { color: #536074; font-size: 12px; }
 }
 
 .student-records-print-report { display: none; }
+.teacher-records-print-report { display: none; }
+.audit-logs-print-report { display: none; }
