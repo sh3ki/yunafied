@@ -1,8 +1,9 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { Plus, FileText, CheckCircle, Clock, Paperclip, Download, X, BookOpen, Search, Users } from 'lucide-react';
+import { Plus, FileText, CheckCircle, Clock, Paperclip, Download, Eye, X, BookOpen, Search, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import { AssignmentItem, SubmissionItem } from '@/app/types/models';
+import { FilePreviewModal, PreviewFile } from '@/app/components/FilePreviewModal';
 
 /** Resolve a file URL: absolute URLs (Cloudinary) are used as-is; relative paths get backendBaseUrl prepended. */
 function resolveFileUrl(url: string, backendBaseUrl: string): string {
@@ -45,6 +46,7 @@ export function Assignments({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isGradingModalOpen, setIsGradingModalOpen] = useState(false);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<PreviewFile | null>(null);
 
   const [submissionText, setSubmissionText] = useState('');
   const [submissionFile, setSubmissionFile] = useState<File | null>(null);
@@ -119,6 +121,10 @@ export function Assignments({
     setGradeInput('');
     setFeedbackInput('');
     setIsGradingModalOpen(true);
+  };
+
+  const openPreview = (title: string, fileName: string, url: string) => {
+    setPreviewFile({ title, fileName, url: resolveFileUrl(url, backendBaseUrl) });
   };
 
   const handleCreateAssignment = async () => {
@@ -302,28 +308,10 @@ export function Assignments({
                     <span className="bg-red-100 text-red-600 text-xs font-semibold px-2 py-0.5 rounded-full">Closed</span>
                   )}
                   {selectedAssignment.attachmentFileName && selectedAssignment.attachmentUrl && (
-                    <a
-                      href={toDownloadUrl(resolveFileUrl(selectedAssignment.attachmentUrl, backendBaseUrl))}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download={selectedAssignment.attachmentFileName}
-                      className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      {selectedAssignment.attachmentFileName}
-                    </a>
+                    <span className="inline-flex items-center gap-2"><button type="button" onClick={() => openPreview(selectedAssignment.title, selectedAssignment.attachmentFileName!, selectedAssignment.attachmentUrl!)} className="inline-flex items-center gap-1 text-indigo-600 hover:underline"><Eye className="h-3.5 w-3.5" />Preview: {selectedAssignment.attachmentFileName}</button><a href={toDownloadUrl(resolveFileUrl(selectedAssignment.attachmentUrl, backendBaseUrl))} target="_blank" rel="noopener noreferrer" download={selectedAssignment.attachmentFileName} className="inline-flex items-center gap-1 text-gray-600 hover:underline"><Download className="h-3.5 w-3.5" />Download</a></span>
                   )}
                   {selectedAssignment.rubricFileName && selectedAssignment.rubricUrl && (
-                    <a
-                      href={toDownloadUrl(selectedAssignment.rubricUrl)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      download={selectedAssignment.rubricFileName}
-                      className="inline-flex items-center gap-1 text-emerald-600 hover:underline"
-                    >
-                      <BookOpen className="h-3.5 w-3.5" />
-                      Rubric: {selectedAssignment.rubricFileName}
-                    </a>
+                    <span className="inline-flex items-center gap-2"><button type="button" onClick={() => openPreview(`${selectedAssignment.title} rubric`, selectedAssignment.rubricFileName!, selectedAssignment.rubricUrl!)} className="inline-flex items-center gap-1 text-emerald-600 hover:underline"><Eye className="h-3.5 w-3.5" />Preview rubric</button><a href={toDownloadUrl(resolveFileUrl(selectedAssignment.rubricUrl, backendBaseUrl))} target="_blank" rel="noopener noreferrer" download={selectedAssignment.rubricFileName} className="inline-flex items-center gap-1 text-gray-600 hover:underline"><BookOpen className="h-3.5 w-3.5" />Download rubric</a></span>
                   )}
                 </div>
               </div>
@@ -350,16 +338,7 @@ export function Assignments({
                           <p className="mt-3 text-sm text-gray-600 bg-white border border-green-200 rounded-lg p-3 text-left">{mySubmission.contentText}</p>
                         )}
                         {mySubmission.fileName && mySubmission.fileUrl && (
-                          <a
-                            href={toDownloadUrl(resolveFileUrl(mySubmission.fileUrl, backendBaseUrl))}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            download={mySubmission.fileName}
-                            className="mt-3 inline-flex items-center gap-1 text-sm text-indigo-600 underline"
-                          >
-                            <Paperclip className="h-3.5 w-3.5" />
-                            {mySubmission.fileName}
-                          </a>
+                          <span className="mt-3 flex items-center justify-center gap-3"><button type="button" onClick={() => openPreview(`${selectedAssignment.title} submission`, mySubmission.fileName!, mySubmission.fileUrl!)} className="inline-flex items-center gap-1 text-sm text-indigo-600 underline"><Eye className="h-3.5 w-3.5" />Preview</button><a href={toDownloadUrl(resolveFileUrl(mySubmission.fileUrl, backendBaseUrl))} target="_blank" rel="noopener noreferrer" download={mySubmission.fileName} className="inline-flex items-center gap-1 text-sm text-gray-600 underline"><Paperclip className="h-3.5 w-3.5" />Download</a></span>
                         )}
                       </div>
 
@@ -454,16 +433,7 @@ export function Assignments({
                             <div className="font-medium text-gray-800">{submission.studentName}</div>
                             {submission.contentText && <div className="text-sm text-gray-500 mt-1 line-clamp-2">{submission.contentText}</div>}
                             {submission.fileName && submission.fileUrl && (
-                              <a
-                                href={toDownloadUrl(resolveFileUrl(submission.fileUrl, backendBaseUrl))}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                download={submission.fileName}
-                                className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"
-                              >
-                                <Download className="h-3 w-3" />
-                                {submission.fileName}
-                              </a>
+                              <span className="mt-1 flex flex-wrap items-center gap-2"><button type="button" onClick={() => openPreview(`${submission.studentName} submission`, submission.fileName!, submission.fileUrl!)} className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"><Eye className="h-3 w-3" />Preview</button><a href={toDownloadUrl(resolveFileUrl(submission.fileUrl, backendBaseUrl))} target="_blank" rel="noopener noreferrer" download={submission.fileName} className="inline-flex items-center gap-1 text-xs text-gray-600 hover:underline"><Download className="h-3 w-3" />Download: {submission.fileName}</a></span>
                             )}
                           </div>
                           <div className="text-right">
@@ -728,6 +698,7 @@ export function Assignments({
           </div>
         </div>
       )}
+      {previewFile && <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} downloadUrl={toDownloadUrl(previewFile.url)} />}
     </div>
   );
 }
