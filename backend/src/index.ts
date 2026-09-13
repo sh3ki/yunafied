@@ -1587,7 +1587,7 @@ app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res
       service.listAssignments(),
       service.listSubmissionsForRole(requester),
       service.listSchedulesForRole(requester),
-      service.listAnnouncements(),
+      service.listAnnouncements(requester),
       service.getNotificationReadState(userId),
       service.getNotificationDeleteRefs(userId),
     ]);
@@ -2600,7 +2600,11 @@ app.patch("/api/submissions/:id/grade", requireAuth, requireRole("admin", "teach
 
 app.get("/api/announcements", requireAuth, async (_req, res, next) => {
   try {
-    res.json(await service.listAnnouncements());
+    const req = _req as AuthenticatedRequest;
+    const userId = req.auth?.sub;
+    const role = req.auth?.role;
+    if (!userId || !role) { res.status(401).json({ message: "Unauthorized" }); return; }
+    res.json(await service.listAnnouncements({ id: userId, role }));
   } catch (error) {
     next(error);
   }
@@ -2609,6 +2613,7 @@ app.get("/api/announcements", requireAuth, async (_req, res, next) => {
 const createAnnouncementSchema = z.object({
   title: z.string().min(2),
   content: z.string().min(2),
+  targetScope: z.enum(["all", "admins", "teachers", "students"]).default("all"),
 });
 
 const createDirectChatSchema = z.object({
@@ -2647,9 +2652,16 @@ app.post("/api/announcements", requireAuth, requireRole("admin", "teacher"), asy
   try {
     const payload = createAnnouncementSchema.parse(req.body);
     const postedById = req.auth?.sub;
+    const role = req.auth?.role;
 
     if (!postedById) {
       res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const allowedTargets = role === "admin" ? ["all", "teachers", "students"] : ["all", "admins", "students"];
+    if (!role || !allowedTargets.includes(payload.targetScope)) {
+      res.status(400).json({ message: "You cannot target that audience." });
       return;
     }
 
@@ -2657,6 +2669,7 @@ app.post("/api/announcements", requireAuth, requireRole("admin", "teacher"), asy
       title: payload.title,
       content: payload.content,
       postedById,
+      targetScope: payload.targetScope,
     });
 
     res.status(201).json(announcement);
@@ -3707,7 +3720,9 @@ app.put("/api/announcements/:id", requireAuth, requireRole("admin", "teacher"), 
     const userId = req.auth?.sub;
     const role = req.auth?.role;
     if (!userId || !role) { res.status(401).json({ message: "Unauthorized" }); return; }
-    const input = z.object({ title: z.string().min(1), content: z.string().min(1) }).parse(req.body);
+    const input = z.object({ title: z.string().min(1), content: z.string().min(1), targetScope: z.enum(["all", "admins", "teachers", "students"]) }).parse(req.body);
+    const allowedTargets = role === "admin" ? ["all", "teachers", "students"] : ["all", "admins", "students"];
+    if (!allowedTargets.includes(input.targetScope)) { res.status(400).json({ message: "You cannot target that audience." }); return; }
     const updated = await service.updateAnnouncement(req.params.id, userId, role as "admin" | "teacher", input);
     if (!updated) { res.status(404).json({ message: "Announcement not found or permission denied." }); return; }
     res.json(updated);
