@@ -125,10 +125,20 @@ function hashVerificationToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function getAppUrl(): string {
+  const configuredUrl = process.env.APP_URL || process.env.FRONTEND_URL || process.env.VITE_APP_URL;
+  if (configuredUrl?.trim()) return configuredUrl.trim();
+
+  // Keep production emails usable even if the hosting provider has not exposed
+  // the frontend URL to the backend process yet. Local development still uses Vite.
+  return process.env.NODE_ENV === "production"
+    ? "https://www.yunafied.online"
+    : "http://localhost:5173";
+}
+
 async function sendVerificationLinkEmail(toEmail: string, firstName: string, token: string): Promise<void> {
   const from = process.env.RESEND_FROM || "onboarding@resend.dev";
-  const appUrl = process.env.FRONTEND_URL || process.env.VITE_APP_URL || "http://localhost:5173";
-  const verifyUrl = `${appUrl.replace(/\/$/, "")}/verify-account?token=${encodeURIComponent(token)}`;
+  const verifyUrl = `${getAppUrl().replace(/\/$/, "")}/verify-account?token=${encodeURIComponent(token)}`;
   await resend.emails.send({
     from: `YUNAfied <${from}>`,
     to: toEmail,
