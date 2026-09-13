@@ -162,7 +162,7 @@ interface AuthenticatedShellProps {
   onSubmitAssignment: (assignmentId: string, input: { file?: File | null; contentText?: string }) => Promise<void>;
   onGradeSubmission: (submissionId: string, grade: string, feedback: string) => Promise<void>;
   onToggleAssignmentClosed: (assignmentId: string, isClosed: boolean) => Promise<void>;
-  onCreateAnnouncement: (input: { title: string; content: string }) => Promise<void>;
+  onCreateAnnouncement: (input: { title: string; content: string; targetScope: AnnouncementItem["targetScope"] }) => Promise<void>;
   onUploadProfileImage: (file: File) => Promise<{ secureUrl: string; publicId: string }>;
   onUpdateMyProfile: (input: {
     firstName: string;
@@ -903,7 +903,7 @@ export default function App() {
     }));
   };
 
-  const createAnnouncement = async (input: { title: string; content: string }) => {
+  const createAnnouncement = async (input: { title: string; content: string; targetScope: AnnouncementItem["targetScope"] }) => {
     const created = await apiClient.createAnnouncement(input);
     setData((prev) => ({ ...prev, announcements: [created, ...prev.announcements] }));
   };
