@@ -1,9 +1,23 @@
 export type UserRole = "admin" | "teacher" | "student";
+export type GamifiedGameType = "speed_run" | "match_master" | "word_builder" | "memory_flip" | "boss_battle" | "quest_adventure";
+export type GamifiedGameMode = "practice" | "assessed";
 export type UserStatus = "active" | "inactive" | "pending" | "archived" | "completed" | "dropped";
 export type ScheduleStatus = "scheduled" | "cancelled" | "pending" | "accepted" | "declined";
 export type EnrollmentStatus = "active" | "completed" | "dropped" | "archived";
 export type ChatType = "direct" | "group";
 export type MeetingRoomStatus = "calling" | "active" | "declined" | "ended";
+
+export interface ArcadeGameItem {
+  id: string; slug: string; title: string; description: string; gameType: GamifiedGameType;
+  categoryId: string | null; categoryName: string | null; createdById: string; createdByName: string;
+  difficulty: "beginner" | "intermediate" | "advanced"; estimatedMinutes: number;
+  practiceXpReward: number; practiceCoinReward: number; isPublished: boolean; questionCount: number;
+}
+export interface ArcadeGameDetail extends ArcadeGameItem { content: Array<Record<string, any>>; }
+export interface StudentProgressionItem {
+  studentId: string; levelNumber: number; totalXp: number; currentLevelXp: number; coinBalance: number;
+  currentStreak: number; longestStreak: number;
+}
 
 export interface MeetingChatMessage {
   id: string;
@@ -448,6 +462,10 @@ export interface StoreItem {
   name: string;
   description?: string | null;
   xpCost: number;
+  coinCost?: number;
+  itemType?: string;
+  effectConfig?: Record<string, unknown>;
+  isActive?: boolean;
   isConsumable: boolean;
   createdAt: string;
 }
