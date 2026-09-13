@@ -299,4 +299,26 @@
     padding: 0;
   }
   .teacher-print-chart { break-inside: avoid; page-break-inside: avoid; margin-bottom: 18px; }
+  .student-records-print-report {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #172033;
+    font-family: Arial, sans-serif;
+  }
+  .student-records-print-report * { visibility: visible !important; }
+  .student-records-print-header { border-bottom: 2px solid #7c3aed; margin-bottom: 18px; padding-bottom: 10px; }
+  .student-records-print-header h1 { font-size: 22px; margin: 0 0 6px; }
+  .student-records-print-header p { color: #536074; font-size: 11px; margin: 3px 0; }
+  .student-records-print-report table { border-collapse: collapse; font-size: 10px; width: 100%; }
+  .student-records-print-report thead { display: table-header-group; }
+  .student-records-print-report tr { break-inside: avoid; page-break-inside: avoid; }
+  .student-records-print-report th, .student-records-print-report td { border: 1px solid #d8dee8; padding: 7px; text-align: left; vertical-align: top; }
+  .student-records-print-report th { background: #eef2f7; font-weight: 700; }
+  .student-records-print-empty { color: #536074; font-size: 12px; }
 }
+
+.student-records-print-report { display: none; }
