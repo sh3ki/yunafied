@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Mic, MicOff, Video, VideoOff, PhoneOff, CameraOff, AlertTriangle, Phone, Settings, X, MessageCircle, Send } from 'lucide-react';
 import { MeetingChatMessage, MeetingRoom } from '@/app/types/models';
@@ -37,6 +37,7 @@ type CallPhase = 'connecting' | 'calling' | 'active' | 'ended' | 'declined' | 'e
 
 export function VideoCall({ userId, role }: VideoCallProps) {
   const { roomToken } = useParams<{ roomToken: string }>();
+  const navigate = useNavigate();
 
   const [phase, setPhase] = useState<CallPhase>('connecting');
   const [room, setRoom] = useState<MeetingRoom | null>(null);
@@ -491,6 +492,14 @@ export function VideoCall({ userId, role }: VideoCallProps) {
     }
   }, [isTeacher, phase, room, startAsStudent]);
 
+  // In the Capacitor APK there is no browser tab to close. Return both roles
+  // to the dashboard when the other participant ends the meeting as well.
+  useEffect(() => {
+    if (phase !== 'ended' && phase !== 'declined') return;
+    const timer = window.setTimeout(() => navigate('/app/dashboard', { replace: true }), 700);
+    return () => window.clearTimeout(timer);
+  }, [navigate, phase]);
+
   const toggleMic = () => {
     localStreamRef.current?.getAudioTracks().forEach((t) => {
       t.enabled = !t.enabled;
@@ -577,7 +586,11 @@ export function VideoCall({ userId, role }: VideoCallProps) {
     endCall('ended');
   };
 
-  const goBack = () => window.close();
+  const goBack = useCallback(() => {
+    // window.close() is not allowed for an in-app WebView (and is unreliable
+    // for browser tabs). Always return to the authenticated dashboard.
+    navigate('/app/dashboard', { replace: true });
+  }, [navigate]);
 
   const otherName = isTeacher
     ? room?.studentName || 'Student'
