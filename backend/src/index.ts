@@ -2255,6 +2255,38 @@ app.delete("/api/schedules/:id", requireAuth, requireRole("admin"), async (req: 
   }
 });
 
+app.get('/api/arcade/games', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const gameType = arcadeGameTypeSchema.parse(req.query.gameType);
+    res.json(await service.listArcadeGames({ id: req.auth?.sub || '', role: req.auth?.role || 'student' }, gameType));
+  } catch (error) { next(error); }
+});
+
+app.post('/api/arcade/games', requireAuth, requireRole('admin', 'teacher'), async (req: AuthenticatedRequest, res, next) => {
+  try { const payload = arcadeCreateSchema.parse(req.body); res.status(201).json(await service.createArcadeGame(payload, { id: req.auth?.sub || '', role: req.auth?.role || 'teacher' })); } catch (error) { next(error); }
+});
+
+app.get('/api/arcade/games/:id', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try { const game = await service.getArcadeGame(req.params.id, { id: req.auth?.sub || '', role: req.auth?.role || 'student' }); if (!game) { res.status(404).json({ message: 'Game not found.' }); return; } res.json(game); } catch (error) { next(error); }
+});
+
+app.post('/api/arcade/games/:id/attempts', requireAuth, requireRole('student', 'teacher', 'admin'), async (req: AuthenticatedRequest, res, next) => {
+  try { const payload = z.object({ mode: z.enum(['practice', 'assessed']).default('practice'), responses: z.array(z.object({ contentId: z.string().uuid().optional(), answer: z.string().max(1000).optional(), choiceId: z.string().uuid().optional(), pairKey: z.string().optional() })).max(200) }).parse(req.body); res.status(201).json(await service.submitArcadeAttempt(req.params.id, req.auth?.sub || '', payload.mode, payload.responses, req.auth?.role || 'student')); } catch (error) { next(error); }
+});
+
+app.get('/api/arcade/progression', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.getStudentProgression(req.auth?.sub || '')); } catch (error) { next(error); }
+});
+
+app.get('/api/arcade/leaderboard', requireAuth, async (req, res, next) => {
+  try {
+    const gameId = z.string().uuid().optional().parse(req.query.gameId);
+    const gameType = arcadeGameTypeSchema.parse(req.query.gameType);
+    const limit = z.coerce.number().int().min(1).max(100).default(20).parse(req.query.limit);
+    res.json(await service.listArcadeLeaderboard(gameId, gameType, limit));
+  } catch (error) { next(error); }
+});
+
 app.get("/api/gamified/categories", requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     const requesterRole = req.auth?.role || "student";
@@ -2772,6 +2804,9 @@ const accountEnrollmentSchema = z.object({
   studentId: z.string().uuid().optional(), teacherId: z.string().uuid().optional(), subject: z.string().min(2).max(200).optional(), tutorialGroup: z.string().max(120).optional(), gradeLevel: z.string().max(120).optional(), note: z.string().max(1000).optional(),
   mobileNumber: z.string().max(40).optional(), birthdate: z.preprocess((value) => value === '' ? undefined : value, z.string().date().optional()), professionalTitle: z.string().max(160).optional(), employmentStatus: z.string().max(80).optional(), education: z.string().max(500).optional(), certifications: z.string().max(1000).optional(), yearsExperience: z.coerce.number().int().min(0).max(80).optional(), specializations: z.array(z.string().min(1).max(120)).optional(), notes: z.string().max(2000).optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(), classSchedule: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
 });
+
+const arcadeGameTypeSchema = z.enum(['speed_run', 'match_master', 'word_builder', 'memory_flip', 'boss_battle', 'quest_adventure']).optional();
+const arcadeCreateSchema = z.object({ title: z.string().min(2).max(150), description: z.string().max(2000).optional(), gameType: z.enum(['speed_run', 'match_master', 'word_builder', 'memory_flip', 'boss_battle', 'quest_adventure']), categoryId: z.string().uuid().nullable().optional(), difficulty: z.enum(['beginner', 'intermediate', 'advanced']).optional(), isPublished: z.boolean().optional(), content: z.array(z.object({ prompt: z.string().optional(), answer: z.string().optional(), leftText: z.string().optional(), rightText: z.string().optional(), cardText: z.string().optional(), pairKey: z.string().optional(), choices: z.array(z.string()).optional(), correctIndex: z.number().int().min(0).max(3).optional(), timeLimitSeconds: z.number().int().min(5).max(120).optional(), storyText: z.string().optional(), bossDamage: z.number().int().min(1).max(100).optional() })).min(1).max(100) });
 
 app.post("/api/enrollments/account", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
