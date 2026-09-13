@@ -249,8 +249,9 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2.5"
+                readOnly
+                aria-readonly="true"
+                className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2.5 bg-gray-50 text-gray-500 cursor-not-allowed"
                 placeholder="you@email.com"
               />
             </div>
