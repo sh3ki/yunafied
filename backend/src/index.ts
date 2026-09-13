@@ -701,9 +701,9 @@ const learningMaterialUpload = multer({
   limits: { fileSize: 20 * 1024 * 1024 },
   fileFilter: (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = [".pdf", ".doc", ".docx", ".txt", ".ppt", ".pptx", ".xls", ".xlsx"];
+    const allowed = [".pdf", ".doc", ".docx", ".txt", ".ppt", ".pptx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
     if (!allowed.includes(ext)) {
-      cb(new Error("Only PDF, DOC, DOCX, TXT, PPT, PPTX, XLS, and XLSX files are allowed."));
+      cb(new Error("Only PDF, DOC, DOCX, TXT, PPT, PPTX, XLS, XLSX, JPG, JPEG, PNG, GIF, WEBP, and BMP files are allowed."));
       return;
     }
     cb(null, true);
@@ -3001,6 +3001,10 @@ app.post("/api/materials/link", requireAuth, requireRole("admin", "teacher"), as
     }
 
     const payload = materialLinkSchema.parse(req.body);
+    if (req.auth?.role === "teacher" && !(await service.teacherHasSubject(creatorId, payload.subject))) {
+      res.status(403).json({ message: "You can only create learning materials for your assigned subjects." });
+      return;
+    }
     const row = await service.createLearningMaterial({
       title: payload.title,
       description: payload.description || null,
@@ -3047,6 +3051,11 @@ app.post(
       }
       if (!subject || subject.length < 2) {
         res.status(400).json({ message: "Subject is required." });
+        return;
+      }
+
+      if (req.auth?.role === "teacher" && !(await service.teacherHasSubject(creatorId, subject))) {
+        res.status(403).json({ message: "You can only create learning materials for your assigned subjects." });
         return;
       }
 
