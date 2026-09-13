@@ -760,6 +760,24 @@ async function uploadDocumentBufferToCloudinary(file: Express.Multer.File): Prom
   });
 }
 
+function getCloudinaryAssetDetails(resourceUrl: string): { publicId: string; resourceType: string } | null {
+  try {
+    const parts = new URL(resourceUrl).pathname.split('/').filter(Boolean);
+    const uploadIndex = parts.indexOf('upload');
+    if (uploadIndex < 1) return null;
+    const versionIndex = parts.findIndex((part, index) => index > uploadIndex && /^v\d+$/.test(part));
+    if (versionIndex < 0 || versionIndex === parts.length - 1) return null;
+    const publicIdWithExtension = parts.slice(versionIndex + 1).join('/');
+    const extensionIndex = publicIdWithExtension.lastIndexOf('.');
+    return {
+      publicId: extensionIndex > 0 ? publicIdWithExtension.slice(0, extensionIndex) : publicIdWithExtension,
+      resourceType: parts[uploadIndex - 1] || 'auto',
+    };
+  } catch {
+    return null;
+  }
+}
+
   app.use(
     helmet({
       crossOriginResourcePolicy: false,
@@ -2879,6 +2897,48 @@ app.get("/api/materials", requireAuth, async (req: AuthenticatedRequest, res, ne
     }
 
     res.json(await service.listLearningMaterials({ id: requesterId, role: requesterRole }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/materials/:id/download", requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const requesterId = req.auth?.sub;
+    const requesterRole = req.auth?.role;
+    if (!requesterId || !requesterRole) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    const material = (await service.listLearningMaterials({ id: requesterId, role: requesterRole })).find((item) => item.id === req.params.id);
+    if (!material || material.materialType !== "file") {
+      res.status(404).json({ message: "Learning material not found." });
+      return;
+    }
+
+    const asset = getCloudinaryAssetDetails(material.resourceUrl);
+    if (!asset) {
+      res.status(502).json({ message: "This file cannot be downloaded right now." });
+      return;
+    }
+
+    const extension = path.extname(material.fileName || "").replace(/^\./, "") || "bin";
+    const signedDownloadUrl = cloudinary.utils.private_download_url(asset.publicId, extension, {
+      resource_type: asset.resourceType,
+      type: "upload",
+      attachment: true,
+    });
+    const upstream = await fetch(signedDownloadUrl);
+    if (!upstream.ok) {
+      res.status(502).json({ message: "Cloudinary could not provide this file." });
+      return;
+    }
+
+    res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(material.fileName || `${material.title}.${extension}`)}`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(Buffer.from(await upstream.arrayBuffer()));
   } catch (error) {
     next(error);
   }
