@@ -25,9 +25,9 @@ export function TableSearch({ value, onChange, placeholder = "Search records..."
   return <div className="relative flex-1 min-w-[220px]"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" /><input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" /></div>;
 }
 
-export function TableFilter({ label, value, options, onChange }: { label: string; value: string; options: Array<string | { value: string; label: string }>; onChange: (value: string) => void }) {
+export function TableFilter({ label, value, options, onChange, className = "" }: { label: string; value: string; options: Array<string | { value: string; label: string }>; onChange: (value: string) => void; className?: string }) {
   const uniqueOptions = useMemo(() => { const seen = new Set<string>(); return options.filter(Boolean).map((option) => typeof option === 'string' ? { value: option, label: option } : option).filter((option) => !seen.has(option.value) && seen.add(option.value)).sort((a, b) => a.label.localeCompare(b.label)); }, [options]);
-  return <label className="flex items-center gap-2 text-sm text-gray-600"><span className="sr-only">{label}</span><select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"><option value="">All {label.toLowerCase()}</option>{uniqueOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+  return <label className={`flex min-w-0 items-center gap-2 text-sm text-gray-600 ${className}`}><span className="sr-only">{label}</span><select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="min-w-0 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"><option value="">All {label.toLowerCase()}</option>{uniqueOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
 export function PrintButton({ onClick, disabled = false }: { onClick: () => void; disabled?: boolean }) {
