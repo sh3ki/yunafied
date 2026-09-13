@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Eye, X } from "lucide-react";
 import { apiClient } from "@/app/services/apiClient";
 import type { AuditLogItem } from "@/app/types/models";
-import { PrintButton, TableFilter, TablePagination, TableSearch, printTableReport, DEFAULT_TABLE_PAGE_SIZE } from "./ui/table-tools";
+import { PrintButton, TableFilter, TablePagination, TableSearch, DEFAULT_TABLE_PAGE_SIZE } from "./ui/table-tools";
 
 const PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE;
 
@@ -12,6 +12,9 @@ export function AuditLogs() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [printRows, setPrintRows] = useState<AuditLogItem[]>([]);
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
 
   const [filterAction, setFilterAction] = useState("");
   const [filterEntityType, setFilterEntityType] = useState("");
@@ -50,15 +53,22 @@ export function AuditLogs() {
   }, [filterAction, filterEntityType, filterDateFrom, filterDateTo, filterSearch]);
 
   const printLogs = async () => {
+    setPrinting(true);
     const allRows: AuditLogItem[] = [];
-    let currentPage = 1;
-    let totalPages = 1;
-    do {
-      const result = await apiClient.listAuditLogs({ action: filterAction || undefined, entityType: filterEntityType || undefined, search: filterSearch.trim() || undefined, dateFrom: filterDateFrom || undefined, dateTo: filterDateTo || undefined, page: currentPage, pageSize: 50 });
-      allRows.push(...result.rows); totalPages = result.totalPages; currentPage += 1;
-    } while (currentPage <= totalPages);
-    await apiClient.recordAuditLogPrint({ action: filterAction, entityType: filterEntityType, search: filterSearch, dateFrom: filterDateFrom, dateTo: filterDateTo });
-    printTableReport({ title: 'Audit Trail', subtitle: `Filters: ${filterAction || 'All actions'} · ${filterEntityType || 'All entity types'} · ${filterDateFrom || 'Any date'} to ${filterDateTo || 'Any date'} · ${filterSearch || 'No search'}`, columns: ['Actor', 'Role', 'Action', 'Entity Type', 'Entity ID', 'IP Address', 'Date'], rows: allRows.map((log) => [log.actorName, log.actorRole, log.action, log.entityType, log.entityId || '—', log.ipAddress || '—', new Date(log.createdAt).toLocaleString()]) });
+    try {
+      let currentPage = 1;
+      let totalPages = 1;
+      do {
+        const result = await apiClient.listAuditLogs({ action: filterAction || undefined, entityType: filterEntityType || undefined, search: filterSearch.trim() || undefined, dateFrom: filterDateFrom || undefined, dateTo: filterDateTo || undefined, page: currentPage, pageSize: 50 });
+        allRows.push(...result.rows); totalPages = result.totalPages; currentPage += 1;
+      } while (currentPage <= totalPages);
+      setPrintRows(allRows);
+      setPrintedAt(new Date());
+      await apiClient.recordAuditLogPrint({ action: filterAction, entityType: filterEntityType, search: filterSearch, dateFrom: filterDateFrom, dateTo: filterDateTo });
+      requestAnimationFrame(() => { window.print(); setPrinting(false); });
+    } catch {
+      setPrinting(false);
+    }
   };
 
   return (
@@ -72,13 +82,13 @@ export function AuditLogs() {
 
       {/* Filters */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs font-medium text-gray-500 mb-1">Action</label>
-          <TableFilter label="Actions" value={filterAction} options={rows.map((row) => row.action)} onChange={(value) => { setFilterAction(value); setPage(1); }} />
+          <TableFilter className="w-full" label="Actions" value={filterAction} options={rows.map((row) => row.action)} onChange={(value) => { setFilterAction(value); setPage(1); }} />
         </div>
-        <div>
+        <div className="min-w-0">
           <label className="block text-xs font-medium text-gray-500 mb-1">Entity Type</label>
-          <TableFilter label="Entity types" value={filterEntityType} options={rows.map((row) => row.entityType)} onChange={(value) => { setFilterEntityType(value); setPage(1); }} />
+          <TableFilter className="w-full" label="Entity types" value={filterEntityType} options={rows.map((row) => row.entityType)} onChange={(value) => { setFilterEntityType(value); setPage(1); }} />
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Date From</label>
@@ -103,8 +113,10 @@ export function AuditLogs() {
       {/* Search bar */}
       <div className="flex gap-2">
         <TableSearch value={filterSearch} onChange={setFilterSearch} placeholder="Search actor, action, entity..." />
-        <PrintButton onClick={() => void printLogs()} />
+        <PrintButton onClick={() => void printLogs()} disabled={printing || loading} />
       </div>
+
+      <section className="audit-logs-print-report" aria-hidden="true"><div className="audit-logs-print-header"><h1>Audit Trail</h1><p>Action: {filterAction || "All actions"} · Entity type: {filterEntityType || "All entity types"} · Date: {filterDateFrom || "Any date"} to {filterDateTo || "Any date"} · Search: {filterSearch.trim() || "None"}</p><p>Printed: {(printedAt || new Date()).toLocaleString()} · Records: {printRows.length}</p></div>{printRows.length ? <table><thead><tr><th>Actor</th><th>Role</th><th>Action</th><th>Entity Type</th><th>Entity ID</th><th>IP Address</th><th>Date</th></tr></thead><tbody>{printRows.map((log) => <tr key={log.id}><td>{log.actorName}</td><td>{log.actorRole}</td><td>{log.action}</td><td>{log.entityType}</td><td>{log.entityId || "—"}</td><td>{log.ipAddress || "—"}</td><td>{new Date(log.createdAt).toLocaleString()}</td></tr>)}</tbody></table> : <p className="audit-logs-print-empty">No audit log entries match the current filters.</p>}</section>
 
       {/* Table */}
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
