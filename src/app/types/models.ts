@@ -246,6 +246,7 @@ export interface StatusChangeHistoryItem {
   notes: string | null;
   changedById: string | null;
   createdAt: string;
+  targetScope: "all" | "admins" | "teachers" | "students";
 }
 
 export interface LearningMaterialItem {
