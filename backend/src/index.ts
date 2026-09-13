@@ -2262,6 +2262,19 @@ app.get('/api/arcade/games', requireAuth, async (req: AuthenticatedRequest, res,
   } catch (error) { next(error); }
 });
 
+const assessmentQuestionSchema = z.object({
+  type: z.enum(['multiple-choice', 'true-false', 'identification']),
+  prompt: z.string().min(1).max(2000),
+  points: z.coerce.number().int().min(1).max(100).default(1),
+  choices: z.array(z.object({ text: z.string().min(1).max(300), isCorrect: z.boolean() })).optional().default([]),
+  acceptedAnswers: z.array(z.string().min(1).max(300)).optional().default([]),
+});
+const assessmentSchema = z.object({
+  title: z.string().min(2).max(150), subject: z.string().min(2).max(200), gradeLevel: z.string().max(120).default(''),
+  assessmentType: z.enum(['pre', 'post']), pairedAssessmentId: nullableUuidSchema.optional(), instructions: z.string().max(2000).optional(),
+  questions: z.array(assessmentQuestionSchema).min(1).max(100),
+});
+
 app.post('/api/arcade/games', requireAuth, requireRole('admin', 'teacher'), async (req: AuthenticatedRequest, res, next) => {
   try { const payload = arcadeCreateSchema.parse(req.body); res.status(201).json(await service.createArcadeGame(payload, { id: req.auth?.sub || '', role: req.auth?.role || 'teacher' })); } catch (error) { next(error); }
 });
@@ -2614,6 +2627,41 @@ const createAnnouncementSchema = z.object({
   title: z.string().min(2),
   content: z.string().min(2),
   targetScope: z.enum(["all", "admins", "teachers", "students"]).default("all"),
+});
+
+app.get('/api/assessments/subjects', requireAuth, requireRole('admin', 'teacher'), async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.listAssessmentSubjects({ id: req.auth?.sub || '', role: req.auth?.role || 'admin' })); } catch (error) { next(error); }
+});
+app.get('/api/assessments', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.listAssessments({ id: req.auth?.sub || '', role: req.auth?.role || 'student' })); } catch (error) { next(error); }
+});
+// Keep this collection route before /:id so "assignments" is not treated as an assessment id.
+app.get('/api/assessments/assignments', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.listAssessmentAssignments({ id: req.auth?.sub || '', role: req.auth?.role || 'student' })); } catch (error) { next(error); }
+});
+app.get('/api/assessments/:id', requireAuth, async (req: AuthenticatedRequest, res, next) => {
+  try { const item = await service.getAssessment(req.params.id, { id: req.auth?.sub || '', role: req.auth?.role || 'student' }, req.auth?.role !== 'student'); if (!item) { res.status(404).json({ message: 'Assessment not found.' }); return; } res.json(item); } catch (error) { next(error); }
+});
+app.post('/api/assessments', requireAuth, requireRole('admin', 'teacher'), async (req: AuthenticatedRequest, res, next) => {
+  try { res.status(201).json(await service.createAssessment(assessmentSchema.parse(req.body), { id: req.auth?.sub || '', role: req.auth?.role || 'teacher' })); } catch (error) { next(error); }
+});
+app.post('/api/assessments/:id/publish', requireAuth, requireRole('admin', 'teacher'), async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.publishAssessment(req.params.id, { id: req.auth?.sub || '', role: req.auth?.role || 'teacher' })); } catch (error) { next(error); }
+});
+app.post('/api/assessments/:id/assign', requireAuth, requireRole('admin', 'teacher'), async (req: AuthenticatedRequest, res, next) => {
+  try { const payload = z.object({ studentIds: z.array(z.string().uuid()).min(1), dueAt: z.string().datetime().nullable().optional() }).parse(req.body); res.json(await service.assignAssessment(req.params.id, payload.studentIds, payload.dueAt || null, { id: req.auth?.sub || '', role: req.auth?.role || 'teacher' })); } catch (error) { next(error); }
+});
+app.post('/api/assessments/assignments/:id/start', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.startAssessment(req.params.id, req.auth?.sub || '')); } catch (error) { next(error); }
+});
+app.post('/api/assessments/assignments/:id/submit', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { const payload = z.object({ answers: z.array(z.object({ questionId: z.string().uuid(), selectedChoiceId: nullableUuidSchema.optional(), answerText: z.string().max(1000).nullable().optional() })) }).parse(req.body); res.json(await service.submitAssessment(req.params.id, req.auth?.sub || '', payload.answers)); } catch (error) { next(error); }
+});
+app.put('/api/assessments/assignments/:id/answers', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { const payload = z.object({ answers: z.array(z.object({ questionId: z.string().uuid(), selectedChoiceId: nullableUuidSchema.optional(), answerText: z.string().max(1000).nullable().optional() })) }).parse(req.body); await service.saveAssessmentAnswers(req.params.id, req.auth?.sub || '', payload.answers); res.status(204).send(); } catch (error) { next(error); }
+});
+app.get('/api/assessments/analytics/overview', requireAuth, requireRole('admin', 'teacher'), async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.getAssessmentAnalytics({ id: req.auth?.sub || '', role: req.auth?.role || 'admin' })); } catch (error) { next(error); }
 });
 
 const createDirectChatSchema = z.object({
