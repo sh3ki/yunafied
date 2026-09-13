@@ -828,6 +828,17 @@ class YunafiedApiClient {
     return this.request<LearningMaterialItem[]>("/api/materials");
   }
 
+  async downloadLearningMaterial(id: string): Promise<Blob> {
+    const headers = new Headers();
+    if (this.token) headers.set("Authorization", `Bearer ${this.token}`);
+    const response = await fetch(`${this.baseUrl}/api/materials/${id}/download`, { headers });
+    if (!response.ok) {
+      const json = await response.json().catch(() => ({}));
+      throw new Error(json.message || `Request failed (${response.status})`);
+    }
+    return response.blob();
+  }
+
   async createLearningMaterialLink(payload: {
     title: string;
     subject: string;
