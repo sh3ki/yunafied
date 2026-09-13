@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { execFile } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -30,6 +30,19 @@ const service = new YunafiedService();
 const BOOTSTRAP_CACHE_TTL_MS = 30000;
 const bootstrapCache = new Map<string, { expiresAt: number; data: unknown }>();
 const GROQ_CHAT_MODEL = "openai/gpt-oss-120b";
+
+type MeetingChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: "teacher" | "student";
+  content: string;
+  createdAt: string;
+};
+
+// Process-memory only: meeting chat is ephemeral and is discarded when the
+// meeting ends or the backend process restarts.
+const meetingChats = new Map<string, MeetingChatMessage[]>();
 
 interface GroqMessage {
   role: "system" | "user" | "assistant";
@@ -3152,6 +3165,11 @@ const meetingSignalSchema = z.object({
 
 const meetingStatusSchema = z.object({
   status: z.enum(["active", "declined", "ended"]),
+  durationSeconds: z.number().int().min(0).optional(),
+});
+
+const meetingChatSchema = z.object({
+  content: z.string().trim().min(1).max(2000),
 });
 
 app.post("/api/meetings", requireAuth, requireRole("teacher"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -3169,14 +3187,20 @@ app.post("/api/meetings", requireAuth, requireRole("teacher"), async (req: Authe
       return;
     }
 
-    // End any existing active calling rooms for this teacher before creating new one
-    await pool.query(
-      `UPDATE meeting_rooms SET status = 'ended', updated_at = NOW()
+    // End any previous room through the same history-producing path used by
+    // the in-call End button, so starting a new meeting cannot lose duration.
+    const previousRooms = await pool.query<{ room_token: string }>(
+      `SELECT room_token FROM meeting_rooms
         WHERE teacher_id = $1 AND status IN ('calling', 'active')`,
       [userId],
     );
+    for (const previousRoom of previousRooms.rows) {
+      await service.updateMeetingStatus(previousRoom.room_token, "ended");
+      meetingChats.delete(previousRoom.room_token);
+    }
 
-    const roomToken = randomBytes(24).toString("hex");
+    // Keep the token UUID-shaped because call_history.room_token is UUID.
+    const roomToken = randomUUID();
 
     const room = await service.createMeetingRoom({
       roomToken,
@@ -3345,7 +3369,10 @@ app.patch("/api/meetings/:roomToken/status", requireAuth, async (req: Authentica
       return;
     }
 
-    const updated = await service.updateMeetingStatus(req.params.roomToken, payload.status);
+    const updated = await service.updateMeetingStatus(req.params.roomToken, payload.status, payload.durationSeconds);
+    if (payload.status === "ended") {
+      meetingChats.delete(req.params.roomToken);
+    }
     res.json(updated);
   } catch (error) {
     next(error);
@@ -3689,6 +3716,61 @@ const adminAnalyticsQuerySchema = z.object({
   refresh: z.enum(["true", "false"]).optional(),
 });
 
+// Ephemeral meeting chat. It is authorized against the meeting on every
+// request and is never written to the database.
+app.get("/api/meetings/:roomToken/chat", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    if (!userId) { res.status(401).json({ message: "Unauthorized" }); return; }
+    const room = await service.getMeetingRoom(req.params.roomToken);
+    if (!room || (room.teacherId !== userId && room.studentId !== userId)) {
+      res.status(403).json({ message: "Access denied." });
+      return;
+    }
+    if (room.status === "ended" || room.status === "declined") {
+      meetingChats.delete(req.params.roomToken);
+      res.json([]);
+      return;
+    }
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+    res.json(meetingChats.get(req.params.roomToken) || []);
+  } catch (error) { next(error); }
+});
+
+app.post("/api/meetings/:roomToken/chat", requireAuth, async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.auth?.sub;
+    const userRole = req.auth?.role;
+    if (!userId || (userRole !== "teacher" && userRole !== "student")) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+    const room = await service.getMeetingRoom(req.params.roomToken);
+    if (!room || (room.teacherId !== userId && room.studentId !== userId)) {
+      res.status(403).json({ message: "Access denied." });
+      return;
+    }
+    if (room.status === "ended" || room.status === "declined") {
+      res.status(400).json({ message: "Meeting has ended." });
+      return;
+    }
+    const payload = meetingChatSchema.parse(req.body);
+    const message: MeetingChatMessage = {
+      id: randomBytes(12).toString("hex"),
+      senderId: userId,
+      senderName: userRole === "teacher" ? room.teacherName : (room.studentName || "Student"),
+      senderRole: userRole,
+      content: payload.content,
+      createdAt: new Date().toISOString(),
+    };
+    const messages = meetingChats.get(req.params.roomToken) || [];
+    messages.push(message);
+    if (messages.length > 500) messages.splice(0, messages.length - 500);
+    meetingChats.set(req.params.roomToken, messages);
+    res.status(201).json(message);
+  } catch (error) { next(error); }
+});
+
 app.post("/api/admin/audit-logs/print", requireAuth, requireRole("admin"), async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const actorId = req.auth?.sub;
@@ -3860,6 +3942,7 @@ async function start(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `).catch(() => { /* table may already exist */ });
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_call_history_room_token_unique ON call_history(room_token)`).catch(() => {});
   // Ensure rubric columns exist on assignments
   await pool.query(`
     ALTER TABLE assignments
