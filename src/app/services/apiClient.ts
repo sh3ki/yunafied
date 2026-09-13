@@ -629,7 +629,7 @@ class YunafiedApiClient {
     return this.request<AnnouncementItem[]>("/api/announcements");
   }
 
-  async createAnnouncement(payload: { title: string; content: string }): Promise<AnnouncementItem> {
+  async createAnnouncement(payload: { title: string; content: string; targetScope: AnnouncementItem["targetScope"] }): Promise<AnnouncementItem> {
     return this.request<AnnouncementItem>("/api/announcements", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -1056,7 +1056,7 @@ class YunafiedApiClient {
 
   // ─── Announcements Edit / Delete ─────────────────────────────────────────────
 
-  async updateAnnouncement(id: string, payload: { title: string; content: string }): Promise<AnnouncementItem> {
+  async updateAnnouncement(id: string, payload: { title: string; content: string; targetScope: AnnouncementItem["targetScope"] }): Promise<AnnouncementItem> {
     return this.request<AnnouncementItem>(`/api/announcements/${id}`, {
       method: "PUT",
       body: JSON.stringify(payload),
