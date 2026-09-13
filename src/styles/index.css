@@ -359,8 +359,41 @@
   .audit-logs-print-report th, .audit-logs-print-report td { border: 1px solid #d8dee8; padding: 6px; text-align: left; vertical-align: top; }
   .audit-logs-print-report th { background: #eef2f7; font-weight: 700; }
   .audit-logs-print-empty { color: #536074; font-size: 12px; }
+  .user-management-print-report,
+  .enrollment-print-report {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #172033;
+    font-family: Arial, sans-serif;
+  }
+  .user-management-print-report *,
+  .enrollment-print-report * { visibility: visible !important; }
+  .user-management-print-header,
+  .enrollment-print-header { border-bottom: 2px solid #4f46e5; margin-bottom: 18px; padding-bottom: 10px; }
+  .user-management-print-header h1,
+  .enrollment-print-header h1 { font-size: 22px; margin: 0 0 6px; }
+  .user-management-print-header p,
+  .enrollment-print-header p { color: #536074; font-size: 11px; margin: 3px 0; }
+  .user-management-print-report table,
+  .enrollment-print-report table { border-collapse: collapse; font-size: 10px; width: 100%; }
+  .user-management-print-report thead,
+  .enrollment-print-report thead { display: table-header-group; }
+  .user-management-print-report tr,
+  .enrollment-print-report tr { break-inside: avoid; page-break-inside: avoid; }
+  .user-management-print-report th, .user-management-print-report td,
+  .enrollment-print-report th, .enrollment-print-report td { border: 1px solid #d8dee8; padding: 7px; text-align: left; vertical-align: top; }
+  .user-management-print-report th,
+  .enrollment-print-report th { background: #eef2f7; font-weight: 700; }
+  .user-management-print-empty,
+  .enrollment-print-empty { color: #536074; font-size: 12px; }
 }
 
 .student-records-print-report { display: none; }
 .teacher-records-print-report { display: none; }
 .audit-logs-print-report { display: none; }
+.user-management-print-report,
+.enrollment-print-report { display: none; }
