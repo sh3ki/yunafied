@@ -3,7 +3,7 @@ import { ArrowRightLeft, ImagePlus, Mail, Pencil, Search, Shield, Trash2, Upload
 import { toast } from 'sonner';
 import { AuthUser, UserRole, UserStatus } from '@/app/types/models';
 import { apiClient } from '@/app/services/apiClient';
-import { PrintButton, TableFilter, TablePagination, TableSearch, printTableReport, DEFAULT_TABLE_PAGE_SIZE } from './ui/table-tools';
+import { PrintButton, TableFilter, TablePagination, TableSearch, DEFAULT_TABLE_PAGE_SIZE } from './ui/table-tools';
 
 interface ProfileUploadResult {
   secureUrl: string;
@@ -68,6 +68,8 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
   const [selectedUser, setSelectedUser] = useState<AuthUser | null>(null);
   const [statusUser, setStatusUser] = useState<AuthUser | null>(null);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const [statusForm, setStatusForm] = useState({ status: 'active' as UserStatus, reason: '', dropDate: new Date().toISOString().slice(0, 10), actionTaken: '', pullOutReason: '', notes: '' });
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -158,7 +160,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
     return filteredUsers.slice(start, start + pageSize);
   }, [filteredUsers, safePage, pageSize]);
 
-  const printUsers = () => printTableReport({ title: 'User Management', subtitle: `Filters: ${roleFilter || 'All roles'} · ${statusFilter || 'All statuses'} · ${dateFrom || 'Any date'} to ${dateTo || 'Any date'} · ${searchTerm || 'No search'}`, columns: ['Name', 'Email', 'Role', 'Status', 'Created'], rows: filteredUsers.map((user) => [user.fullName, user.email, user.role, user.status, new Date(user.createdAt).toLocaleString()]) });
+  const printUsers = () => { setPrinting(true); setPrintedAt(new Date()); requestAnimationFrame(() => { window.print(); setPrinting(false); }); };
 
   const resetCreateForm = () => {
     setNewUser({
@@ -304,7 +306,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
           <TableFilter label="Statuses" value={statusFilter} options={users.map((user) => user.status)} onChange={(value) => setStatusFilter(value)} />
           <input aria-label="Created from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
           <input aria-label="Created to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-          <PrintButton onClick={printUsers} />
+          <PrintButton onClick={printUsers} disabled={printing} />
         </div>
 
         <div className="user-management-table overflow-x-auto">
@@ -333,7 +335,6 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                     <div className="font-medium text-gray-900">{user.fullName}</div>
                   </div>
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{new Date(user.createdAt).toLocaleDateString()}</td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2 text-gray-500">
                     <Mail className="h-4 w-4" />
@@ -359,6 +360,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
                     {user.status}
                   </span>
                 </td>
+                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}</td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button
                     onClick={() => openEdit(user)}
@@ -400,6 +402,8 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
 
         <TablePagination page={safePage} pageSize={pageSize} total={filteredUsers.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
       </div>
+
+      <section className="user-management-print-report" aria-hidden="true"><div className="user-management-print-header"><h1>User Management</h1><p>Role: {roleFilter || 'All roles'} · Status: {statusFilter || 'All statuses'} · Date: {dateFrom || 'Any date'} to {dateTo || 'Any date'} · Search: {searchTerm.trim() || 'None'}</p><p>Printed: {(printedAt || new Date()).toLocaleString()} · Records: {filteredUsers.length}</p></div>{filteredUsers.length ? <table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th></tr></thead><tbody>{filteredUsers.map((user) => <tr key={user.id}><td>{user.fullName}</td><td>{user.email}</td><td>{user.role}</td><td>{user.status}</td><td>{new Date(user.createdAt).toLocaleString()}</td></tr>)}</tbody></table> : <p className="user-management-print-empty">No users match the current filters.</p>}</section>
 
       {isCreateOpen && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4 backdrop-blur-sm">
