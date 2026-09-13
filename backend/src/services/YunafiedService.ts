@@ -1707,9 +1707,13 @@ export class YunafiedService {
                 m.updated_at AS "updatedAt"
            FROM learning_materials m
            JOIN users u ON u.id = m.created_by_id
-           JOIN enrollment_records e ON e.teacher_id = m.created_by_id
-          WHERE e.student_id = $1
-            AND e.status = 'active'
+          WHERE EXISTS (
+                  SELECT 1
+                    FROM enrollment_records e
+                   WHERE e.student_id = $1
+                     AND e.status = 'active'
+                     AND lower(trim(e.subject)) = lower(trim(m.subject))
+                )
           ORDER BY m.created_at DESC`,
         [requester.id],
       );
@@ -1732,7 +1736,13 @@ export class YunafiedService {
                 m.updated_at AS "updatedAt"
            FROM learning_materials m
            JOIN users u ON u.id = m.created_by_id
-          WHERE m.created_by_id = $1
+          WHERE EXISTS (
+                  SELECT 1
+                    FROM enrollment_records e
+                   WHERE e.teacher_id = $1
+                     AND e.status = 'active'
+                     AND lower(trim(e.subject)) = lower(trim(m.subject))
+                )
           ORDER BY m.created_at DESC`,
         [requester.id],
       );
@@ -1758,6 +1768,19 @@ export class YunafiedService {
     );
 
     return result.rows as LearningMaterialItem[];
+  }
+
+  async teacherHasSubject(teacherId: string, subject: string): Promise<boolean> {
+    const result = await pool.query(
+      `SELECT 1
+         FROM enrollment_records
+        WHERE teacher_id = $1
+          AND status = 'active'
+          AND lower(trim(subject)) = lower(trim($2))
+        LIMIT 1`,
+      [teacherId, subject],
+    );
+    return (result.rowCount ?? 0) > 0;
   }
 
   async createLearningMaterial(input: {
