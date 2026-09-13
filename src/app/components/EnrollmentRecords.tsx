@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { apiClient } from '@/app/services/apiClient';
 import { AuthUser, EnrollmentRecordItem, EnrollmentStatus, UserRole } from '@/app/types/models';
 import { UsersView } from './Users';
-import { PrintButton, TableFilter, TablePagination, TableSearch, printTableReport, DEFAULT_TABLE_PAGE_SIZE } from './ui/table-tools';
+import { PrintButton, TableFilter, TablePagination, TableSearch, DEFAULT_TABLE_PAGE_SIZE } from './ui/table-tools';
 interface EnrollmentRecordsProps {
   role: UserRole;
   onAddUser?: (input: any) => Promise<void>;
@@ -45,6 +45,8 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [printedAt, setPrintedAt] = useState<Date | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isAssignmentModalOpen, setIsAssignmentModalOpen] = useState(false);
   const [addAssignment, setAddAssignment] = useState(false);
@@ -131,7 +133,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
     if (hasAssignment && (missingCounterpart || !accountForm.subject.trim())) { toast.error('Complete the class/tutorial assignment fields or leave them blank.'); return; }
     try {
       setSaving(true);
-      await apiClient.enrollAccount({ ...accountForm, middleName: accountForm.middleName || undefined, studentId: addAssignment ? accountForm.studentId || undefined : undefined, teacherId: addAssignment ? accountForm.teacherId || undefined : undefined, subject: addAssignment ? accountForm.subject || undefined : undefined, tutorialGroup: addAssignment ? accountForm.tutorialGroup || undefined : undefined, gradeLevel: addAssignment ? accountForm.gradeLevel || undefined : undefined, note: addAssignment ? accountForm.note || undefined : undefined, yearsExperience: accountForm.yearsExperience ? Number(accountForm.yearsExperience) : undefined, specializations: accountForm.specializations.split(',').map((item) => item.trim()).filter(Boolean), availability: accountForm.role === 'teacher' ? accountForm.availability : undefined, classSchedule: addAssignment ? accountForm.classSchedule : undefined });
+      await apiClient.enrollAccount({ ...accountForm, middleName: accountForm.middleName || undefined, birthdate: accountForm.role === 'student' ? accountForm.birthdate || undefined : undefined, studentId: addAssignment ? accountForm.studentId || undefined : undefined, teacherId: addAssignment ? accountForm.teacherId || undefined : undefined, subject: addAssignment ? accountForm.subject || undefined : undefined, tutorialGroup: addAssignment ? accountForm.tutorialGroup || undefined : undefined, gradeLevel: addAssignment ? accountForm.gradeLevel || undefined : undefined, note: addAssignment ? accountForm.note || undefined : undefined, yearsExperience: accountForm.yearsExperience ? Number(accountForm.yearsExperience) : undefined, specializations: accountForm.specializations.split(',').map((item) => item.trim()).filter(Boolean), availability: accountForm.role === 'teacher' ? accountForm.availability : undefined, classSchedule: addAssignment ? accountForm.classSchedule : undefined });
       toast.success('Account enrolled. Verification link sent.');
       setAccountForm({ firstName: '', middleName: '', lastName: '', email: '', role: 'student', studentId: '', teacherId: '', subject: '', tutorialGroup: '', gradeLevel: '', note: '', mobileNumber: '', birthdate: '', professionalTitle: '', employmentStatus: '', education: '', certifications: '', yearsExperience: '', specializations: '', availability: [], classSchedule: [] });
       setMinorPolicyAgreed(false);
@@ -200,7 +202,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   useEffect(() => { setPage(1); }, [searchTerm, filterSubject, filterTeacher, filterGroup, filterStatus, filterGradeLevel, dateFrom, dateTo]);
   const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
   const scheduleLabel = (r: EnrollmentRecordItem) => (r.classSchedule || []).map((slot) => `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][slot.dayOfWeek]} ${slot.startTime.slice(0, 5)}-${slot.endTime.slice(0, 5)}`).join(', ') || '—';
-  const printEnrollments = () => printTableReport({ title: 'Enrollment Records', subtitle: `Filters: ${filterStatus || 'All statuses'} · ${filterTeacher || 'All teachers'} · ${filterSubject || 'All subjects'} · ${dateFrom || 'Any date'} to ${dateTo || 'Any date'} · ${searchTerm || 'No search'}`, columns: ['Student', 'Teacher', 'Subject', 'Group', 'Grade Level', 'Class Schedule', 'Status', 'Created'], rows: filteredRows.map((r) => [r.studentName, r.teacherName, r.subject, r.tutorialGroup || '—', r.gradeLevel || '—', scheduleLabel(r), r.status, new Date(r.createdAt).toLocaleString()]) });
+  const printEnrollments = () => { setPrinting(true); setPrintedAt(new Date()); requestAnimationFrame(() => { window.print(); setPrinting(false); }); };
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -253,7 +255,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
         </select>
         <input aria-label="Created from" type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
         <input aria-label="Created to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
-        <PrintButton onClick={printEnrollments} />
+        <PrintButton onClick={printEnrollments} disabled={printing || loading} />
         
         {(searchTerm || filterSubject || filterTeacher || filterGroup || filterStatus || filterGradeLevel) && (
           <button
@@ -355,6 +357,8 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
         </div>}
         </>
       )}
+
+      {(!isAdmin || activeTab === 'assignments') && <section className="enrollment-print-report" aria-hidden="true"><div className="enrollment-print-header"><h1>Enrollment Records</h1><p>Status: {filterStatus || 'All statuses'} · Teacher: {filterTeacher || 'All teachers'} · Subject: {filterSubject || 'All subjects'} · Dates: {dateFrom || 'Any date'} to {dateTo || 'Any date'} · Search: {searchTerm.trim() || 'None'}</p><p>Printed: {(printedAt || new Date()).toLocaleString()} · Records: {filteredRows.length}</p></div>{filteredRows.length ? <table><thead><tr><th>Student</th><th>Teacher</th><th>Subject</th><th>Group</th><th>Grade Level</th><th>Class Schedule</th><th>Status</th><th>Created</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td>{row.studentName}</td><td>{row.teacherName}</td><td>{row.subject}</td><td>{row.tutorialGroup || '—'}</td><td>{row.gradeLevel || '—'}</td><td>{scheduleLabel(row)}</td><td>{row.status}</td><td>{new Date(row.createdAt).toLocaleString()}</td></tr>)}</tbody></table> : <p className="enrollment-print-empty">No enrollment records match the current filters.</p>}</section>}
 
       <div className={`enrollment-table-scroll bg-white border border-gray-100 rounded-2xl shadow-sm overflow-x-auto ${isAdmin && activeTab === 'users' ? 'hidden' : ''}`}>
         <table className="w-full text-left">
