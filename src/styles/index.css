@@ -359,6 +359,26 @@
   .audit-logs-print-report th, .audit-logs-print-report td { border: 1px solid #d8dee8; padding: 6px; text-align: left; vertical-align: top; }
   .audit-logs-print-report th { background: #eef2f7; font-weight: 700; }
   .audit-logs-print-empty { color: #536074; font-size: 12px; }
+  .meeting-history-print-report {
+    display: block !important;
+    visibility: visible !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #172033;
+    font-family: Arial, sans-serif;
+  }
+  .meeting-history-print-report * { visibility: visible !important; }
+  .meeting-history-print-header { border-bottom: 2px solid #2563eb; margin-bottom: 18px; padding-bottom: 10px; }
+  .meeting-history-print-header h1 { font-size: 22px; margin: 0 0 6px; }
+  .meeting-history-print-header p { color: #536074; font-size: 11px; margin: 3px 0; }
+  .meeting-history-print-report table { border-collapse: collapse; font-size: 10px; width: 100%; }
+  .meeting-history-print-report thead { display: table-header-group; }
+  .meeting-history-print-report tr { break-inside: avoid; page-break-inside: avoid; }
+  .meeting-history-print-report th, .meeting-history-print-report td { border: 1px solid #d8dee8; padding: 7px; text-align: left; vertical-align: top; }
+  .meeting-history-print-report th { background: #eef2f7; font-weight: 700; }
+  .meeting-history-print-empty { color: #536074; font-size: 12px; }
   .user-management-print-report,
   .enrollment-print-report {
     display: block !important;
@@ -395,5 +415,6 @@
 .student-records-print-report { display: none; }
 .teacher-records-print-report { display: none; }
 .audit-logs-print-report { display: none; }
+.meeting-history-print-report { display: none; }
 .user-management-print-report,
 .enrollment-print-report { display: none; }
