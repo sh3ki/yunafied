@@ -8,17 +8,17 @@ interface CommunicationProps {
   role: UserRole;
   userId: string;
   announcements: AnnouncementItem[];
-  onCreateAnnouncement: (input: { title: string; content: string }) => Promise<void>;
+  onCreateAnnouncement: (input: { title: string; content: string; targetScope: AnnouncementItem["targetScope"] }) => Promise<void>;
   onAnnouncementsChange?: (updated: AnnouncementItem[]) => void;
 }
 
 export function Communication({ role, userId, announcements, onCreateAnnouncement, onAnnouncementsChange }: CommunicationProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ title: '', content: '' });
+  const [form, setForm] = useState<{ title: string; content: string; targetScope: AnnouncementItem["targetScope"] }>({ title: '', content: '', targetScope: 'all' });
   const [openAnnouncement, setOpenAnnouncement] = useState<AnnouncementItem | null>(null);
   const [editTarget, setEditTarget] = useState<AnnouncementItem | null>(null);
-  const [editForm, setEditForm] = useState({ title: '', content: '' });
+  const [editForm, setEditForm] = useState<{ title: string; content: string; targetScope: AnnouncementItem["targetScope"] }>({ title: '', content: '', targetScope: 'all' });
   const [editSaving, setEditSaving] = useState(false);
 
   const canPost = role === 'teacher' || role === 'admin';
@@ -34,8 +34,8 @@ export function Communication({ role, userId, announcements, onCreateAnnouncemen
 
     try {
       setSaving(true);
-      await onCreateAnnouncement({ title: form.title, content: form.content });
-      setForm({ title: '', content: '' });
+      await onCreateAnnouncement(form);
+      setForm({ title: '', content: '', targetScope: 'all' });
       setIsModalOpen(false);
       toast.success('Announcement posted.');
     } catch (error: unknown) {
@@ -48,7 +48,7 @@ export function Communication({ role, userId, announcements, onCreateAnnouncemen
   const openEdit = (item: AnnouncementItem, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditTarget(item);
-    setEditForm({ title: item.title, content: item.content });
+    setEditForm({ title: item.title, content: item.content, targetScope: item.targetScope });
   };
 
   const handleEditSave = async () => {
@@ -134,6 +134,7 @@ export function Communication({ role, userId, announcements, onCreateAnnouncemen
             </div>
             <p className="mt-2 text-sm text-gray-600 line-clamp-2 whitespace-pre-wrap">{item.content}</p>
             <p className="mt-3 text-xs text-indigo-700 font-medium">Posted by: {item.postedByName}</p>
+            <span className="inline-block mt-2 text-xs rounded-full bg-violet-50 text-violet-700 px-2 py-1">Audience: {item.targetScope === 'all' ? 'Everyone' : `${item.targetScope.slice(0, -1).replace(/^./, (c) => c.toUpperCase())}s only`}</span>
           </div>
         ))}
 
@@ -191,6 +192,13 @@ export function Communication({ role, userId, announcements, onCreateAnnouncemen
                   onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
+                <select className="w-full border rounded-lg px-3 py-2 bg-white" value={editForm.targetScope} onChange={(e) => setEditForm({ ...editForm, targetScope: e.target.value as AnnouncementItem["targetScope"] })}>
+                  <option value="all">Everyone</option>
+                  {role === 'admin' ? <><option value="teachers">Teachers only</option><option value="students">Students only</option></> : <><option value="admins">Admins only</option><option value="students">Students only</option></>}
+                </select>
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => setEditTarget(null)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">
@@ -224,6 +232,13 @@ export function Communication({ role, userId, announcements, onCreateAnnouncemen
                   value={form.content}
                   onChange={(e) => setForm({ ...form, content: e.target.value })}
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
+                <select className="w-full border rounded-lg px-3 py-2 bg-white" value={form.targetScope} onChange={(e) => setForm({ ...form, targetScope: e.target.value as AnnouncementItem["targetScope"] })}>
+                  <option value="all">Everyone</option>
+                  {role === 'admin' ? <><option value="teachers">Teachers only</option><option value="students">Students only</option></> : <><option value="admins">Admins only</option><option value="students">Students only</option></>}
+                </select>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
