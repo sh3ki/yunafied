@@ -608,7 +608,7 @@ function AuthenticatedShell({
               )}
 
               {currentView === 'assessments' && (
-                <Assessments role={userRole} userId={session.user.id} users={data.users} />
+                <Assessments role={userRole} userId={session.user.id} users={data.users} enrollments={data.enrollments} />
               )}
 
               {currentView === 'grades' && (
