@@ -17,7 +17,7 @@ import { Schedule } from '@/app/components/Schedule';
 import { Assignments } from '@/app/components/Assignments';
 import { Communication } from '@/app/components/Communication';
 import { Chats } from '@/app/components/Chats';
-import { GamifiedLearning } from '@/app/components/GamifiedLearning';
+import { ArcadeDashboard } from '@/app/components/ArcadeDashboard';
 import { VideoSummarizer } from '@/app/components/VideoSummarizer';
 import { WordTranslator } from '@/app/components/WordTranslator';
 import { AIGuide } from '@/app/components/AIGuide';
@@ -543,9 +543,7 @@ function AuthenticatedShell({
 
               {currentView === 'materials' && <LearningMaterials role={userRole} backendBaseUrl={backendBaseUrl} />}
 
-              {currentView === 'gamified-learning' && (
-                <GamifiedLearning role={userRole} userId={session.user.id} />
-              )}
+              {currentView === 'gamified-learning' && <ArcadeDashboard role={userRole} />}
 
               {currentView === 'video-summarizer' && (userRole === 'student' || userRole === 'teacher') && <VideoSummarizer />}
 
