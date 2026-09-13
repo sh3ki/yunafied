@@ -541,7 +541,7 @@ function AuthenticatedShell({
 
               {currentView === 'student-records' && (userRole === 'admin' || userRole === 'teacher') && <StudentRecords role={userRole} />}
 
-              {currentView === 'materials' && <LearningMaterials role={userRole} backendBaseUrl={backendBaseUrl} />}
+              {currentView === 'materials' && <LearningMaterials role={userRole} backendBaseUrl={backendBaseUrl} subjectOptions={Array.from(new Set(data.enrollments.filter((enrollment) => userRole === 'admin' || enrollment.status === 'active').filter((enrollment) => userRole !== 'teacher' || enrollment.teacherId === session.user.id).filter((enrollment) => userRole !== 'student' || enrollment.studentId === session.user.id).map((enrollment) => enrollment.subject))).sort()} />}
 
               {currentView === 'gamified-learning' && <ArcadeDashboard role={userRole} />}
 
