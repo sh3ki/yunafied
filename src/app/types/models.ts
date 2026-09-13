@@ -5,6 +5,15 @@ export type EnrollmentStatus = "active" | "completed" | "dropped" | "archived";
 export type ChatType = "direct" | "group";
 export type MeetingRoomStatus = "calling" | "active" | "declined" | "ended";
 
+export interface MeetingChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: "teacher" | "student";
+  content: string;
+  createdAt: string;
+}
+
 export interface MeetingRoom {
   id: string;
   roomToken: string;
