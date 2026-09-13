@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Download, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Printer, Search } from "lucide-react";
 
 export const DEFAULT_TABLE_PAGE_SIZE = 10;
 
@@ -30,8 +30,8 @@ export function TableFilter({ label, value, options, onChange }: { label: string
   return <label className="flex items-center gap-2 text-sm text-gray-600"><span className="sr-only">{label}</span><select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"><option value="">All {label.toLowerCase()}</option>{uniqueOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
 }
 
-export function PrintButton({ onClick }: { onClick: () => void }) {
-  return <button onClick={onClick} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"><Download className="h-4 w-4" />Print</button>;
+export function PrintButton({ onClick, disabled = false }: { onClick: () => void; disabled?: boolean }) {
+  return <button type="button" onClick={onClick} disabled={disabled} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"><Printer className="h-4 w-4" />Print</button>;
 }
 
 export function printTableReport({ title, subtitle, columns, rows }: { title: string; subtitle?: string; columns: string[]; rows: Array<Array<unknown>> }) {
