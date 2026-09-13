@@ -1,6 +1,7 @@
 import { pool } from "../lib/db.js";
 import {
   AnnouncementItem,
+  ArcadeGameItem,
   AssignmentItem,
   AuthUser,
   ChatMessageItem,
@@ -29,6 +30,7 @@ import {
   TranslationHistoryItem,
   UserRole,
   UserStatus,
+  StudentProgressionItem,
 } from "../types/models.js";
 
 interface DbUserRow {
@@ -3011,25 +3013,24 @@ export class YunafiedService {
 
   async listStoreItems(): Promise<StoreItem[]> {
     const result = await pool.query(
-      `SELECT id, code, name, description, xp_cost AS "xpCost", is_consumable AS "isConsumable", created_at AS "createdAt" FROM store_items ORDER BY created_at ASC`,
+      `SELECT id, code, name, description, xp_cost AS "xpCost", coin_cost AS "coinCost", item_type AS "itemType", effect_config AS "effectConfig", is_active AS "isActive", is_consumable AS "isConsumable", created_at AS "createdAt" FROM store_items WHERE is_active = TRUE ORDER BY created_at ASC`,
     );
     return result.rows as StoreItem[];
   }
 
   async purchaseStoreItem(studentId: string, code: string): Promise<StudentStorePurchaseItem | null> {
-    const itemRes = await pool.query<{ id: string; xp_cost: number }>('SELECT id, xp_cost FROM store_items WHERE code = $1', [code]);
+    const itemRes = await pool.query<{ id: string; coin_cost: number }>('SELECT id, coin_cost FROM store_items WHERE code = $1 AND is_active = TRUE', [code]);
     const item = itemRes.rows[0];
     if (!item) throw new Error('Store item not found');
 
-    // verify XP
-    const xp = await this.getStudentXp(studentId);
-    if (xp.totalXp < item.xp_cost) throw new Error('Insufficient XP');
+    const progression = await this.getStudentProgression(studentId);
+    if (progression.coinBalance < item.coin_cost) throw new Error('Insufficient coins');
 
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // deduct XP
-      await client.query('UPDATE student_xp SET total_xp = GREATEST(total_xp - $1, 0), updated_at = NOW() WHERE student_id = $2', [item.xp_cost, studentId]);
+      await client.query('UPDATE student_progression SET coin_balance = coin_balance - $1 WHERE student_id = $2', [item.coin_cost, studentId]);
+      await client.query(`INSERT INTO student_coin_transactions (student_id, amount, transaction_type, reference_type, reference_id, description) VALUES ($1, $2, 'store_purchase', 'store_items', $3, $4)`, [studentId, -item.coin_cost, item.id, `Purchased ${code}`]);
       const inserted = await client.query(
         `INSERT INTO student_store_purchases (student_id, store_item_id) VALUES ($1, $2) RETURNING id, student_id AS "studentId", store_item_id AS "storeItemId", purchased_at AS "purchasedAt"`,
         [studentId, item.id],
@@ -4086,6 +4087,97 @@ export class YunafiedService {
       [input.fingerprint, JSON.stringify(input.filters), JSON.stringify(input.snapshot), input.interpretation],
     );
     return result.rows[0];
+  }
+
+  async listArcadeGames(requester: { id: string; role: UserRole }, gameType?: string): Promise<ArcadeGameItem[]> {
+    const params: string[] = [];
+    const filters: string[] = [];
+    if (gameType) { params.push(gameType); filters.push(`g.game_type = $${params.length}`); }
+    if (requester.role === "student") filters.push("g.is_published = TRUE", "(g.visibility = 'all_students' OR EXISTS (SELECT 1 FROM gamified_game_assignments ga WHERE ga.game_id = g.id AND ga.student_id = $" + (params.push(requester.id), params.length) + "))");
+    if (requester.role === "teacher") { params.push(requester.id); filters.push(`g.created_by = $${params.length}`); }
+    const whereSql = filters.length ? `WHERE ${filters.join(" AND ")}` : "";
+    const result = await pool.query<ArcadeGameItem>(`SELECT g.id,g.slug,g.title,g.description,g.game_type AS "gameType",g.category_id AS "categoryId",c.name AS "categoryName",g.created_by AS "createdById",u.full_name AS "createdByName",g.difficulty,g.estimated_minutes AS "estimatedMinutes",g.practice_xp_reward AS "practiceXpReward",g.practice_coin_reward AS "practiceCoinReward",g.is_published AS "isPublished",CASE g.game_type WHEN 'speed_run' THEN (SELECT COUNT(*) FROM gamified_speed_run_questions x WHERE x.game_id=g.id) WHEN 'match_master' THEN (SELECT COUNT(*) FROM gamified_match_master_pairs x WHERE x.game_id=g.id) WHEN 'word_builder' THEN (SELECT COUNT(*) FROM gamified_word_builder_challenges x WHERE x.game_id=g.id) WHEN 'memory_flip' THEN (SELECT COUNT(*) FROM gamified_memory_flip_cards x WHERE x.game_id=g.id)/2 WHEN 'boss_battle' THEN (SELECT COUNT(*) FROM gamified_boss_battle_questions x JOIN gamified_boss_battle_stages s ON s.id=x.stage_id WHERE s.game_id=g.id) ELSE (SELECT COUNT(*) FROM gamified_quest_adventure_nodes x WHERE x.game_id=g.id) END::int AS "questionCount" FROM gamified_games g LEFT JOIN gamified_categories c ON c.id=g.category_id JOIN users u ON u.id=g.created_by ${whereSql} ORDER BY g.created_at DESC`, params);
+    return result.rows;
+  }
+
+  async createArcadeGame(input: { title: string; description?: string; gameType: string; categoryId?: string | null; difficulty?: string; isPublished?: boolean; content: Array<{ prompt?: string; answer?: string; leftText?: string; rightText?: string; cardText?: string; pairKey?: string; choices?: string[]; correctIndex?: number; timeLimitSeconds?: number; storyText?: string; bossDamage?: number }> }, requester: { id: string; role: UserRole }): Promise<{ id: string }> {
+    const slug = `${input.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${Date.now()}`;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const game = await client.query<{ id: string }>(`INSERT INTO gamified_games (slug,title,description,game_type,category_id,created_by,difficulty,is_published) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [slug, input.title.trim(), input.description?.trim() || '', input.gameType, input.categoryId || null, requester.id, input.difficulty || 'beginner', input.isPublished ?? false]);
+      const gameId = game.rows[0].id;
+      for (let i = 0; i < input.content.length; i++) {
+        const item = input.content[i];
+        if (input.gameType === 'speed_run') { const question = await client.query<{ id: string }>(`INSERT INTO gamified_speed_run_questions (game_id,prompt,question_order,points,time_limit_seconds) VALUES ($1,$2,$3,100,$4) RETURNING id`, [gameId, item.prompt || '', i + 1, item.timeLimitSeconds || 20]); for (let choiceIndex = 0; choiceIndex < (item.choices || []).length; choiceIndex++) await client.query(`INSERT INTO gamified_speed_run_choices (question_id,choice_text,choice_order,is_correct) VALUES ($1,$2,$3,$4)`, [question.rows[0].id, item.choices![choiceIndex], choiceIndex + 1, choiceIndex === (item.correctIndex || 0)]); }
+        else if (input.gameType === 'match_master') await client.query(`INSERT INTO gamified_match_master_pairs (game_id,left_text,right_text,pair_order) VALUES ($1,$2,$3,$4)`, [gameId, item.leftText || '', item.rightText || '', i + 1]);
+        else if (input.gameType === 'memory_flip') { await client.query(`INSERT INTO gamified_memory_flip_cards (game_id,pair_key,card_text,card_kind,card_order) VALUES ($1,$2,$3,'term',$4)`, [gameId, item.pairKey || String(i), item.cardText || item.prompt || item.leftText || '', i * 2 + 1]); await client.query(`INSERT INTO gamified_memory_flip_cards (game_id,pair_key,card_text,card_kind,card_order) VALUES ($1,$2,$3,'match',$4)`, [gameId, item.pairKey || String(i), item.rightText || item.answer || '', i * 2 + 2]); }
+        else if (input.gameType === 'word_builder') await client.query(`INSERT INTO gamified_word_builder_challenges (game_id,prompt,answer,challenge_order) VALUES ($1,$2,$3,$4)`, [gameId, item.prompt || '', item.answer || '', i + 1]);
+        else if (input.gameType === 'quest_adventure') await client.query(`INSERT INTO gamified_quest_adventure_nodes (game_id,node_order,title,prompt,answer) VALUES ($1,$2,$3,$4,$5)`, [gameId, i + 1, `Checkpoint ${i + 1}`, item.prompt || '', item.answer || '']);
+        else if (input.gameType === 'boss_battle') { const stage = await client.query<{ id: string }>(`INSERT INTO gamified_boss_battle_stages (game_id,stage_order,title) VALUES ($1,$2,$3) RETURNING id`, [gameId, i + 1, `Stage ${i + 1}`]); await client.query(`INSERT INTO gamified_boss_battle_questions (stage_id,question_order,prompt,answer) VALUES ($1,1,$2,$3)`, [stage.rows[0].id, item.prompt || '', item.answer || '']); }
+      }
+      await client.query('COMMIT');
+      return { id: gameId };
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+  }
+
+  async getStudentProgression(studentId: string): Promise<StudentProgressionItem> {
+    const result = await pool.query<StudentProgressionItem>(`INSERT INTO student_progression (student_id) VALUES ($1) ON CONFLICT (student_id) DO UPDATE SET student_id=EXCLUDED.student_id RETURNING student_id AS "studentId",level_number AS "levelNumber",total_xp AS "totalXp",current_level_xp AS "currentLevelXp",coin_balance AS "coinBalance",current_streak AS "currentStreak",longest_streak AS "longestStreak"`, [studentId]);
+    return result.rows[0];
+  }
+
+  async getArcadeGame(gameId: string, requester: { id: string; role: UserRole }): Promise<Record<string, unknown> | null> {
+    const game = await pool.query(`SELECT g.id,g.title,g.description,g.game_type AS "gameType",g.category_id AS "categoryId",c.name AS "categoryName",g.difficulty,g.practice_xp_reward AS "practiceXpReward",g.practice_coin_reward AS "practiceCoinReward",g.is_published AS "isPublished" FROM gamified_games g LEFT JOIN gamified_categories c ON c.id=g.category_id WHERE g.id=$1 AND ($2 <> 'student' OR g.is_published=TRUE)`, [gameId, requester.role]);
+    if (!game.rows[0]) return null;
+    const item = game.rows[0] as Record<string, unknown>;
+    const type = item.gameType;
+    let content: unknown[] = [];
+    if (type === 'speed_run') content = (await pool.query(`SELECT q.id,q.prompt,q.question_order AS "order",q.points,q.time_limit_seconds AS "timeLimitSeconds",json_agg(json_build_object('id',c.id,'text',c.choice_text,'order',c.choice_order) ORDER BY c.choice_order) AS choices FROM gamified_speed_run_questions q JOIN gamified_speed_run_choices c ON c.question_id=q.id WHERE q.game_id=$1 GROUP BY q.id ORDER BY q.question_order`, [gameId])).rows;
+    if (type === 'match_master') content = (await pool.query(`SELECT id,left_text AS "leftText",right_text AS "rightText",pair_order AS "order" FROM gamified_match_master_pairs WHERE game_id=$1 ORDER BY pair_order`, [gameId])).rows;
+    if (type === 'word_builder') content = (await pool.query(`SELECT id,prompt,scrambled_letters AS "scrambledLetters",challenge_order AS "order" FROM gamified_word_builder_challenges WHERE game_id=$1 ORDER BY challenge_order`, [gameId])).rows;
+    if (type === 'memory_flip') content = (await pool.query(`SELECT id,pair_key AS "pairKey",card_text AS "cardText",card_kind AS "cardKind",card_order AS "order" FROM gamified_memory_flip_cards WHERE game_id=$1 ORDER BY card_order`, [gameId])).rows;
+    if (type === 'boss_battle') content = (await pool.query(`SELECT q.id,s.stage_order AS "stageOrder",s.title,q.prompt,q.question_order AS "order" FROM gamified_boss_battle_questions q JOIN gamified_boss_battle_stages s ON s.id=q.stage_id WHERE s.game_id=$1 ORDER BY s.stage_order,q.question_order`, [gameId])).rows;
+    if (type === 'quest_adventure') content = (await pool.query(`SELECT id,node_order AS "order",title,story_text AS "storyText",prompt FROM gamified_quest_adventure_nodes WHERE game_id=$1 ORDER BY node_order`, [gameId])).rows;
+    return { ...item, content };
+  }
+
+  async submitArcadeAttempt(gameId: string, studentId: string, mode: 'practice' | 'assessed', responses: Array<{ contentId?: string; answer?: string; choiceId?: string; pairKey?: string }>, requesterRole: UserRole = 'student'): Promise<Record<string, unknown>> {
+    const game = await pool.query<{ game_type: string; practice_xp_reward: number; practice_coin_reward: number }>(`SELECT game_type,practice_xp_reward,practice_coin_reward FROM gamified_games WHERE id=$1 AND is_published=TRUE`, [gameId]);
+    if (!game.rows[0]) throw new Error('Game is not available.');
+    const count = await pool.query<{ count: string }>(`SELECT COUNT(*)::text AS count FROM gamified_game_attempts WHERE game_id=$1 AND student_id=$2 AND mode=$3`, [gameId, studentId, mode]);
+    const attemptNumber = Number(count.rows[0]?.count || 0) + 1;
+    const multiplier = Math.max(0.25, 1 - ((attemptNumber - 1) * 0.15));
+    const answers = responses.map((response) => String(response.answer || response.choiceId || response.pairKey || '').trim().toLowerCase());
+    const gameType = game.rows[0].game_type;
+    const correct: string[] = [];
+    if (gameType === 'word_builder') (await pool.query<{ answer: string }>(`SELECT answer FROM gamified_word_builder_challenges WHERE game_id=$1 ORDER BY challenge_order`, [gameId])).rows.forEach((r) => correct.push(r.answer.toLowerCase()));
+    if (gameType === 'quest_adventure') (await pool.query<{ answer: string }>(`SELECT answer FROM gamified_quest_adventure_nodes WHERE game_id=$1 ORDER BY node_order`, [gameId])).rows.forEach((r) => correct.push(r.answer.toLowerCase()));
+    if (gameType === 'match_master') (await pool.query<{ right_text: string }>(`SELECT right_text FROM gamified_match_master_pairs WHERE game_id=$1 ORDER BY pair_order`, [gameId])).rows.forEach((r) => correct.push(r.right_text.toLowerCase()));
+    if (gameType === 'memory_flip') { const rows = (await pool.query<{ pair_key: string }>(`SELECT DISTINCT pair_key FROM gamified_memory_flip_cards WHERE game_id=$1 ORDER BY pair_key`, [gameId])).rows; rows.forEach((r) => correct.push(r.pair_key)); }
+    if (gameType === 'speed_run') (await pool.query<{ id: string; choice_id: string }>(`SELECT q.id,(SELECT c.id FROM gamified_speed_run_choices c WHERE c.question_id=q.id AND c.is_correct=TRUE LIMIT 1) AS choice_id FROM gamified_speed_run_questions q WHERE q.game_id=$1 ORDER BY q.question_order`, [gameId])).rows.forEach((r) => correct.push(r.choice_id));
+    if (gameType === 'boss_battle') (await pool.query<{ answer: string }>(`SELECT q.answer FROM gamified_boss_battle_questions q JOIN gamified_boss_battle_stages s ON s.id=q.stage_id WHERE s.game_id=$1 ORDER BY s.stage_order,q.question_order`, [gameId])).rows.forEach((r) => correct.push(r.answer.toLowerCase()));
+    const correctAnswers = answers.reduce((total, answer, index) => total + (answer && answer === correct[index] ? 1 : 0), 0);
+    const accuracy = correct.length ? Math.round((correctAnswers / correct.length) * 10000) / 100 : 0;
+    const baseXp = mode === 'practice' ? game.rows[0].practice_xp_reward : 0;
+    const baseCoins = mode === 'practice' ? game.rows[0].practice_coin_reward : 0;
+    const xpEarned = Math.round(baseXp * (accuracy / 100) * multiplier);
+    const coinsEarned = Math.round(baseCoins * (accuracy / 100) * multiplier);
+    const score = correctAnswers * 100;
+    if (requesterRole !== 'student') return { preview: true, attemptNumber, score, accuracy, correctAnswers, totalQuestions: correct.length, xpEarned: 0, coinsEarned: 0, rewardMultiplier: 0 };
+    const attempt = await pool.query<{ id: string }>(`INSERT INTO gamified_game_attempts (game_id,student_id,mode,attempt_number,score,accuracy,xp_earned,coins_earned) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, [gameId, studentId, mode, attemptNumber, score, accuracy, xpEarned, coinsEarned]);
+    await pool.query(`INSERT INTO student_coin_transactions (student_id,amount,transaction_type,reference_type,reference_id,description) VALUES ($1,$2,'game_reward','gamified_game_attempts',$3,$4)`, [studentId, coinsEarned, attempt.rows[0].id, `Reward for attempt ${attemptNumber}`]);
+    await pool.query(`INSERT INTO student_progression (student_id,total_xp,current_level_xp,level_number,coin_balance) VALUES ($1,$2,MOD($2,500),FLOOR($2 / 500)::int + 1,$3) ON CONFLICT (student_id) DO UPDATE SET total_xp=student_progression.total_xp+$2,current_level_xp=MOD(student_progression.total_xp+$2,500),level_number=FLOOR((student_progression.total_xp+$2) / 500)::int + 1,coin_balance=student_progression.coin_balance+$3,last_activity_at=NOW()`, [studentId, xpEarned, coinsEarned]);
+    return { attemptId: attempt.rows[0].id, attemptNumber, score, accuracy, correctAnswers, totalQuestions: correct.length, xpEarned, coinsEarned, rewardMultiplier: multiplier };
+  }
+
+  async listArcadeLeaderboard(gameId?: string, gameType?: string, limit = 20): Promise<Array<{ studentId: string; studentName: string; bestScore: number; attemptCount: number }>> {
+    const params: unknown[] = [];
+    const filters: string[] = [];
+    if (gameId) { params.push(gameId); filters.push(`a.game_id=$${params.length}`); }
+    if (gameType) { params.push(gameType); filters.push(`g.game_type=$${params.length}`); }
+    params.push(limit);
+    const result = await pool.query(`SELECT a.student_id AS "studentId",u.full_name AS "studentName",MAX(a.score)::int AS "bestScore",COUNT(*)::int AS "attemptCount" FROM gamified_game_attempts a JOIN gamified_games g ON g.id=a.game_id JOIN users u ON u.id=a.student_id ${filters.length ? `WHERE ${filters.join(" AND ")}` : ""} GROUP BY a.student_id,u.full_name ORDER BY "bestScore" DESC LIMIT $${params.length}`, params);
+    return result.rows;
   }
 
   async importUsersFromCsv(
