@@ -171,25 +171,47 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
     doSpeak();
   };
 
-  const handleSaveVocab = async () => {
-    if (!textToTranslate.trim() || !translatedText.trim()) {
-      toast.error('Translate something first.');
-      return;
-    }
+  const saveVocabItem = async (item: {
+    sourceText: string;
+    translatedText: string;
+    sourceLanguage: string;
+    targetLanguage: string;
+  }) => {
     try {
       setSavingVocab(true);
-      await apiClient.saveVocabItem({
-        sourceText: textToTranslate.trim(),
-        translatedText: translatedText.trim(),
-        sourceLanguage,
-        targetLanguage,
-      });
+      const savedItem = await apiClient.saveVocabItem(item);
+      setVocab((previous) => [
+        savedItem,
+        ...previous.filter((item) => item.id !== savedItem.id),
+      ]);
       toast.success('Saved to vocabulary!');
     } catch {
       toast.error('Failed to save vocab item.');
     } finally {
       setSavingVocab(false);
     }
+  };
+
+  const handleSaveVocab = async () => {
+    if (!textToTranslate.trim() || !translatedText.trim()) {
+      toast.error('Translate something first.');
+      return;
+    }
+    await saveVocabItem({
+      sourceText: textToTranslate.trim(),
+      translatedText: translatedText.trim(),
+      sourceLanguage,
+      targetLanguage,
+    });
+  };
+
+  const handleSaveHistoryItem = async (item: TranslationHistoryItem) => {
+    await saveVocabItem({
+      sourceText: item.sourceText,
+      translatedText: item.translatedText,
+      sourceLanguage: item.sourceLanguage,
+      targetLanguage: item.targetLanguage,
+    });
   };
 
   const handleDeleteVocab = async (id: string) => {
@@ -401,6 +423,16 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                         </button>
                       </div>
                     </div>
+
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        onClick={() => handleSaveHistoryItem(item)}
+                        disabled={savingVocab}
+                        className="flex items-center gap-2 border border-violet-200 bg-violet-50 px-3 py-1.5 rounded-lg text-xs text-violet-700 hover:bg-violet-100 transition disabled:opacity-60"
+                      >
+                        <BookMarked className="h-3.5 w-3.5" /> Save to Vocab
+                      </button>
+                    </div>
                   </div>
                 ))
               )}
@@ -447,8 +479,28 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
                     <div className="text-xs text-gray-400 mb-1">
                       {item.sourceLanguage} → {item.targetLanguage}
                     </div>
-                    <p className="text-sm font-medium text-gray-800 truncate">{item.sourceText}</p>
-                    <p className="text-sm text-violet-700 truncate">{item.translatedText}</p>
+                    <div className="flex items-start gap-2">
+                      <p className="text-sm font-medium text-gray-800 whitespace-pre-wrap break-words flex-1">{item.sourceText}</p>
+                      <button
+                        onClick={() => speakText(item.sourceText, item.sourceLanguage)}
+                        className="p-1.5 rounded-lg hover:bg-violet-50 text-gray-500 hover:text-violet-700 transition shrink-0"
+                        title={`Listen source (${item.sourceLanguage})`}
+                        aria-label={`Listen to ${item.sourceText}`}
+                      >
+                        <Volume2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div className="flex items-start gap-2 mt-1">
+                      <p className="text-sm text-violet-700 whitespace-pre-wrap break-words flex-1">{item.translatedText}</p>
+                      <button
+                        onClick={() => speakText(item.translatedText, item.targetLanguage)}
+                        className="p-1.5 rounded-lg hover:bg-violet-50 text-gray-500 hover:text-violet-700 transition shrink-0"
+                        title={`Listen translation (${item.targetLanguage})`}
+                        aria-label={`Listen to ${item.translatedText}`}
+                      >
+                        <Volume2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </div>
                   <button
                     onClick={() => handleDeleteVocab(item.id)}
@@ -466,5 +518,3 @@ export function WordTranslator({ onTranslate, onLoadHistory }: WordTranslatorPro
     </div>
   );
 }
-
-
