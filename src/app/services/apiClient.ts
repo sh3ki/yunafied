@@ -43,6 +43,7 @@ import {
   StoreItem,
   StudentStorePurchaseItem,
   StudentRecordItem,
+  AssessmentItem, AssessmentDetail, AssessmentAssignment, AssessmentAnalyticsItem,
 } from "@/app/types/models";
 
 interface LoginResponse {
@@ -1107,6 +1108,18 @@ class YunafiedApiClient {
     if (refresh) query.set('refresh', 'true');
     return this.request<AdminAnalyticsItem>(`/api/admin/analytics${query.toString() ? `?${query}` : ''}`);
   }
+
+  async listAssessmentSubjects(): Promise<string[]> { return this.request<string[]>('/api/assessments/subjects'); }
+  async listAssessments(): Promise<AssessmentItem[]> { return this.request<AssessmentItem[]>('/api/assessments'); }
+  async getAssessment(id: string): Promise<AssessmentDetail> { return this.request<AssessmentDetail>(`/api/assessments/${id}`); }
+  async createAssessment(payload: { title: string; subject: string; gradeLevel: string; assessmentType: 'pre'|'post'; pairedAssessmentId?: string|null; instructions?: string; questions: Array<{ type: string; prompt: string; points: number; choices?: Array<{ text: string; isCorrect: boolean }>; acceptedAnswers?: string[] }> }): Promise<AssessmentDetail> { return this.request<AssessmentDetail>('/api/assessments', { method: 'POST', body: JSON.stringify(payload) }); }
+  async publishAssessment(id: string): Promise<AssessmentDetail> { return this.request<AssessmentDetail>(`/api/assessments/${id}/publish`, { method: 'POST' }); }
+  async assignAssessment(id: string, studentIds: string[], dueAt?: string|null): Promise<AssessmentAssignment[]> { return this.request<AssessmentAssignment[]>(`/api/assessments/${id}/assign`, { method: 'POST', body: JSON.stringify({ studentIds, dueAt: dueAt || null }) }); }
+  async listAssessmentAssignments(): Promise<AssessmentAssignment[]> { return this.request<AssessmentAssignment[]>('/api/assessments/assignments'); }
+  async startAssessment(id: string): Promise<AssessmentDetail & { assignmentId: string; attemptId: string; answers: Array<{ questionId: string; selectedChoiceId: string|null; answerText: string|null }> }> { return this.request(`/api/assessments/assignments/${id}/start`, { method: 'POST' }); }
+  async submitAssessment(id: string, answers: Array<{ questionId: string; selectedChoiceId?: string|null; answerText?: string|null }>): Promise<{ score: number; totalPoints: number; submittedAt: string; review?: Array<{ questionId: string; isCorrect: boolean; correctAnswer: string }> }> { return this.request(`/api/assessments/assignments/${id}/submit`, { method: 'POST', body: JSON.stringify({ answers }) }); }
+  async saveAssessmentAnswers(id: string, answers: Array<{ questionId: string; selectedChoiceId?: string|null; answerText?: string|null }>): Promise<void> { await this.request(`/api/assessments/assignments/${id}/answers`, { method: 'PUT', body: JSON.stringify({ answers }) }); }
+  async getAssessmentAnalytics(): Promise<AssessmentAnalyticsItem> { return this.request<AssessmentAnalyticsItem>('/api/assessments/analytics/overview'); }
 
   async changeUserStatus(id: string, payload: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }): Promise<AuthUser> {
     return this.request<AuthUser>(`/api/users/${id}/status`, { method: "PATCH", body: JSON.stringify(payload) });
