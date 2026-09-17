@@ -1,0 +1,85 @@
+.cycling-runner-world {
+  isolation: isolate;
+  background: #79b6d0;
+}
+
+.three-runner-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.cycling-rider {
+  animation: cycling-pedal-bob .36s ease-in-out infinite alternate;
+  transform-origin: bottom center;
+  pointer-events: none;
+}
+
+.cycling-controls {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 25;
+  transform: translateX(-50%);
+}
+
+.runner-pickup-effect {
+  position: absolute;
+  z-index: 35;
+  bottom: 38%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  padding: .45rem .75rem;
+  font-weight: 900;
+  color: #fff;
+  animation: pickup-pop .52s ease-out both;
+  pointer-events: none;
+}
+
+.runner-pickup-coin { background: #e89c12; box-shadow: 0 0 24px #ffd85a; }
+.runner-pickup-power { background: #6d35f5; box-shadow: 0 0 28px #bba0ff; }
+
+.word-hunt-board {
+  position: relative;
+  height: 280px;
+  overflow: hidden;
+  touch-action: none;
+  border-radius: 1.5rem;
+  background: linear-gradient(#bde9ff 0 48%, #8cca74 48%);
+}
+
+.word-hunt-card {
+  position: absolute;
+  display: grid;
+  width: 74px;
+  height: 74px;
+  place-items: center;
+  border: 2px solid rgb(255 255 255 / .8);
+  border-radius: 1rem;
+  background: rgb(255 255 255 / .82);
+  box-shadow: 0 5px 12px rgb(30 55 40 / .24);
+  touch-action: none;
+}
+
+.boss-hit-flash { animation: boss-hit .45s ease-out; }
+
+@keyframes pickup-pop {
+  0% { opacity: 0; transform: translate(-50%, 18px) scale(.55); }
+  35% { opacity: 1; transform: translate(-50%, -12px) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -55px) scale(.9); }
+}
+
+@keyframes boss-hit {
+  0%, 100% { transform: translateX(0); filter: none; }
+  25% { transform: translateX(-9px) scale(1.13); filter: brightness(2) saturate(2); }
+  55% { transform: translateX(8px) scale(.93); filter: sepia(1) saturate(5); }
+}
+
+@keyframes cycling-pedal-bob {
+  to { transform: translateY(3px) rotate(-.45deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cycling-rider { animation-duration: 4s; }
+}
