@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pencil, Search, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiClient } from "@/app/services/apiClient";
-import type { TeacherRecordItem } from "@/app/types/models";
+import type { AuthUser, TeacherRecordItem } from "@/app/types/models";
 import { PrintButton, TableFilter, TablePagination, DEFAULT_TABLE_PAGE_SIZE } from "./ui/table-tools";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -14,7 +14,7 @@ function Availability({ record }: { record: TeacherRecordItem }) {
   return <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-7">{grouped.map(({ day, slots }) => <div key={day} className={`min-h-[52px] rounded-lg border p-2 ${slots.length ? "border-violet-100 bg-violet-50/60" : "border-gray-100 bg-gray-50/70"}`}><p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">{day}</p>{slots.length ? slots.map((slot) => <p key={slot.id} className="mt-1 whitespace-nowrap text-[11px] font-semibold text-violet-700">{timeLabel(slot.startTime)}–{timeLabel(slot.endTime)}</p>) : <p className="mt-1 text-[11px] text-gray-400">—</p>}</div>)}</div>;
 }
 
-export function TeacherRecords() {
+export function TeacherRecords({ generatedBy }: { generatedBy: AuthUser }) {
   const [records, setRecords] = useState<TeacherRecordItem[]>([]);
   const [search, setSearch] = useState(""); const [status, setStatus] = useState(""); const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE); const [selected, setSelected] = useState<TeacherRecordItem | null>(null); const [editForm, setEditForm] = useState<TeacherEditForm>({ mobileNumber: "", professionalTitle: "", employmentStatus: "", yearsExperience: "", specializations: "", education: "", certifications: "", notes: "" }); const [saving, setSaving] = useState(false); const [loading, setLoading] = useState(true); const [printedAt, setPrintedAt] = useState<Date | null>(null);
   useEffect(() => { apiClient.listTeacherRecords().then(setRecords).catch((error: Error) => toast.error(error.message || "Failed to load teacher records.")).finally(() => setLoading(false)); }, []);
