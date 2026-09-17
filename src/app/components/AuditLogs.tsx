@@ -6,7 +6,7 @@ import { PrintButton, TableFilter, TablePagination, TableSearch, DEFAULT_TABLE_P
 
 const PAGE_SIZE = DEFAULT_TABLE_PAGE_SIZE;
 
-export function AuditLogs() {
+export function AuditLogs({ generatedBy }: { generatedBy: { role: string; fullName: string } }) {
   const [rows, setRows] = useState<AuditLogItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
