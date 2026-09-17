@@ -71,9 +71,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   const [filterSubject, setFilterSubject] = useState('');
   const [filterTeacher, setFilterTeacher] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterGroup, setFilterGroup] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterGradeLevel, setFilterGradeLevel] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_TABLE_PAGE_SIZE);
   const [dateFrom, setDateFrom] = useState('');
@@ -185,23 +183,29 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
   // Filtered rows
   const filteredRows = useMemo(() => rows.filter((r) => {
     const search = searchTerm.trim().toLowerCase();
-    if (search && ![r.studentName, r.teacherName, r.subject, r.tutorialGroup || '', r.gradeLevel || ''].some((value) => value.toLowerCase().includes(search))) return false;
+    if (search && ![r.studentName, r.teacherName, r.subject].some((value) => value.toLowerCase().includes(search))) return false;
     if (filterSubject && !r.subject.toLowerCase().includes(filterSubject.toLowerCase())) return false;
     if (filterTeacher && r.teacherName && !r.teacherName.toLowerCase().includes(filterTeacher.toLowerCase())) return false;
-    if (filterGroup && r.tutorialGroup !== filterGroup) return false;
     if (filterStatus && r.status !== filterStatus) return false;
-    if (filterGradeLevel && (r as any).gradeLevel && !(r as any).gradeLevel.toLowerCase().includes(filterGradeLevel.toLowerCase())) return false;
     const createdDate = r.createdAt?.slice(0, 10) || '';
     if (dateFrom && createdDate < dateFrom) return false;
     if (dateTo && createdDate > dateTo) return false;
     return true;
-  }), [rows, searchTerm, filterSubject, filterTeacher, filterGroup, filterStatus, filterGradeLevel, dateFrom, dateTo]);
+  }), [rows, searchTerm, filterSubject, filterTeacher, filterStatus, dateFrom, dateTo]);
 
   const teacherOptions = Array.from(new Set(rows.map((row) => row.teacherName).filter(Boolean))).sort();
   const subjectOptions = Array.from(new Set(rows.map((row) => row.subject).filter(Boolean))).sort();
-  const groupOptions = Array.from(new Set(rows.map((row) => row.tutorialGroup || '').filter(Boolean))).sort();
-  const gradeLevelOptions = Array.from(new Set(rows.map((row) => row.gradeLevel || '').filter(Boolean))).sort();
-  useEffect(() => { setPage(1); }, [searchTerm, filterSubject, filterTeacher, filterGroup, filterStatus, filterGradeLevel, dateFrom, dateTo]);
+  const studentAge = (row: EnrollmentRecordItem) => {
+    const birthdate = users.find((user) => user.id === row.studentId)?.birthdate;
+    if (!birthdate) return '—';
+    const birth = new Date(`${birthdate.slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(birth.getTime())) return '—';
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    if (today < new Date(today.getFullYear(), birth.getMonth(), birth.getDate())) age -= 1;
+    return age >= 0 ? String(age) : '—';
+  };
+  useEffect(() => { setPage(1); }, [searchTerm, filterSubject, filterTeacher, filterStatus, dateFrom, dateTo]);
   const paginatedRows = filteredRows.slice((page - 1) * pageSize, page * pageSize);
   const scheduleLabel = (r: EnrollmentRecordItem) => (r.classSchedule || []).map((slot) => `${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][slot.dayOfWeek]} ${slot.startTime.slice(0, 5)}-${slot.endTime.slice(0, 5)}`).join(', ') || '—';
   const printEnrollments = () => { setPrinting(true); setPrintedAt(new Date()); requestAnimationFrame(() => { window.print(); setPrinting(false); }); };
@@ -246,8 +250,6 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
         <TableSearch value={searchTerm} onChange={setSearchTerm} placeholder="Search students, teachers, subjects..." />
         <TableFilter label="Teachers" value={filterTeacher} options={teacherOptions} onChange={setFilterTeacher} />
         <TableFilter label="Subjects" value={filterSubject} options={subjectOptions} onChange={setFilterSubject} />
-        <TableFilter label="Grade levels" value={filterGradeLevel} options={gradeLevelOptions} onChange={setFilterGradeLevel} />
-        <TableFilter label="Groups" value={filterGroup} options={groupOptions} onChange={setFilterGroup} />
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
           <option value="">All statuses</option>
           <option value="active">Active</option>
@@ -259,9 +261,9 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
         <input aria-label="Created to" type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm" />
         <PrintButton onClick={printEnrollments} disabled={printing || loading} />
         
-        {(searchTerm || filterSubject || filterTeacher || filterGroup || filterStatus || filterGradeLevel) && (
+        {(searchTerm || filterSubject || filterTeacher || filterStatus) && (
           <button
-            onClick={() => { setSearchTerm(''); setFilterSubject(''); setFilterTeacher(''); setFilterGroup(''); setFilterStatus(''); setFilterGradeLevel(''); }}
+            onClick={() => { setSearchTerm(''); setFilterSubject(''); setFilterTeacher(''); setFilterStatus(''); }}
             className="text-sm text-gray-500 hover:text-gray-700 px-2"
           >
             Clear
@@ -360,7 +362,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
         </>
       )}
 
-      {(!isAdmin || activeTab === 'assignments') && <section className="enrollment-print-report" aria-hidden="true"><div className="enrollment-print-header"><h1>Enrollment Records</h1><p>Status: {filterStatus || 'All statuses'} · Teacher: {filterTeacher || 'All teachers'} · Subject: {filterSubject || 'All subjects'} · Dates: {dateFrom || 'Any date'} to {dateTo || 'Any date'} · Search: {searchTerm.trim() || 'None'}</p><p>Printed: {(printedAt || new Date()).toLocaleString()} · Records: {filteredRows.length}</p></div>{filteredRows.length ? <table><thead><tr><th>Student</th><th>Teacher</th><th>Subject</th><th>Group</th><th>Grade Level</th><th>Class Schedule</th><th>Status</th><th>Created</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td>{row.studentName}</td><td>{row.teacherName}</td><td>{row.subject}</td><td>{row.tutorialGroup || '—'}</td><td>{row.gradeLevel || '—'}</td><td>{scheduleLabel(row)}</td><td>{row.status}</td><td>{new Date(row.createdAt).toLocaleString()}</td></tr>)}</tbody></table> : <p className="enrollment-print-empty">No enrollment records match the current filters.</p>}</section>}
+      {(!isAdmin || activeTab === 'assignments') && <section className="enrollment-print-report" aria-hidden="true"><div className="enrollment-print-header"><h1>Enrollment Records</h1><p>Status: {filterStatus || 'All statuses'} · Teacher: {filterTeacher || 'All teachers'} · Subject: {filterSubject || 'All subjects'} · Dates: {dateFrom || 'Any date'} to {dateTo || 'Any date'} · Search: {searchTerm.trim() || 'None'}</p><p>Printed: {(printedAt || new Date()).toLocaleString()} · Records: {filteredRows.length}</p></div>{filteredRows.length ? <table><thead><tr><th>Student</th><th>Age</th><th>Teacher</th><th>Subject</th><th>Class Schedule</th><th>Status</th><th>Created</th></tr></thead><tbody>{filteredRows.map((row) => <tr key={row.id}><td>{row.studentName}</td><td>{studentAge(row)}</td><td>{row.teacherName}</td><td>{row.subject}</td><td>{scheduleLabel(row)}</td><td>{row.status}</td><td>{new Date(row.createdAt).toLocaleString()}</td></tr>)}</tbody></table> : <p className="enrollment-print-empty">No enrollment records match the current filters.</p>}</section>}
 
       <div className={`enrollment-table-scroll bg-white border border-gray-100 rounded-2xl shadow-sm overflow-x-auto ${isAdmin && activeTab === 'users' ? 'hidden' : ''}`}>
         <table className="w-full text-left">
@@ -369,8 +371,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
               <th className="px-4 py-3">Student</th>
               <th className="px-4 py-3">Teacher</th>
               <th className="px-4 py-3">Subject</th>
-              <th className="px-4 py-3">Group</th>
-              <th className="px-4 py-3">Grade Level</th>
+              <th className="px-4 py-3">Age</th>
               <th className="px-4 py-3">Class Schedule</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Created</th>
@@ -383,8 +384,7 @@ export function EnrollmentRecords({ role, onAddUser, onEditUser, onDeleteUser, o
                 <td className="px-4 py-3">{row.studentName}</td>
                 <td className="px-4 py-3">{row.teacherName}</td>
                 <td className="px-4 py-3">{row.subject}</td>
-                <td className="px-4 py-3">{row.tutorialGroup || '-'}</td>
-                <td className="px-4 py-3">{(row as any).gradeLevel || '-'}</td>
+                <td className="px-4 py-3">{studentAge(row)}</td>
                 <td className="px-4 py-3 text-sm">{scheduleLabel(row)}</td>
                 <td className="px-4 py-3">
                   {isAdmin ? (
