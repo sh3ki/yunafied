@@ -431,3 +431,10 @@
 .meeting-history-print-report { display: none; }
 .user-management-print-report,
 .enrollment-print-report { display: none; }
+/* Assessment assignment is automatic after publishing. */
+article > .mt-4.flex.gap-2:has(button) { display: none; }
+
+/* Give modal actions visible feedback while an assessment is being saved or published. */
+@keyframes assessment-button-spinner { to { transform: rotate(360deg); } }
+.fixed.inset-0 button:disabled { cursor: wait; opacity: 0.7; }
+.fixed.inset-0 button:disabled::before { content: ''; width: 0.9rem; height: 0.9rem; margin-right: 0.4rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 9999px; display: inline-block; vertical-align: -0.15rem; animation: assessment-button-spinner 0.7s linear infinite; }
