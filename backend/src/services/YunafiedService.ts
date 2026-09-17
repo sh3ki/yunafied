@@ -4164,6 +4164,60 @@ export class YunafiedService {
     return result.rows[0];
   }
 
+  async getCyclingQuestState(studentId: string): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    const progression = await this.getStudentProgression(studentId);
+    const items = await pool.query<{ power_up: 'skip' | 'double'; quantity: number }>(`SELECT power_up, quantity FROM student_cycling_powerups WHERE student_id=$1`, [studentId]);
+    const powerUps = { skip: 0, double: 0 };
+    items.rows.forEach((item) => { powerUps[item.power_up] = item.quantity; });
+    return { coinBalance: progression.coinBalance, powerUps };
+  }
+
+  async purchaseCyclingPowerUp(studentId: string, powerUp: 'skip' | 'double'): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    const cost = powerUp === 'skip' ? 15 : 20;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const balance = await client.query<{ coin_balance: number }>(`INSERT INTO student_progression (student_id) VALUES ($1) ON CONFLICT (student_id) DO UPDATE SET student_id=EXCLUDED.student_id RETURNING coin_balance`, [studentId]);
+      if ((balance.rows[0]?.coin_balance || 0) < cost) throw new Error('You need more coins for that power-up.');
+      await client.query(`UPDATE student_progression SET coin_balance=coin_balance-$2 WHERE student_id=$1`, [studentId, cost]);
+      await client.query(`INSERT INTO student_cycling_powerups (student_id,power_up,quantity) VALUES ($1,$2,1) ON CONFLICT (student_id,power_up) DO UPDATE SET quantity=student_cycling_powerups.quantity+1,updated_at=NOW()`, [studentId, powerUp]);
+      await client.query(`INSERT INTO student_coin_transactions (student_id,amount,transaction_type,description) VALUES ($1,$2,'cycling_shop',$3)`, [studentId, -cost, `Bought ${powerUp} power-up`]);
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    return this.getCyclingQuestState(studentId);
+  }
+
+  async useCyclingPowerUp(studentId: string, powerUp: 'skip' | 'double'): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    const result = await pool.query(`UPDATE student_cycling_powerups SET quantity=quantity-1,updated_at=NOW() WHERE student_id=$1 AND power_up=$2 AND quantity > 0 RETURNING quantity`, [studentId, powerUp]);
+    if (!result.rows[0]) throw new Error('That power-up is no longer available.');
+    return this.getCyclingQuestState(studentId);
+  }
+
+  async grantCyclingPowerUp(studentId: string, powerUp: 'skip' | 'double'): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    await pool.query(`INSERT INTO student_cycling_powerups (student_id,power_up,quantity) VALUES ($1,$2,1) ON CONFLICT (student_id,power_up) DO UPDATE SET quantity=student_cycling_powerups.quantity+1,updated_at=NOW()`, [studentId, powerUp]);
+    return this.getCyclingQuestState(studentId);
+  }
+
+  async collectCyclingCoins(studentId: string, amount: number): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    const safeAmount = Math.max(1, Math.min(8, Math.trunc(amount)));
+    await pool.query(`INSERT INTO student_progression (student_id,coin_balance,last_activity_at) VALUES ($1,$2,NOW()) ON CONFLICT (student_id) DO UPDATE SET coin_balance=student_progression.coin_balance+$2,last_activity_at=NOW()`, [studentId, safeAmount]);
+    await pool.query(`INSERT INTO student_coin_transactions (student_id,amount,transaction_type,description) VALUES ($1,$2,'cycling_pickup','Collected a cycling lane coin')`, [studentId, safeAmount]);
+    return this.getCyclingQuestState(studentId);
+  }
+
+  async completeCyclingQuestRun(studentId: string, input: { score: number; bossCorrectCount: number }): Promise<{ coinBalance: number; powerUps: { skip: number; double: number }; coinsEarned: number }> {
+    const coinsEarned = Math.max(0, Math.min(5, input.bossCorrectCount)) * 5 + 10;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const run = await client.query<{ id: string }>(`INSERT INTO cycling_quest_runs (student_id,score,boss_correct_count,coins_earned) VALUES ($1,$2,$3,$4) RETURNING id`, [studentId, input.score, input.bossCorrectCount, coinsEarned]);
+      await client.query(`INSERT INTO student_progression (student_id,coin_balance,last_activity_at) VALUES ($1,$2,NOW()) ON CONFLICT (student_id) DO UPDATE SET coin_balance=student_progression.coin_balance+$2,last_activity_at=NOW()`, [studentId, coinsEarned]);
+      await client.query(`INSERT INTO student_coin_transactions (student_id,amount,transaction_type,reference_type,reference_id,description) VALUES ($1,$2,'cycling_completion','cycling_quest_runs',$3,'Completed Level 1 cycling quest')`, [studentId, coinsEarned, run.rows[0].id]);
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    return { ...(await this.getCyclingQuestState(studentId)), coinsEarned };
+  }
+
   async getArcadeGame(gameId: string, requester: { id: string; role: UserRole }): Promise<Record<string, unknown> | null> {
     const game = await pool.query(`SELECT g.id,g.title,g.description,g.game_type AS "gameType",g.category_id AS "categoryId",c.name AS "categoryName",g.difficulty,g.practice_xp_reward AS "practiceXpReward",g.practice_coin_reward AS "practiceCoinReward",g.is_published AS "isPublished" FROM gamified_games g LEFT JOIN gamified_categories c ON c.id=g.category_id WHERE g.id=$1 AND ($2 <> 'student' OR g.is_published=TRUE)`, [gameId, requester.role]);
     if (!game.rows[0]) return null;
