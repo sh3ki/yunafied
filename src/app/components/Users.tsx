@@ -33,7 +33,7 @@ interface UpdateUserInput {
   profileImagePublicId?: string | null;
   password?: string;
   mobileNumber?: string;
-  birthdate?: string;
+  birthdate?: string | null;
   professionalTitle?: string;
   employmentStatus?: string;
   yearsExperience?: string;
@@ -195,7 +195,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
     setIsEditOpen(true);
     if (user.role === 'teacher') void apiClient.listTeacherRecords().then((records) => {
       const record = records.find((item) => item.teacherId === user.id);
-      if (record) setEditUser((current) => ({ ...current, mobileNumber: record.mobileNumber || '', professionalTitle: record.professionalTitle || '', employmentStatus: record.employmentStatus || '', yearsExperience: record.yearsExperience == null ? '' : String(record.yearsExperience), specializations: record.specializations || [], education: record.education || '', certifications: record.certifications || '', availability: record.availability.map((item) => ({ dayOfWeek: item.dayOfWeek, date: item.date || null, startTime: item.startTime.slice(0, 5), endTime: item.endTime.slice(0, 5) })) }));
+      if (record) setEditUser((current) => ({ ...current, mobileNumber: record.mobileNumber || '', professionalTitle: record.professionalTitle || '', employmentStatus: record.employmentStatus || '', yearsExperience: record.yearsExperience == null ? '' : String(record.yearsExperience), specializations: record.specializations || [], education: record.education || '', certifications: record.certifications || '', availability: record.availability.map((item) => ({ dayOfWeek: item.dayOfWeek, date: item.date ? String(item.date).slice(0, 10) : null, startTime: item.startTime.slice(0, 5), endTime: item.endTime.slice(0, 5) })) }));
     }).catch(() => undefined);
   };
 
@@ -232,6 +232,7 @@ export function UsersView({ users, onAddUser, onEditUser, onDeleteUser, onUpload
       setSaving(true);
       await onEditUser(selectedUser.id, {
         ...editUser,
+        birthdate: editUser.birthdate || null,
         password: editUser.password || undefined,
       });
       if (selectedUser.role === 'teacher') {
