@@ -4,7 +4,7 @@ import { apiClient } from "@/app/services/apiClient";
 import type { CallHistoryItem } from "@/app/types/models";
 import { PrintButton, TableFilter, TablePagination, TableSearch, DEFAULT_TABLE_PAGE_SIZE } from "./ui/table-tools";
 
-export function MeetingHistory() {
+export function MeetingHistory({ generatedBy }: { generatedBy: { role: string; fullName: string } }) {
   const [rooms, setRooms] = useState<CallHistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
