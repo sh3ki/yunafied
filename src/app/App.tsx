@@ -40,6 +40,7 @@ import { Analytics } from '@/app/components/Analytics';
 import { TeacherDashboard } from '@/app/components/TeacherDashboard';
 import { Assessments } from '@/app/components/Assessments';
 import { apiClient } from '@/app/services/apiClient';
+import { LoginResponse } from '@/app/services/apiClient';
 import {
   AnnouncementItem,
   AssignmentItem,
@@ -412,6 +413,8 @@ function AuthenticatedShell({
                     const mySubs = data.submissions.filter((s) => s.studentId === session.user.id);
                     const gradedSubs = mySubs.filter((s) => s.grade).length;
                     const pendingSubs = mySubs.filter((s) => !s.grade).length;
+                    const numericGrades = mySubs.map((submission) => Number.parseFloat(String(submission.grade))).filter((grade) => Number.isFinite(grade));
+                    const averageGrade = numericGrades.length ? numericGrades.reduce((sum, grade) => sum + grade, 0) / numericGrades.length : null;
 
                     const assignmentProgressData = data.assignments.map((a) => {
                       const sub = mySubs.find((s) => s.assignmentId === a.id);
@@ -442,6 +445,10 @@ function AuthenticatedShell({
                             </div>
                           ))}
                         </div>
+                        <section className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5"><h3 className="font-semibold text-emerald-900">My overall learning summary</h3><p className="mt-2 text-sm leading-6 text-emerald-900/80">You have submitted {mySubs.length} of {data.assignments.length} assignment{data.assignments.length === 1 ? '' : 's'} and received grades for {gradedSubs}. {averageGrade === null ? 'Complete and submit more work to see a reliable performance average.' : `Your current recorded average is ${averageGrade.toFixed(1)}%.`}</p></div>
+                          <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-5"><h3 className="font-semibold text-indigo-900">How to use this dashboard</h3><p className="mt-2 text-sm leading-6 text-indigo-900/80">Use the assignment chart to choose what to finish next, review graded work and feedback to improve your next submission, and use schedule status to follow up on pending tutoring or class requests. Assessment results are diagnostic and do not affect grades.</p></div>
+                        </section>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                             <h3 className="text-sm font-semibold text-gray-700 mb-4">My Assignment Progress</h3>
@@ -476,6 +483,10 @@ function AuthenticatedShell({
                                 <Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} barSize={32} />
                               </BarChart>
                             </ResponsiveContainer>
+                          </div>
+                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:col-span-2">
+                            <h3 className="text-sm font-semibold text-gray-700 mb-4">My graded performance</h3>
+                            {numericGrades.length ? <ResponsiveContainer width="100%" height={200}><BarChart data={[{ name: 'Average', value: Number(averageGrade?.toFixed(1)) }]}><CartesianGrid strokeDasharray="3 3" vertical={false} /><XAxis dataKey="name" axisLine={false} tickLine={false} /><YAxis domain={[0, 100]} /><Tooltip /><Bar dataKey="value" fill="#10b981" radius={[4, 4, 0, 0]} barSize={50} /></BarChart></ResponsiveContainer> : <div className="h-48 flex items-center justify-center text-gray-400 text-sm">No graded performance yet</div>}
                           </div>
                         </div>
                         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-6">
@@ -727,6 +738,17 @@ export default function App() {
 
   const handleVerifyOtp = async (email: string, otp: string) => {
     const response = await apiClient.verifyOtp(email, otp);
+    apiClient.setToken(response.token);
+    localStorage.setItem('yunafied_token', response.token);
+    setSession({ token: response.token, user: response.user });
+    await loadData();
+    navigate('/app/dashboard', { replace: true });
+  };
+
+  const handleAccountActivated = async (response: LoginResponse) => {
+    // Account setup returns the activated user's own JWT. Replace any existing
+    // browser session (for example, an admin who opened the email link) so the
+    // new account is never routed through the old user's role/session.
     apiClient.setToken(response.token);
     localStorage.setItem('yunafied_token', response.token);
     setSession({ token: response.token, user: response.user });
@@ -1067,7 +1089,7 @@ export default function App() {
             )
           }
         />
-        <Route path="/verify-account" element={<AccountSetup />} />
+        <Route path="/verify-account" element={<AccountSetup onActivated={handleAccountActivated} />} />
         <Route path="/app" element={<Navigate to="/app/dashboard" replace />} />
         <Route
           path="/app/video-call/:roomToken"
