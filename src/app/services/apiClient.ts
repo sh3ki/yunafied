@@ -46,7 +46,7 @@ import {
   AssessmentItem, AssessmentDetail, AssessmentAssignment, AssessmentAnalyticsItem,
 } from "@/app/types/models";
 
-interface LoginResponse {
+export interface LoginResponse {
   token: string;
   user: AuthUser;
 }
