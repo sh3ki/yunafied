@@ -951,7 +951,7 @@ export default function App() {
     yearsExperience?: number | null;
     specializations?: string[];
     notes?: string | null;
-    availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
+    availability?: Array<{ dayOfWeek: number; date?: string | null; startTime: string; endTime: string }>;
   }) => {
     const updated = await apiClient.updateProfile(input);
     setSession((prev) => (prev ? { ...prev, user: updated } : prev));
