@@ -26,7 +26,7 @@ interface UpdateProfileInput {
   yearsExperience?: number | null;
   specializations?: string[];
   notes?: string | null;
-  availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
+  availability?: Array<{ dayOfWeek: number; date?: string | null; startTime: string; endTime: string }>;
 }
 
 interface ProfileSettingsProps {
@@ -64,7 +64,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
   const [yearsExperience, setYearsExperience] = useState(user.yearsExperience == null ? '' : String(user.yearsExperience));
   const [specializations, setSpecializations] = useState((user.specializations || []).join(', '));
   const [notes, setNotes] = useState(user.notes || '');
-  const [availability, setAvailability] = useState(user.availability?.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
+  const [availability, setAvailability] = useState(user.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date || null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
   const [policyOpen, setPolicyOpen] = useState(false);
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
     setEducation(user.education || ''); setCertifications(user.certifications || '');
     setYearsExperience(user.yearsExperience == null ? '' : String(user.yearsExperience));
     setSpecializations((user.specializations || []).join(', ')); setNotes(user.notes || '');
-    setAvailability(user.availability?.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
+    setAvailability(user.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date || null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
   }, [user]);
 
   useEffect(() => { void apiClient.getProfileDetails().then((details) => {
@@ -90,7 +90,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
     setBirthdate(details.birthdate || '');
     setEducation(details.education || ''); setCertifications(details.certifications || ''); setYearsExperience(details.yearsExperience == null ? '' : String(details.yearsExperience));
     setSpecializations((details.specializations || []).join(', ')); setNotes(details.notes || '');
-    setAvailability(details.availability?.map(({ dayOfWeek, startTime, endTime }) => ({ dayOfWeek, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
+    setAvailability(details.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date || null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
   }).catch(() => undefined); }, [user.id]);
 
   useEffect(() => {
@@ -269,7 +269,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
             <div><label className="text-sm font-medium text-gray-700 mb-2 block">Education</label><textarea value={education} onChange={(e) => setEducation(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" placeholder="Degrees and institutions" /></div>
             <div><label className="text-sm font-medium text-gray-700 mb-2 block">Certifications</label><textarea value={certifications} onChange={(e) => setCertifications(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" /></div>
             <div className="md:col-span-2"><label className="text-sm font-medium text-gray-700 mb-2 block">Notes</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2.5" /></div>
-            <div className="md:col-span-2"><div className="flex items-center justify-between mb-2"><label className="text-sm font-medium text-gray-700">Availability</label><button type="button" onClick={() => setAvailability((items) => [...items, { dayOfWeek: 1, startTime: '09:00', endTime: '17:00' }])} className="text-sm text-violet-700 inline-flex items-center gap-1"><Plus className="h-4 w-4" />Add time</button></div>{availability.map((item, index) => <div key={`${index}-${item.dayOfWeek}`} className="flex flex-wrap items-center gap-2 mb-2"><select value={item.dayOfWeek} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, dayOfWeek: Number(e.target.value) } : x))} className="border border-gray-200 rounded-lg px-2 py-2"><option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></select><input type="time" value={item.startTime} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, startTime: e.target.value } : x))} className="border border-gray-200 rounded-lg px-2 py-2" /><span>to</span><input type="time" value={item.endTime} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, endTime: e.target.value } : x))} className="border border-gray-200 rounded-lg px-2 py-2" /><button type="button" onClick={() => setAvailability((items) => items.filter((_, i) => i !== index))} className="p-2 text-gray-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>)}</div>
+            <div className="md:col-span-2"><div className="flex items-center justify-between mb-2"><label className="text-sm font-medium text-gray-700">Availability</label><button type="button" onClick={() => { const date = new Date().toISOString().slice(0, 10); setAvailability((items) => [...items, { dayOfWeek: new Date(`${date}T00:00:00`).getDay(), date, startTime: '09:00', endTime: '17:00' }]); }} className="text-sm text-violet-700 inline-flex items-center gap-1"><Plus className="h-4 w-4" />Add availability</button></div><p className="mb-2 text-xs text-gray-500">Choose a specific date or a recurring day of the week.</p>{availability.map((item, index) => <div key={`${index}-${item.date || item.dayOfWeek}`} className="flex flex-wrap items-center gap-2 mb-2"><select value={item.date ? 'date' : 'day'} onChange={(e) => setAvailability((items) => items.map((x, i) => { if (i !== index) return x; const date = e.target.value === 'date' ? (x.date || new Date().toISOString().slice(0, 10)) : null; return { ...x, date, dayOfWeek: date ? new Date(`${date}T00:00:00`).getDay() : x.dayOfWeek }; }))} className="border border-gray-200 rounded-lg px-2 py-2"><option value="date">Specific date</option><option value="day">Every week</option></select>{item.date ? <input type="date" value={item.date} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, date: e.target.value || null, dayOfWeek: e.target.value ? new Date(`${e.target.value}T00:00:00`).getDay() : x.dayOfWeek } : x))} className="border border-gray-200 rounded-lg px-2 py-2" /> : <select value={item.dayOfWeek} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, dayOfWeek: Number(e.target.value) } : x))} className="border border-gray-200 rounded-lg px-2 py-2"><option value="0">Sunday</option><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option></select>}<input type="time" value={item.startTime} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, startTime: e.target.value } : x))} className="border border-gray-200 rounded-lg px-2 py-2" /><span>to</span><input type="time" value={item.endTime} onChange={(e) => setAvailability((items) => items.map((x, i) => i === index ? { ...x, endTime: e.target.value } : x))} className="border border-gray-200 rounded-lg px-2 py-2" /><button type="button" onClick={() => setAvailability((items) => items.filter((_, i) => i !== index))} className="p-2 text-gray-400 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></div>)}</div>
           </>}
         </div>
 
