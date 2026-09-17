@@ -2267,11 +2267,11 @@ const assessmentQuestionSchema = z.object({
   prompt: z.string().min(1).max(2000),
   points: z.coerce.number().int().min(1).max(100).default(1),
   choices: z.array(z.object({ text: z.string().min(1).max(300), isCorrect: z.boolean() })).optional().default([]),
-  acceptedAnswers: z.array(z.string().min(1).max(300)).optional().default([]),
+  acceptedAnswers: z.array(z.string().max(300)).optional().default([]),
 });
 const assessmentSchema = z.object({
   title: z.string().min(2).max(150), subject: z.string().min(2).max(200), gradeLevel: z.string().max(120).default(''),
-  assessmentType: z.enum(['pre', 'post']), pairedAssessmentId: nullableUuidSchema.optional(), instructions: z.string().max(2000).optional(),
+  instructions: z.string().max(2000).optional(),
   questions: z.array(assessmentQuestionSchema).min(1).max(100),
 });
 
