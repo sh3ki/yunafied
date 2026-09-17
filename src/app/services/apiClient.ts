@@ -94,7 +94,7 @@ export interface AccountEnrollmentPayload {
   yearsExperience?: number;
   specializations?: string[];
   notes?: string;
-  availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
+  availability?: Array<{ dayOfWeek: number; date?: string | null; startTime: string; endTime: string }>;
   classSchedule?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
 }
 
@@ -134,7 +134,7 @@ interface UpdateProfilePayload {
   yearsExperience?: number | null;
   specializations?: string[];
   notes?: string | null;
-  availability?: Array<{ dayOfWeek: number; startTime: string; endTime: string }>;
+  availability?: Array<{ dayOfWeek: number; date?: string | null; startTime: string; endTime: string }>;
 }
 
 interface YunaAiMessage {
@@ -320,7 +320,7 @@ class YunafiedApiClient {
     await this.request<void>(`/api/admin/teacher-records/${id}`, { method: "PUT", body: JSON.stringify(payload) });
   }
 
-  async replaceTeacherAvailability(id: string, availability: Array<{ dayOfWeek: number; startTime: string; endTime: string }>): Promise<void> {
+  async replaceTeacherAvailability(id: string, availability: Array<{ dayOfWeek: number; date?: string | null; startTime: string; endTime: string }>): Promise<void> {
     await this.request<void>(`/api/admin/teacher-records/${id}/availability`, { method: "PUT", body: JSON.stringify({ availability }) });
   }
 
@@ -982,7 +982,7 @@ class YunafiedApiClient {
     return this.request<TeacherAvailabilityItem[]>(`/api/teacher/availability${qs}`);
   }
 
-  async createTeacherAvailability(payload: { dayOfWeek: number; startTime: string; endTime: string; teacherId?: string }): Promise<TeacherAvailabilityItem> {
+  async createTeacherAvailability(payload: { dayOfWeek: number; date?: string | null; startTime: string; endTime: string; teacherId?: string }): Promise<TeacherAvailabilityItem> {
     return this.request<TeacherAvailabilityItem>("/api/teacher/availability", {
       method: "POST",
       body: JSON.stringify(payload),
