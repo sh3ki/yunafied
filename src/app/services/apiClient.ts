@@ -105,6 +105,7 @@ interface UpdateUserPayload {
   lastName: string;
   role: UserRole;
   status: UserStatus;
+  birthdate?: string | null;
   profileImageUrl?: string | null;
   profileImagePublicId?: string | null;
   password?: string;
@@ -125,7 +126,6 @@ interface UpdateProfilePayload {
   currentPassword?: string;
   newPassword?: string;
   mobileNumber?: string | null;
-  birthdate?: string | null;
   birthdate?: string | null;
   professionalTitle?: string | null;
   employmentStatus?: string | null;
