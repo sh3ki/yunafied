@@ -2291,6 +2291,25 @@ app.get('/api/arcade/progression', requireAuth, requireRole('student'), async (r
   try { res.json(await service.getStudentProgression(req.auth?.sub || '')); } catch (error) { next(error); }
 });
 
+app.get('/api/cycling-quest/state', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.getCyclingQuestState(req.auth?.sub || '')); } catch (error) { next(error); }
+});
+app.post('/api/cycling-quest/power-ups/:powerUp/purchase', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { const powerUp = z.enum(['skip', 'double']).parse(req.params.powerUp); res.json(await service.purchaseCyclingPowerUp(req.auth?.sub || '', powerUp)); } catch (error) { next(error); }
+});
+app.post('/api/cycling-quest/power-ups/:powerUp/use', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { const powerUp = z.enum(['skip', 'double']).parse(req.params.powerUp); res.json(await service.useCyclingPowerUp(req.auth?.sub || '', powerUp)); } catch (error) { next(error); }
+});
+app.post('/api/cycling-quest/power-ups/:powerUp/collect', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { const powerUp = z.enum(['skip', 'double']).parse(req.params.powerUp); res.json(await service.grantCyclingPowerUp(req.auth?.sub || '', powerUp)); } catch (error) { next(error); }
+});
+app.post('/api/cycling-quest/coins/collect', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { const input = z.object({ amount: z.coerce.number().int().min(1).max(8) }).parse(req.body); res.json(await service.collectCyclingCoins(req.auth?.sub || '', input.amount)); } catch (error) { next(error); }
+});
+app.post('/api/cycling-quest/runs/complete', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { const input = z.object({ score: z.coerce.number().int().min(0).max(10000), bossCorrectCount: z.coerce.number().int().min(0).max(5) }).parse(req.body); res.status(201).json(await service.completeCyclingQuestRun(req.auth?.sub || '', input)); } catch (error) { next(error); }
+});
+
 app.get('/api/arcade/leaderboard', requireAuth, async (req, res, next) => {
   try {
     const gameId = z.string().uuid().optional().parse(req.query.gameId);
