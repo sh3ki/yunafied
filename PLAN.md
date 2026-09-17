@@ -1,4 +1,13 @@
-# YUNAfied — Enhancement Execution Plan
+# YUNAfied â€” Enhancement Execution Plan
+
+## Completed: Student Cycling Quest Game
+
+- Student Gamified now opens a mobile-first three-lane cycling game; Level 1 is playable and recommended for ages 5â€“7, while Levels 2 and 3 are coming soon (ages 8â€“10 and 11â€“13).
+- Fixed Level 1 content: phonics B/bee, K/kite, M/moon; picture spelling cat, dog, sun; word hunts for dog, kite, fish; and a 30-second, five-word Buzz-the-Beetle spelling boss (bee, frog, star, book, tree).
+- The ride pauses for every treasure and cannot resume until the challenge is complete. Confirmed exit remains available. Coins, shop power-ups, scores, generated game graphics, music controls, backend persistence, and migration `034_cycling_quest_game.sql` are implemented.
+- The active ride is rendered by a Three.js perspective scene: procedural road, lane markers, coins, power-ups, trees, and rocks are live WebGL meshes, while the rear-view cyclist is overlaid as the player avatar.
+- Collected coins are now held as pending treasure rewards and are credited to the student only after that treasure is successfully completed.
+- Validation completed: backend build, frontend production build, and the database migration runner passed. The requested Playwright interactive tool is not available in this session.
 
 > **Based on**: ENHANCEMENTS.md  
 > **Deployment Target**: Render Free Tier  
@@ -13,12 +22,12 @@ Every implementation decision in this plan follows these hard constraints:
 
 | Rule | What This Means in Code |
 |---|---|
-| **No disk writes** — ephemeral filesystem | Use `multer.memoryStorage()` everywhere. Upload directly from buffer to Cloudinary. |
+| **No disk writes** â€” ephemeral filesystem | Use `multer.memoryStorage()` everywhere. Upload directly from buffer to Cloudinary. |
 | **No in-memory state that must survive restarts** | No in-memory job queues, trackers, or session maps (except short-lived bootstrap cache which is intentionally ephemeral). |
 | **No WebSocket / socket.io** | Render free tier kills idle connections on cold start. All real-time features use HTTP polling. |
 | **No backend PDF generation** | `pdfkit`, `@react-pdf/renderer`, and `puppeteer` are all banned. Use `jsPDF` on the **frontend** only. |
 | **Whisper model = `tiny` or `base` only** | The free tier has ~512 MB RAM. Larger models will crash the process. |
-| **Rate limiter uses in-memory store** | `express-rate-limit` default MemoryStore is acceptable — single instance, resets on cold start (fine for free tier). |
+| **Rate limiter uses in-memory store** | `express-rate-limit` default MemoryStore is acceptable â€” single instance, resets on cold start (fine for free tier). |
 | **Cold start awareness** | Frontend must handle ~30 s initial response delay gracefully with a loading state. |
 
 ---
@@ -27,8 +36,8 @@ Every implementation decision in this plan follows these hard constraints:
 
 | Phase | Focus | Estimated Items |
 |-------|-------|----------------|
-| Phase 1 | Database Foundation — New migrations | 3 SQL migration files |
-| Phase 2 | Backend Core — New services, endpoints, middleware | ~30 endpoint additions |
+| Phase 1 | Database Foundation â€” New migrations | 3 SQL migration files |
+| Phase 2 | Backend Core â€” New services, endpoints, middleware | ~30 endpoint additions |
 | Phase 3 | Admin Enhancements | 5 major features |
 | Phase 4 | Teacher Enhancements | 7 major features |
 | Phase 5 | Student Enhancements | 6 major features |
@@ -40,11 +49,11 @@ Every implementation decision in this plan follows these hard constraints:
 
 ---
 
-## Phase 1 — Database Foundation
+## Phase 1 â€” Database Foundation
 
 All database changes must be applied before any backend or frontend work.
 
-### Task 1.1 — Migration 015: Core New Tables
+### Task 1.1 â€” Migration 015: Core New Tables
 
 **File to create**: `backend/sql/015_core_enhancements.sql`
 
@@ -165,7 +174,7 @@ CREATE TABLE IF NOT EXISTS ai_chatbot_sessions (
 
 ---
 
-### Task 1.2 — Migration 016: Gamification Tables
+### Task 1.2 â€” Migration 016: Gamification Tables
 
 **File to create**: `backend/sql/016_gamification_expansion.sql`
 
@@ -227,25 +236,25 @@ CREATE TABLE IF NOT EXISTS user_vocabulary (
 
 ---
 
-### Task 1.3 — Migration 017: Existing Table Alterations
+### Task 1.3 â€” Migration 017: Existing Table Alterations
 
 **File to create**: `backend/sql/017_table_alterations.sql`
 
 **What it does**:
-- Alter `assignments` — add `rubric_url`, `rubric_file_name`, `rubric_criteria`, `max_score`, `category`, `tags`
-- Alter `submissions` — add `is_late`, `regraded_at`, `regrade_note`
-- Alter `enrollment_records` — add `grade_level`
-- Alter `announcements` — add `target_scope`, `target_id`, `is_pinned`, `is_deleted`, `edited_at`
-- Alter `users` — add `deleted_at`, `last_login_at`
-- Alter `schedules` — add `reschedule_proposed_date/start/end`
-- Alter `chat_messages` — add `reply_to_id`, `reactions`
-- Alter `gamified_quizzes` — add `publish_at`, `max_attempts`
+- Alter `assignments` â€” add `rubric_url`, `rubric_file_name`, `rubric_criteria`, `max_score`, `category`, `tags`
+- Alter `submissions` â€” add `is_late`, `regraded_at`, `regrade_note`
+- Alter `enrollment_records` â€” add `grade_level`
+- Alter `announcements` â€” add `target_scope`, `target_id`, `is_pinned`, `is_deleted`, `edited_at`
+- Alter `users` â€” add `deleted_at`, `last_login_at`
+- Alter `schedules` â€” add `reschedule_proposed_date/start/end`
+- Alter `chat_messages` â€” add `reply_to_id`, `reactions`
+- Alter `gamified_quizzes` â€” add `publish_at`, `max_attempts`
 
 ---
 
-## Phase 2 — Backend Core
+## Phase 2 â€” Backend Core
 
-### Task 2.1 — New Service Methods in YunafiedService.ts
+### Task 2.1 â€” New Service Methods in YunafiedService.ts
 
 **File to modify**: `backend/src/services/YunafiedService.ts`
 
@@ -311,12 +320,12 @@ Add the following method groups:
 
 ---
 
-### Task 2.2 — Audit Log Middleware
+### Task 2.2 â€” Audit Log Middleware
 
 **File to create**: `backend/src/middleware/auditLog.ts`
 
 ```typescript
-// Middleware factory — wraps a route handler and logs after success
+// Middleware factory â€” wraps a route handler and logs after success
 export function withAudit(action: string, entityType: string) {
   return (handler) => async (req, res, next) => {
     // Run handler, if success (2xx) insert audit log entry non-blocking
@@ -328,7 +337,7 @@ Wire into routes in `backend/src/index.ts` for all mutating endpoints.
 
 ---
 
-### Task 2.3 — Rate Limiting
+### Task 2.3 â€” Rate Limiting
 
 **File to modify**: `backend/src/index.ts`
 
@@ -338,15 +347,15 @@ npm install express-rate-limit --prefix backend
 ```
 
 Add three rate limiters:
-1. `aiLimiter` — 20 req/min per IP for `/api/ai/*`, `/api/translate`, `/api/video-summarize`
-2. `authLimiter` — 10 req/15min per IP for `/api/auth/login`, `/api/auth/register`
-3. `generalLimiter` — 200 req/min per IP applied globally
+1. `aiLimiter` â€” 20 req/min per IP for `/api/ai/*`, `/api/translate`, `/api/video-summarize`
+2. `authLimiter` â€” 10 req/15min per IP for `/api/auth/login`, `/api/auth/register`
+3. `generalLimiter` â€” 200 req/min per IP applied globally
 
-> **Render Free Tier Note**: `express-rate-limit` uses an in-memory `MemoryStore` by default. This is correct for Render free tier (single instance). The counter resets on cold start, which is acceptable. Do NOT add Redis or any external store — that would require a paid add-on.
+> **Render Free Tier Note**: `express-rate-limit` uses an in-memory `MemoryStore` by default. This is correct for Render free tier (single instance). The counter resets on cold start, which is acceptable. Do NOT add Redis or any external store â€” that would require a paid add-on.
 
 ---
 
-### Task 2.4 — New API Route Handlers
+### Task 2.4 â€” New API Route Handlers
 
 **File to modify**: `backend/src/index.ts`
 
@@ -422,9 +431,9 @@ Modify VideoCall flow to record call start/end in `call_history`.
 
 ---
 
-### Task 2.5 — Bootstrap Payload Extension
+### Task 2.5 â€” Bootstrap Payload Extension
 
-**File to modify**: `backend/src/services/YunafiedService.ts` → `getBootstrapData()`
+**File to modify**: `backend/src/services/YunafiedService.ts` â†’ `getBootstrapData()`
 
 Add to the bootstrap response:
 - `unreadNotificationsCount`: From `countUnreadNotifications(userId)`.
@@ -436,7 +445,7 @@ Increase cache TTL in `index.ts` from `8000` to `30000` ms.
 
 ---
 
-### Task 2.6 — Notification Triggers
+### Task 2.6 â€” Notification Triggers
 
 After each state-changing service call, trigger notification creation:
 
@@ -455,7 +464,7 @@ Each trigger is `async` and non-blocking (fire-and-forget `service.createNotific
 
 ---
 
-### Task 2.7 — XP Award Triggers
+### Task 2.7 â€” XP Award Triggers
 
 Add XP award calls at the following events:
 
@@ -472,9 +481,9 @@ Implement `service.addXp(studentId, amount)` which updates `student_xp` table an
 
 ---
 
-## Phase 3 — Admin Module
+## Phase 3 â€” Admin Module
 
-### Task 3.1 — Audit Logs Page
+### Task 3.1 â€” Audit Logs Page
 
 **File to create**: `src/app/components/AuditLogs.tsx`
 
@@ -491,7 +500,7 @@ Implement `service.addXp(studentId, amount)` which updates `student_xp` table an
 
 ---
 
-### Task 3.2 — Advanced Admin Analytics Dashboard
+### Task 3.2 â€” Advanced Admin Analytics Dashboard
 
 **File to modify**: `src/app/App.tsx` (admin dashboard section, approximately line 300+)
 
@@ -499,13 +508,13 @@ Replace/expand the admin dashboard inline code:
 - Add API calls to new `/api/admin/analytics` endpoint (or compute from bootstrap data)
 - Charts: User registration trend (LineChart), Session activity per month (BarChart), Grade distribution system-wide (PieChart)
 - Tables: Top 5 students, Students needing attention
-- Export buttons using `Papa.unparse()` (CSV) or `jsPDF` (PDF) — **client-side only, no server PDF generation**
+- Export buttons using `Papa.unparse()` (CSV) or `jsPDF` (PDF) â€” **client-side only, no server PDF generation**
 
 **New endpoint needed**: `GET /api/admin/analytics` in `backend/src/index.ts` returning aggregated stats.
 
 ---
 
-### Task 3.3 — Bulk User Import
+### Task 3.3 â€” Bulk User Import
 
 **File to modify**: `src/app/components/Users.tsx`
 
@@ -516,11 +525,11 @@ Replace/expand the admin dashboard inline code:
 - Confirm button calls `POST /api/admin/users/import-csv`
 - Result modal shows success/failed rows
 
-**Backend**: Use `multer.memoryStorage()` — the CSV is received as a buffer, parsed in-process with `csv-parse` or `papaparse` on the backend, then each row is inserted. **Do NOT use `diskStorage()`** — the Render free tier filesystem is ephemeral.
+**Backend**: Use `multer.memoryStorage()` â€” the CSV is received as a buffer, parsed in-process with `csv-parse` or `papaparse` on the backend, then each row is inserted. **Do NOT use `diskStorage()`** â€” the Render free tier filesystem is ephemeral.
 
 ---
 
-### Task 3.4 — Admin Meeting History View
+### Task 3.4 â€” Admin Meeting History View
 
 **File to create**: `src/app/components/MeetingHistory.tsx`
 
@@ -532,7 +541,7 @@ Replace/expand the admin dashboard inline code:
 
 ---
 
-### Task 3.5 — Enrollment Record Improvements
+### Task 3.5 â€” Enrollment Record Improvements
 
 **File to modify**: `src/app/components/EnrollmentRecords.tsx`
 
@@ -546,9 +555,9 @@ Replace/expand the admin dashboard inline code:
 
 ---
 
-## Phase 4 — Teacher Module
+## Phase 4 â€” Teacher Module
 
-### Task 4.1 — Schedule: Pending Requests Inbox + Teacher Availability
+### Task 4.1 â€” Schedule: Pending Requests Inbox + Teacher Availability
 
 **File to modify**: `src/app/components/Schedule.tsx`
 
@@ -560,15 +569,15 @@ Replace/expand the admin dashboard inline code:
 **New component**: `src/app/components/TeacherAvailability.tsx` (sub-component used inside Schedule).
 
 **Backend additions**:
-- `POST /api/teacher/availability` — create block
-- `GET /api/teacher/availability` — list blocks
-- `DELETE /api/teacher/availability/:id` — remove block
+- `POST /api/teacher/availability` â€” create block
+- `GET /api/teacher/availability` â€” list blocks
+- `DELETE /api/teacher/availability/:id` â€” remove block
 - Update `POST /api/schedules/:id/respond` to accept `proposedDate/Time` for reschedule proposal.
 - Student side: show `reschedule_proposed_*` fields with Accept/Re-negotiate.
 
 ---
 
-### Task 4.2 — Assignment Rubric System
+### Task 4.2 â€” Assignment Rubric System
 
 **File to modify**: `src/app/components/Assignments.tsx`
 
@@ -578,16 +587,16 @@ Replace/expand the admin dashboard inline code:
 3. Add `category` dropdown and `tags` multi-select to the create assignment form.
 
 **Backend changes**:
-- `POST /api/assignments` — accept multipart form with `rubricFile` field. Upload rubric to Cloudinary/storage. Store `rubric_url`, `rubric_file_name`.
-- `POST /api/submissions/:id/grade` — accept `rubricScores JSONB`, compute total if provided.
+- `POST /api/assignments` â€” accept multipart form with `rubricFile` field. Upload rubric to Cloudinary/storage. Store `rubric_url`, `rubric_file_name`.
+- `POST /api/submissions/:id/grade` â€” accept `rubricScores JSONB`, compute total if provided.
 
 **Type changes**:
-- `AssignmentItem` in `src/app/types/models.ts` — add `rubricUrl`, `rubricFileName`, `rubricCriteria`, `maxScore`, `category`, `tags`.
-- `SubmissionItem` — add `isLate`, `regradedAt`, `regradeNote`.
+- `AssignmentItem` in `src/app/types/models.ts` â€” add `rubricUrl`, `rubricFileName`, `rubricCriteria`, `maxScore`, `category`, `tags`.
+- `SubmissionItem` â€” add `isLate`, `regradedAt`, `regradeNote`.
 
 ---
 
-### Task 4.3 — Late Submission Flag
+### Task 4.3 â€” Late Submission Flag
 
 **File to modify**: `backend/src/services/YunafiedService.ts` (submit assignment logic)
 
@@ -599,7 +608,7 @@ Replace/expand the admin dashboard inline code:
 
 ---
 
-### Task 4.4 — Learning Materials: Organization & Edit
+### Task 4.4 â€” Learning Materials: Organization & Edit
 
 **File to modify**: `src/app/components/LearningMaterials.tsx`
 
@@ -610,14 +619,14 @@ Replace/expand the admin dashboard inline code:
 4. Add `uploaded_for_enrollment_id` field: dropdown to optionally scope a material to a specific enrollment.
 
 **Backend**:
-- Add `PUT /api/materials/:id` — update material metadata.
-- `POST /api/materials/link` and `POST /api/materials/file` — already exist, no change.
+- Add `PUT /api/materials/:id` â€” update material metadata.
+- `POST /api/materials/link` and `POST /api/materials/file` â€” already exist, no change.
 
-**Type changes**: `LearningMaterialItem` — add `enrollmentId?: string`.
+**Type changes**: `LearningMaterialItem` â€” add `enrollmentId?: string`.
 
 ---
 
-### Task 4.5 — Teacher Performance Dashboard: Enhanced Charts
+### Task 4.5 â€” Teacher Performance Dashboard: Enhanced Charts
 
 **File to modify**: `src/app/components/Performance.tsx`
 
@@ -629,7 +638,7 @@ Replace/expand the admin dashboard inline code:
 
 ---
 
-### Task 4.6 — Announcement Delete & Edit
+### Task 4.6 â€” Announcement Delete & Edit
 
 **File to modify**: `src/app/components/Communication.tsx`
 
@@ -642,7 +651,7 @@ Replace/expand the admin dashboard inline code:
 
 ---
 
-### Task 4.7 — Teacher Access to Video Summarizer
+### Task 4.7 â€” Teacher Access to Video Summarizer
 
 **File to modify**: `src/app/App.tsx`
 
@@ -651,9 +660,9 @@ Replace/expand the admin dashboard inline code:
 
 ---
 
-## Phase 5 — Student Module
+## Phase 5 â€” Student Module
 
-### Task 5.1 — Milestones: Connect to Real DB
+### Task 5.1 â€” Milestones: Connect to Real DB
 
 **File to replace**: `src/app/components/Milestones.tsx`
 
@@ -668,13 +677,13 @@ Rewrite this component:
 
 ---
 
-### Task 5.2 — Word Translator: Expanded Languages + Enhancements
+### Task 5.2 â€” Word Translator: Expanded Languages + Enhancements
 
 **File to modify**: `src/app/components/WordTranslator.tsx`
 
 **Changes**:
-1. Replace both language dropdowns with a full list of 20+ languages (see ENHANCEMENTS.md §3.2).
-2. Add a "Swap Languages" button between the two language dropdowns (swap source ↔ target).
+1. Replace both language dropdowns with a full list of 20+ languages (see ENHANCEMENTS.md Â§3.2).
+2. Add a "Swap Languages" button between the two language dropdowns (swap source â†” target).
 3. Add a "Speak" button next to translated text that calls `window.speechSynthesis.speak()` using the Web Speech API.
 4. Add a "Save to Vocabulary" button that appears after a translation. On click calls `POST /api/translation/save-vocab`.
 5. Add a "My Vocabulary" sub-tab at the bottom of the page showing saved vocab items with search and delete.
@@ -688,20 +697,20 @@ Rewrite this component:
 
 ---
 
-### Task 5.3 — Student Dashboard Enhancements
+### Task 5.3 â€” Student Dashboard Enhancements
 
 **File to modify**: `src/app/App.tsx` (student dashboard section)
 
 **Add panels**:
-1. "Today's Sessions" card — list of today's accepted schedules with "Join" button if within active window.
-2. "Pending Assignments" card — list of unsubmitted assignments sorted by due date, with a red indicator if due within 24h.
-3. "Recent Grades" card — last 3 graded submissions.
+1. "Today's Sessions" card â€” list of today's accepted schedules with "Join" button if within active window.
+2. "Pending Assignments" card â€” list of unsubmitted assignments sorted by due date, with a red indicator if due within 24h.
+3. "Recent Grades" card â€” last 3 graded submissions.
 4. Stats row: `total_xp`, `level`, `badges_count`, `quizzes_completed`.
-5. "Streak" counter — days consecutive with activity (compute from `last_login_at` and submission timestamps).
+5. "Streak" counter â€” days consecutive with activity (compute from `last_login_at` and submission timestamps).
 
 ---
 
-### Task 5.4 — Video Summary History
+### Task 5.4 â€” Video Summary History
 
 **File to modify**: `src/app/components/VideoSummarizer.tsx`
 
@@ -714,7 +723,7 @@ Rewrite this component:
 
 ---
 
-### Task 5.5 — Student Study Planner / Tasks
+### Task 5.5 â€” Student Study Planner / Tasks
 
 **File to create**: `src/app/components/StudyPlanner.tsx`
 
@@ -731,7 +740,7 @@ Rewrite this component:
 
 ---
 
-### Task 5.6 — Schedule: Student Request Flow Improvement
+### Task 5.6 â€” Schedule: Student Request Flow Improvement
 
 **File to modify**: `src/app/components/Schedule.tsx` (student role view)
 
@@ -743,9 +752,9 @@ Rewrite this component:
 
 ---
 
-## Phase 6 — AI & Translation Enhancements
+## Phase 6 â€” AI & Translation Enhancements
 
-### Task 6.1 — AI Chatbot: Persistence & Improvements
+### Task 6.1 â€” AI Chatbot: Persistence & Improvements
 
 **File to modify**: `src/app/components/AIChatbot.tsx`
 
@@ -758,36 +767,36 @@ Rewrite this component:
 6. Show animated typing indicator while waiting for response.
 
 **Backend**:
-- `GET /api/chatbot/sessions/latest` — return most recent session messages.
-- `PATCH /api/chatbot/sessions/latest` — upsert latest session.
+- `GET /api/chatbot/sessions/latest` â€” return most recent session messages.
+- `PATCH /api/chatbot/sessions/latest` â€” upsert latest session.
 - System prompt improvements: inject role and current page context.
 
 ---
 
-### Task 6.2 — AI Study Guide: Expanded Subjects
+### Task 6.2 â€” AI Study Guide: Expanded Subjects
 
 **File to modify**: `src/app/components/AIGuide.tsx`
 
 **Changes**:
 1. Expand subject selector to include: English (all sub-topics), Mathematics (Basic/Algebra/Geometry), Science (General/Biology/Chemistry/Physics), Filipino / Filipino Literature, History / Social Studies, General Study Skills.
-2. Update backend Groq system prompt for each subject (Socratic mode — guide, don't answer directly).
+2. Update backend Groq system prompt for each subject (Socratic mode â€” guide, don't answer directly).
 3. Add "Save Session as Notes" button that opens a download modal.
 
 ---
 
-### Task 6.3 — Video Summarizer: Progress Indicator & Persistence
+### Task 6.3 â€” Video Summarizer: Progress Indicator & Persistence
 
 **File to modify**: `src/app/components/VideoSummarizer.tsx`
 
 **Changes**:
-1. Replace the single loading spinner with a **client-side multi-step progress indicator**: `Uploading (1/3) → Transcribing (2/3) → Summarizing (3/3) → Done`. The frontend advances steps based on time elapsed (e.g. after upload completes, immediately advance to step 2; after 5 s advance to step 3; on response arrive show Done). There is **no server-side job tracker** — the Render free tier has an ephemeral process that restarts and would lose any in-memory state.
+1. Replace the single loading spinner with a **client-side multi-step progress indicator**: `Uploading (1/3) â†’ Transcribing (2/3) â†’ Summarizing (3/3) â†’ Done`. The frontend advances steps based on time elapsed (e.g. after upload completes, immediately advance to step 2; after 5 s advance to step 3; on response arrive show Done). There is **no server-side job tracker** â€” the Render free tier has an ephemeral process that restarts and would lose any in-memory state.
 2. Add "Language Hint" select in the summarizer form.
 3. After summary is generated, the backend automatically calls `service.saveVideoSummary()` and returns the saved summary ID. The History tab refreshes automatically.
-4. All video file uploads use `multer.memoryStorage()` on the backend and are piped directly to the Python subprocess stdin — no temp files written to disk.
+4. All video file uploads use `multer.memoryStorage()` on the backend and are piped directly to the Python subprocess stdin â€” no temp files written to disk.
 
 ---
 
-### Task 6.4 — Translation Backend: Language + Register
+### Task 6.4 â€” Translation Backend: Language + Register
 
 **File to modify**: `backend/src/index.ts` (translate endpoint)
 
@@ -795,13 +804,13 @@ Rewrite this component:
 1. Expand the Groq translation system prompt to handle all 20 languages.
 2. Accept optional `register: 'formal' | 'informal'` in request body.
 3. Inject register preference into prompt.
-4. Accept optional `saveToVocab: boolean` flag — if true, call `service.saveVocabItem()` after translation.
+4. Accept optional `saveToVocab: boolean` flag â€” if true, call `service.saveVocabItem()` after translation.
 
 ---
 
-## Phase 7 — Communication & Notifications
+## Phase 7 â€” Communication & Notifications
 
-### Task 7.1 — Notifications Page: Persistent + Mark as Read
+### Task 7.1 â€” Notifications Page: Persistent + Mark as Read
 
 **File to modify**: `src/app/components/Notifications.tsx`
 
@@ -813,11 +822,11 @@ Rewrite this component:
 5. Unread count badge in sidebar now sourced from DB count.
 6. In `App.tsx`, after bootstrap, start a polling interval (every 30s) to refresh unread count.
 
-**Sidebar unread badge**: `src/app/components/Sidebar.tsx` — show unread notifications count on the Bell icon.
+**Sidebar unread badge**: `src/app/components/Sidebar.tsx` â€” show unread notifications count on the Bell icon.
 
 ---
 
-### Task 7.2 — Announcements: Delete / Edit / Pin
+### Task 7.2 â€” Announcements: Delete / Edit / Pin
 
 See Phase 4 Task 4.6 for frontend changes.
 
@@ -827,45 +836,45 @@ See Phase 4 Task 4.6 for frontend changes.
 
 ---
 
-### Task 7.3 — Chat Enhancements
+### Task 7.3 â€” Chat Enhancements
 
 **File to modify**: `src/app/components/Chats.tsx`
 
-> **Render Free Tier Note**: Polling is the correct and stable approach. WebSocket / socket.io is **not used** — Render free tier cold-starts drop persistent connections. The existing polling approach stays. Chat message polling is optimized to 4 seconds (from 3) and chat list to 8 seconds (from 5). `AbortController` is used in each polling `useEffect` to cancel in-flight requests on unmount.
+> **Render Free Tier Note**: Polling is the correct and stable approach. WebSocket / socket.io is **not used** â€” Render free tier cold-starts drop persistent connections. The existing polling approach stays. Chat message polling is optimized to 4 seconds (from 3) and chat list to 8 seconds (from 5). `AbortController` is used in each polling `useEffect` to cancel in-flight requests on unmount.
 
-**Phase 7.3a — Reply-to-Message**:
+**Phase 7.3a â€” Reply-to-Message**:
 1. Each message has a "Reply" icon button on hover.
 2. Clicking reply sets a `replyingTo` state.
 3. Composer shows a quoted preview of the message being replied to (dismiss with X).
 4. On send, include `replyToId` in the message payload.
 5. In the chat display, messages with `reply_to_id` show a quoted context card above the message body.
 
-**Phase 7.3b — Message Reactions**:
-1. Long-press or hover on a message shows an emoji picker (5 options: 👍 ✅ 🔥 ❓ 😊).
+**Phase 7.3b â€” Message Reactions**:
+1. Long-press or hover on a message shows an emoji picker (5 options: ðŸ‘ âœ… ðŸ”¥ â“ ðŸ˜Š).
 2. Clicking an emoji calls `POST /api/chat/:messageId/react`.
 3. Reaction counts shown below messages (grouped by emoji).
 
 **Backend**:
 - Update `chat_messages` query to return `reactions` JSONB field.
-- `POST /api/chat/:messageId/react` — toggle reaction (add if not present, remove if already reacted).
+- `POST /api/chat/:messageId/react` â€” toggle reaction (add if not present, remove if already reacted).
 
 ---
 
-## Phase 8 — Gamification Expansion
+## Phase 8 â€” Gamification Expansion
 
-### Task 8.1 — Badges UI
+### Task 8.1 â€” Badges UI
 
 **File to modify**: `src/app/components/GamifiedLearning.tsx` and create `src/app/components/BadgeDisplay.tsx`
 
 **Changes**:
 1. In GamifiedLearning, for student role, add a "My Badges" section showing earned badges as icons with labels.
 2. Locked badges shown as greyed-out with a "?" until earned.
-3. After each quiz completion, check if any badges were just earned — if so, show a celebration modal.
+3. After each quiz completion, check if any badges were just earned â€” if so, show a celebration modal.
 4. `BadgeDisplay` component used both in GamifiedLearning and in the student dashboard.
 
 ---
 
-### Task 8.2 — XP Bar on Student Dashboard & Profile
+### Task 8.2 â€” XP Bar on Student Dashboard & Profile
 
 **File to modify**: `src/app/App.tsx` (student dashboard), `src/app/components/ProfileSettings.tsx`
 
@@ -875,7 +884,7 @@ See Phase 4 Task 4.6 for frontend changes.
 
 ---
 
-### Task 8.3 — Quiz Analytics for Teacher
+### Task 8.3 â€” Quiz Analytics for Teacher
 
 **File to modify**: `src/app/components/GamifiedLearning.tsx`
 
@@ -890,9 +899,9 @@ After a quiz is published, teacher can click a quiz and see a "Results" tab:
 
 ---
 
-## Phase 9 — UI/UX Polish
+## Phase 9 â€” UI/UX Polish
 
-### Task 9.1 — Unique Sidebar Icons
+### Task 9.1 â€” Unique Sidebar Icons
 
 **File to modify**: `src/app/components/Sidebar.tsx`
 
@@ -907,7 +916,7 @@ Replace duplicate icons:
 
 ---
 
-### Task 9.2 — Skeleton Loading States
+### Task 9.2 â€” Skeleton Loading States
 
 **File to create**: `src/app/components/ui/Skeleton.tsx`
 
@@ -921,22 +930,22 @@ Apply skeleton loading to:
 
 ---
 
-### Task 9.3 — Empty State Components
+### Task 9.3 â€” Empty State Components
 
 **File to create**: `src/app/components/ui/EmptyState.tsx`
 
 Props: `icon`, `heading`, `description`, `action` (optional button label + callback).
 
 Apply to:
-- `Assignments.tsx` — "No assignments yet"
-- `Notifications.tsx` — "You're all caught up"
-- `Chats.tsx` — "No conversations yet"
-- `LearningMaterials.tsx` — "No materials uploaded"
-- `GradesFeedback.tsx` — "No submissions yet"
+- `Assignments.tsx` â€” "No assignments yet"
+- `Notifications.tsx` â€” "You're all caught up"
+- `Chats.tsx` â€” "No conversations yet"
+- `LearningMaterials.tsx` â€” "No materials uploaded"
+- `GradesFeedback.tsx` â€” "No submissions yet"
 
 ---
 
-### Task 9.4 — Video Call Enhancements
+### Task 9.4 â€” Video Call Enhancements
 
 **File to modify**: `src/app/components/VideoCall.tsx`
 
@@ -947,7 +956,7 @@ Apply to:
 
 ---
 
-### Task 9.5 — Dark Mode Foundation
+### Task 9.5 â€” Dark Mode Foundation
 
 **File to modify**: `vite.config.ts`, `src/styles/index.css`, `src/app/App.tsx`
 
@@ -958,7 +967,7 @@ Apply to:
 
 ---
 
-### Task 9.6 — Responsive Fixes
+### Task 9.6 â€” Responsive Fixes
 
 **File to modify**: `src/app/components/Schedule.tsx`, `src/app/components/Performance.tsx`
 
@@ -968,9 +977,9 @@ Apply to:
 
 ---
 
-## Phase 10 — Security & Performance
+## Phase 10 â€” Security & Performance
 
-### Task 10.1 — Soft Delete Users
+### Task 10.1 â€” Soft Delete Users
 
 **File to modify**: `backend/src/services/YunafiedService.ts`
 
@@ -980,13 +989,13 @@ Apply to:
 
 ---
 
-### Task 10.2 — Rate Limiting
+### Task 10.2 â€” Rate Limiting
 
 See Task 2.3.
 
 ---
 
-### Task 10.3 — Input Validation Hardening
+### Task 10.3 â€” Input Validation Hardening
 
 **File to modify**: `backend/src/index.ts`
 
@@ -1001,7 +1010,7 @@ npm install --save-dev @types/dompurify
 
 ---
 
-### Task 10.4 — DB Pool Configuration
+### Task 10.4 â€” DB Pool Configuration
 
 **File to modify**: `backend/src/lib/db.ts`
 
@@ -1070,19 +1079,19 @@ const pool = new Pool({
 
 ```
 Phase 1 (DB migrations)
-    ↓
-Phase 2 (Backend — services + routes)
-    ↓                     ↓
+    â†“
+Phase 2 (Backend â€” services + routes)
+    â†“                     â†“
 Phase 3 (Admin)       Phase 5 (Student)
-    ↓                     ↓
-Phase 4 (Teacher) ←——— Phase 6 (AI)
-    ↓
+    â†“                     â†“
+Phase 4 (Teacher) â†â€”â€”â€” Phase 6 (AI)
+    â†“
 Phase 7 (Comms + Notifs)
-    ↓
+    â†“
 Phase 8 (Gamification)
-    ↓
+    â†“
 Phase 9 (UI/UX Polish)
-    ↓
+    â†“
 Phase 10 (Security + Performance)
 ```
 
@@ -1109,8 +1118,19 @@ npm install --save-dev @types/papaparse --prefix backend
 ```
 
 > **Explicitly NOT installing** (incompatible with Render free tier or unnecessary):
-> - `socket.io` — WebSocket not used
-> - `pdfkit` — server-side PDF not used
-> - `@react-pdf/renderer` — server-side PDF not used
-> - `puppeteer` — too heavy for 512 MB RAM
-> - `multer` `diskStorage` — ephemeral filesystem, use `memoryStorage` instead
+> - `socket.io` â€” WebSocket not used
+> - `pdfkit` â€” server-side PDF not used
+> - `@react-pdf/renderer` â€” server-side PDF not used
+> - `puppeteer` â€” too heavy for 512 MB RAM
+> - `multer` `diskStorage` â€” ephemeral filesystem, use `memoryStorage` instead
+
+
+
+## Cycling Quest runner enhancement (implemented)
+
+- Use a procedural Three.js mobile runner: scrolling road, lane markers, roadside trees/rocks, coins, power-ups, treasure chests, and finish arch are geometry rather than background images.
+- Spawn coins in a predictable repeating lane sequence (left, centre, right), with one collectible at each sequential position. Show collection effects immediately, but only bank those coins after the active treasure is completed.
+- Score learning answers by attempt quality; first-try answers earn the most, later attempts earn less, and boss answers also receive a remaining-time bonus.
+- Make Picture Spelling tiles shuffled; make Word Hunt a draggable pile of overlapping picture cards; animate the boss on every successful hit.
+- After the boss is defeated or its timer expires, resume the runner, render a finish line, and complete the ride only after the cyclist crosses it.
+
