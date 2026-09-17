@@ -384,6 +384,7 @@ export interface TeacherAvailabilityItem {
   id: string;
   teacherId: string;
   dayOfWeek: number;
+  date?: string | null;
   startTime: string;
   endTime: string;
   isActive: boolean;
