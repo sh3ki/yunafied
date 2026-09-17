@@ -60,7 +60,6 @@ export function Sidebar({ role, currentView, onNavigate, onLogout, userEmail, us
     { id: 'teacher-records', label: 'Teacher Records', icon: BriefcaseBusiness, roles: ['admin'] },
     { id: 'student-records', label: 'Student Records', icon: ClipboardList, roles: ['admin', 'teacher'] },
     { id: 'ai-guide', label: 'AI Guide Bot', icon: Sparkles, roles: ['student'] },
-    { id: 'gamified-learning', label: 'Gamified Learning', icon: Sparkles, roles: ['admin', 'teacher', 'student'] },
     { id: 'milestones', label: 'Milestones', icon: Flag, roles: ['student'] },
     { id: 'video-summarizer', label: 'Video Summarizer', icon: Video, roles: ['student', 'teacher'] },
     { id: 'word-translator', label: 'Word Translator', icon: BookOpen, roles: ['student'] },
