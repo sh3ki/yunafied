@@ -15,6 +15,7 @@ import {
   ClipboardList
   ,ClipboardCheck
   ,LogOut
+  ,Gamepad2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -40,7 +41,7 @@ export function BottomNav({ role, currentView, onNavigate, onLogout, chatUnreadT
     { id: 'enrollments', label: 'Enrollments', icon: Users, roles: ['admin'] },
     { id: 'teacher-records', label: 'Teacher Records', icon: ClipboardList, roles: ['admin'] },
     { id: 'student-records', label: 'Student Records', icon: ClipboardList, roles: ['admin', 'teacher'] },
-    { id: 'gamified-learning', label: 'Gamified Learning', icon: Sparkles, roles: ['admin', 'teacher', 'student'] },
+    { id: 'gamified-learning', label: 'Gamified Learning', icon: Gamepad2, roles: ['student'] },
     { id: 'milestones', label: 'Milestones', icon: Flag, roles: ['student'] },
     { id: 'video-summarizer', label: 'Video Summarizer', icon: Video, roles: ['student', 'teacher'] },
     { id: 'word-translator', label: 'Word Translator', icon: BookOpen, roles: ['student'] },
