@@ -64,7 +64,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
   const [yearsExperience, setYearsExperience] = useState(user.yearsExperience == null ? '' : String(user.yearsExperience));
   const [specializations, setSpecializations] = useState((user.specializations || []).join(', '));
   const [notes, setNotes] = useState(user.notes || '');
-  const [availability, setAvailability] = useState(user.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date || null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
+  const [availability, setAvailability] = useState(user.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date ? String(date).slice(0, 10) : null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
   const [policyOpen, setPolicyOpen] = useState(false);
 
   useEffect(() => {
@@ -82,7 +82,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
     setEducation(user.education || ''); setCertifications(user.certifications || '');
     setYearsExperience(user.yearsExperience == null ? '' : String(user.yearsExperience));
     setSpecializations((user.specializations || []).join(', ')); setNotes(user.notes || '');
-    setAvailability(user.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date || null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
+    setAvailability(user.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date ? String(date).slice(0, 10) : null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
   }, [user]);
 
   useEffect(() => { void apiClient.getProfileDetails().then((details) => {
@@ -90,7 +90,7 @@ export function ProfileSettings({ user, onUpdateProfile, onUploadProfileImage }:
     setBirthdate(details.birthdate || '');
     setEducation(details.education || ''); setCertifications(details.certifications || ''); setYearsExperience(details.yearsExperience == null ? '' : String(details.yearsExperience));
     setSpecializations((details.specializations || []).join(', ')); setNotes(details.notes || '');
-    setAvailability(details.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date || null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
+    setAvailability(details.availability?.map(({ dayOfWeek, date, startTime, endTime }) => ({ dayOfWeek, date: date ? String(date).slice(0, 10) : null, startTime: startTime.slice(0, 5), endTime: endTime.slice(0, 5) })) || []);
   }).catch(() => undefined); }, [user.id]);
 
   useEffect(() => {
