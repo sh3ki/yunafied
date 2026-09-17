@@ -2,6 +2,8 @@
 @import './tailwind.css';
 @import './theme.css';
 
+.print-generated-by { display: none; }
+
 .admin-print-report {
   display: block;
   position: fixed;
@@ -278,6 +280,17 @@
 
 @media print {
   @page { size: A4 portrait; margin: 12mm; }
+  .print-generated-by {
+    display: block !important;
+    visibility: visible !important;
+    position: fixed;
+    top: 2mm;
+    right: 12mm;
+    z-index: 9999;
+    color: #536074;
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+  }
   body * { visibility: hidden !important; }
   .admin-print-report,
   .admin-print-report *,
