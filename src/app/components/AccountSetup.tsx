@@ -4,8 +4,9 @@ import { Lock, Loader2, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import { SystemLogo } from './SystemLogo';
 import { apiClient } from '@/app/services/apiClient';
+import { LoginResponse } from '@/app/services/apiClient';
 
-export function AccountSetup() {
+export function AccountSetup({ onActivated }: { onActivated: (response: LoginResponse) => Promise<void> }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const token = params.get('token') || '';
@@ -28,9 +29,9 @@ export function AccountSetup() {
     if (form.password !== form.confirmPassword) { toast.error('Passwords do not match.'); return; }
     try {
       setSaving(true);
-      await apiClient.completeAccountSetup({ token, firstName: form.firstName, middleName: form.middleName || undefined, lastName: form.lastName, password: form.password });
-      toast.success('Account activated. You can now sign in.');
-      navigate('/login', { replace: true });
+      const response = await apiClient.completeAccountSetup({ token, firstName: form.firstName, middleName: form.middleName || undefined, lastName: form.lastName, password: form.password });
+      toast.success(`Account activated. Welcome, ${response.user.fullName}!`);
+      await onActivated(response);
     } catch (err: any) { toast.error(err.message || 'Account setup failed.'); }
     finally { setSaving(false); }
   };
