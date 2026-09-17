@@ -1022,7 +1022,7 @@ const updateProfileSchema = z
     yearsExperience: z.coerce.number().int().min(0).max(80).nullable().optional(),
     specializations: z.array(z.string().min(1).max(120)).optional(),
     notes: z.string().max(2000).nullable().optional(),
-    availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
+    availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), date: z.string().date().nullable().optional(), startTime: z.string(), endTime: z.string() })).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.newPassword && !value.currentPassword) {
@@ -1824,7 +1824,7 @@ const teacherRecordSchema = z.object({
   mobileNumber: z.string().max(40).nullable().optional(), professionalTitle: z.string().max(160).nullable().optional(),
   employmentStatus: z.string().max(80).nullable().optional(), education: z.string().max(500).nullable().optional(),
   certifications: z.string().max(1000).nullable().optional(), yearsExperience: z.coerce.number().int().min(0).max(80).nullable().optional(),
-  specializations: z.array(z.string().min(1).max(120)).default([]), notes: z.string().max(2000).nullable().optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
+  specializations: z.array(z.string().min(1).max(120)).default([]), notes: z.string().max(2000).nullable().optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), date: z.string().date().nullable().optional(), startTime: z.string(), endTime: z.string() })).optional(),
 });
 
 app.get("/api/admin/teacher-records", requireAuth, requireRole("admin"), async (_req, res, next) => {
@@ -1837,7 +1837,7 @@ app.put("/api/admin/teacher-records/:id", requireAuth, requireRole("admin"), asy
 
 app.put("/api/admin/teacher-records/:id/availability", requireAuth, requireRole("admin"), async (req, res, next) => {
   try {
-    const payload = z.object({ availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })) }).parse(req.body);
+    const payload = z.object({ availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), date: z.string().date().nullable().optional(), startTime: z.string(), endTime: z.string() })) }).parse(req.body);
     await service.replaceTeacherAvailability(req.params.id, payload.availability);
     res.status(204).end();
   } catch (error) { next(error); }
@@ -2863,7 +2863,7 @@ const accountEnrollmentSchema = z.object({
   email: z.string().email(), firstName: z.string().min(2), middleName: z.string().optional(), lastName: z.string().min(2),
   role: z.enum(["teacher", "student"]), profileImageUrl: z.string().url().nullable().optional(), profileImagePublicId: z.string().nullable().optional(),
   studentId: z.string().uuid().optional(), teacherId: z.string().uuid().optional(), subject: z.string().min(2).max(200).optional(), tutorialGroup: z.string().max(120).optional(), gradeLevel: z.string().max(120).optional(), note: z.string().max(1000).optional(),
-  mobileNumber: z.string().max(40).optional(), birthdate: z.preprocess((value) => value === '' ? undefined : value, z.string().date().optional()), professionalTitle: z.string().max(160).optional(), employmentStatus: z.string().max(80).optional(), education: z.string().max(500).optional(), certifications: z.string().max(1000).optional(), yearsExperience: z.coerce.number().int().min(0).max(80).optional(), specializations: z.array(z.string().min(1).max(120)).optional(), notes: z.string().max(2000).optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(), classSchedule: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
+  mobileNumber: z.string().max(40).optional(), birthdate: z.preprocess((value) => value === '' ? undefined : value, z.string().date().optional()), professionalTitle: z.string().max(160).optional(), employmentStatus: z.string().max(80).optional(), education: z.string().max(500).optional(), certifications: z.string().max(1000).optional(), yearsExperience: z.coerce.number().int().min(0).max(80).optional(), specializations: z.array(z.string().min(1).max(120)).optional(), notes: z.string().max(2000).optional(), availability: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), date: z.string().date().nullable().optional(), startTime: z.string(), endTime: z.string() })).optional(), classSchedule: z.array(z.object({ dayOfWeek: z.number().int().min(0).max(6), startTime: z.string(), endTime: z.string() })).optional(),
 });
 
 const arcadeGameTypeSchema = z.enum(['speed_run', 'match_master', 'word_builder', 'memory_flip', 'boss_battle', 'quest_adventure']).optional();
@@ -3550,6 +3550,7 @@ app.post("/api/teacher/availability", requireAuth, requireRole("teacher", "admin
     const input = z.object({
       teacherId: z.string().uuid().optional(),
       dayOfWeek: z.number().int().min(0).max(6),
+      date: z.string().date().nullable().optional(),
       startTime: z.string(),
       endTime: z.string(),
     }).parse(req.body);
