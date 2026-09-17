@@ -352,7 +352,7 @@ export class YunafiedService {
          FROM users u LEFT JOIN teacher_records tr ON tr.teacher_id = u.id
         WHERE u.role = 'teacher' ORDER BY u.last_name, u.first_name`,
     );
-    const availability = await pool.query(`SELECT id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek", start_time AS "startTime", end_time AS "endTime", is_active AS "isActive", created_at AS "createdAt" FROM teacher_availability WHERE is_active = TRUE ORDER BY day_of_week, start_time`);
+    const availability = await pool.query(`SELECT id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek", available_date AS "date", start_time AS "startTime", end_time AS "endTime", is_active AS "isActive", created_at AS "createdAt" FROM teacher_availability WHERE is_active = TRUE ORDER BY available_date NULLS LAST, day_of_week, start_time`);
     return result.rows.map((row) => ({ teacherId: row.id, teacher: this.toAuthUser(row), mobileNumber: row.mobileNumber || null, professionalTitle: row.professionalTitle || null, employmentStatus: row.employmentStatus || null, education: row.education || null, certifications: row.certifications || null, yearsExperience: row.yearsExperience == null ? null : Number(row.yearsExperience), specializations: Array.isArray(row.specializations) ? row.specializations : [], notes: row.notes || null, availability: availability.rows.filter((item) => item.teacherId === row.id), updatedAt: row.updatedAt || row.created_at }));
   }
 
@@ -3642,22 +3642,22 @@ export class YunafiedService {
 
   async createAvailabilityBlock(
     teacherId: string,
-    input: { dayOfWeek: number; startTime: string; endTime: string },
+    input: { dayOfWeek: number; date?: string | null; startTime: string; endTime: string },
   ): Promise<import("../types/models.js").TeacherAvailabilityItem> {
     const result = await pool.query(
-      `INSERT INTO teacher_availability (teacher_id, day_of_week, start_time, end_time)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek",
+      `INSERT INTO teacher_availability (teacher_id, day_of_week, available_date, start_time, end_time)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek", available_date AS "date",
                  start_time AS "startTime", end_time AS "endTime",
                  is_active AS "isActive", created_at AS "createdAt"`,
-      [teacherId, input.dayOfWeek, input.startTime, input.endTime],
+      [teacherId, input.dayOfWeek, input.date || null, input.startTime, input.endTime],
     );
     return result.rows[0] as import("../types/models.js").TeacherAvailabilityItem;
   }
 
   async listAvailabilityByTeacher(teacherId: string): Promise<import("../types/models.js").TeacherAvailabilityItem[]> {
     const result = await pool.query(
-      `SELECT id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek",
+      `SELECT id, teacher_id AS "teacherId", day_of_week AS "dayOfWeek", available_date AS "date",
               start_time AS "startTime", end_time AS "endTime",
               is_active AS "isActive", created_at AS "createdAt"
          FROM teacher_availability
@@ -4047,7 +4047,7 @@ export class YunafiedService {
     };
   }
 
-  async replaceTeacherAvailability(teacherId: string, blocks: { dayOfWeek: number; startTime: string; endTime: string }[]): Promise<void> {
+  async replaceTeacherAvailability(teacherId: string, blocks: { dayOfWeek: number; date?: string | null; startTime: string; endTime: string }[]): Promise<void> {
     await pool.query("DELETE FROM teacher_availability WHERE teacher_id = $1", [teacherId]);
     for (const block of blocks) await this.createAvailabilityBlock(teacherId, block);
   }
