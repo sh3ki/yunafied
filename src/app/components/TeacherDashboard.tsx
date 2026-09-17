@@ -74,6 +74,9 @@ export function TeacherDashboard({ teacher, users, assignments, submissions, sch
     submissions: aiText('submissions', [graded.length, pending]),
     progress: studentProgress.length ? `Performance is available for ${studentProgress.filter((student) => student.average > 0).length} of ${students.length} assigned student${students.length === 1 ? '' : 's'}. Use the student-level view to identify who needs enrichment or additional support.` : aiText('progress', []),
   };
+  const overallSummary = students.length
+    ? `${students.length} assigned student${students.length === 1 ? '' : 's'} have ${mySubmissions.length} submission${mySubmissions.length === 1 ? '' : 's'} in the current dashboard. ${numericGrades.length ? `The recorded average is ${averageGrade.toFixed(1)}%, with ${graded.length} graded and ${pending} still awaiting feedback.` : 'There are not enough graded submissions yet to calculate a reliable class average.'}`
+    : 'No assigned students or related activity is available yet, so the charts will become more informative as students submit work.';
 
   return <div className="p-6 max-w-7xl mx-auto print:p-0">
     <div className="flex flex-wrap items-center justify-between gap-3 mb-6 print:hidden">
@@ -88,6 +91,10 @@ export function TeacherDashboard({ teacher, users, assignments, submissions, sch
         ['Upcoming Meetings', upcoming.length, CalendarDays, 'bg-blue-50 text-blue-700'],
       ].map(([label, value, Icon, color]) => <div key={String(label)} className={`rounded-2xl p-5 ${color} border border-white shadow-sm`}><Icon className="h-5 w-5 mb-2" /><p className="text-xs uppercase tracking-wide font-semibold opacity-80">{label}</p><p className="text-3xl font-extrabold mt-1">{value}</p></div>)}
     </div>
+    <section className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-4 print:hidden">
+      <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-5"><h3 className="font-semibold text-indigo-900">Overall summary</h3><p className="mt-2 text-sm leading-6 text-indigo-900/80">{overallSummary}</p></div>
+      <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-5"><h3 className="font-semibold text-emerald-900">How the teacher can use this</h3><p className="mt-2 text-sm leading-6 text-emerald-900/80">Use grade distribution to group students for targeted support, compare submitted versus graded work to prioritize feedback, and use student performance to plan enrichment or intervention. Check upcoming meetings to turn these findings into specific follow-up actions.</p></div>
+    </section>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <ChartCard title="Grade distribution" interpretation={interpretations.grades}><ResponsiveContainer width="100%" height={230}><PieChart><Pie data={gradeDistribution} dataKey="value" nameKey="name" innerRadius={58} outerRadius={88} label>{gradeDistribution.map((item, index) => <Cell key={item.name} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></ChartCard>
       <ChartCard title="Submission status" interpretation={interpretations.submissions}><ResponsiveContainer width="100%" height={230}><PieChart><Pie data={[{ name: 'Graded', value: graded.length }, { name: 'Pending', value: pending }]} dataKey="value" nameKey="name" innerRadius={58} outerRadius={88} label><Cell fill="#10b981" /><Cell fill="#f59e0b" /></Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></ChartCard>
