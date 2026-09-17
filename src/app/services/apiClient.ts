@@ -851,6 +851,25 @@ class YunafiedApiClient {
     return this.request<StudentProgressionItem>('/api/arcade/progression');
   }
 
+  async getCyclingQuestState(): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    return this.request('/api/cycling-quest/state');
+  }
+  async purchaseCyclingPowerUp(powerUp: 'skip' | 'double'): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    return this.request(`/api/cycling-quest/power-ups/${powerUp}/purchase`, { method: 'POST' });
+  }
+  async useCyclingPowerUp(powerUp: 'skip' | 'double'): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    return this.request(`/api/cycling-quest/power-ups/${powerUp}/use`, { method: 'POST' });
+  }
+  async collectCyclingPowerUp(powerUp: 'skip' | 'double'): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    return this.request(`/api/cycling-quest/power-ups/${powerUp}/collect`, { method: 'POST' });
+  }
+  async collectCyclingCoins(amount: number): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
+    return this.request('/api/cycling-quest/coins/collect', { method: 'POST', body: JSON.stringify({ amount }) });
+  }
+  async completeCyclingQuestRun(payload: { score: number; bossCorrectCount: number }): Promise<{ coinBalance: number; powerUps: { skip: number; double: number }; coinsEarned: number }> {
+    return this.request('/api/cycling-quest/runs/complete', { method: 'POST', body: JSON.stringify(payload) });
+  }
+
   async listArcadeLeaderboard(input?: { gameId?: string; gameType?: string; limit?: number }): Promise<Array<{ studentId: string; studentName: string; bestScore: number; attemptCount: number }>> {
     const params = new URLSearchParams();
     if (input?.gameId) params.set('gameId', input.gameId);
