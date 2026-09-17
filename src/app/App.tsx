@@ -90,7 +90,7 @@ interface AuthenticatedShellProps {
     profileImagePublicId?: string | null;
     password: string;
     mobileNumber?: string;
-    birthdate?: string;
+    birthdate?: string | null;
   }) => Promise<void>;
   onEditUser: (
     id: string,
@@ -105,7 +105,7 @@ interface AuthenticatedShellProps {
       profileImagePublicId?: string | null;
       password?: string;
       mobileNumber?: string;
-      birthdate?: string;
+      birthdate?: string | null;
     },
   ) => Promise<void>;
   onChangeUserStatus: (id: string, input: { status: UserStatus; reason?: string; dropDate?: string; actionTaken?: string; pullOutReason?: string; notes?: string }) => Promise<void>;
@@ -792,6 +792,7 @@ export default function App() {
       email: string;
       role: UserRole;
       status: UserStatus;
+      birthdate?: string | null;
       profileImageUrl?: string | null;
       profileImagePublicId?: string | null;
       password?: string;
