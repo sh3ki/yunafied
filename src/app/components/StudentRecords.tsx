@@ -6,11 +6,11 @@ import { apiClient } from "@/app/services/apiClient";
 import type { StudentRecordItem, UserRole } from "@/app/types/models";
 import { PrintButton, TablePagination, DEFAULT_TABLE_PAGE_SIZE } from "./ui/table-tools";
 
-interface StudentRecordsProps { role: UserRole }
+interface StudentRecordsProps { role: UserRole; generatedBy: { role: UserRole; fullName: string } }
 type RecordTab = "overview" | "academic" | "sessions";
 const dateLabel = (value: string | null | undefined) => value ? new Date(value).toLocaleDateString() : "—";
 
-export function StudentRecords({ role }: StudentRecordsProps) {
+export function StudentRecords({ role, generatedBy }: StudentRecordsProps) {
   const [records, setRecords] = useState<StudentRecordItem[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("active");
