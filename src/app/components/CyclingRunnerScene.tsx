@@ -60,6 +60,21 @@ export function CyclingRunnerScene({ level, lane, paused, powerUp, treasureVisib
     for (let index = 0; index < 24; index += 1) { const group = new THREE.Group(); const disc = new THREE.Mesh(coinGeometry, coinMaterial); disc.rotation.x = Math.PI / 2; const star = new THREE.Mesh(starGeometry, starMaterial); star.position.z = .05; group.add(disc, star); resetCoin(group, -12 - index * 10.5); coins.push(group); world.add(group); }
     const powerGroup = new THREE.Group(); const core = new THREE.Mesh(new THREE.OctahedronGeometry(.38, 0), new THREE.MeshStandardMaterial({ color: '#8b5cf6', emissive: '#4719af', emissiveIntensity: .7, metalness: .4 })); const ring = new THREE.Mesh(new THREE.TorusGeometry(.55, .075, 8, 20), new THREE.MeshStandardMaterial({ color: '#ffd34d', emissive: '#754700', emissiveIntensity: .45 })); ring.rotation.x = Math.PI / 2; powerGroup.add(core, ring); powerGroup.visible = false; world.add(powerGroup);
     const treasureGroup = new THREE.Group(); const treasureChests: THREE.Group[] = []; [-1.18, 0, 1.18].forEach((x, index) => { const chest = new THREE.Group(); const base = new THREE.Mesh(new THREE.BoxGeometry(.62, .42, .44), new THREE.MeshStandardMaterial({ color: '#145b78', metalness: .35, roughness: .42 })); base.position.y = .42; const lid = new THREE.Mesh(new THREE.BoxGeometry(.68, .2, .48), new THREE.MeshStandardMaterial({ color: '#18b6a4', emissive: '#075e62', emissiveIntensity: .45, metalness: .45 })); lid.position.y = .71; const lock = new THREE.Mesh(new THREE.BoxGeometry(.12, .16, .05), new THREE.MeshBasicMaterial({ color: '#ffe36e' })); lock.position.set(0, .48, .25); chest.add(base, lid, lock); chest.position.set(x, 0, 0); chest.userData.phase = index * 1.8; treasureChests.push(chest); treasureGroup.add(chest); }); treasureGroup.visible = false; world.add(treasureGroup);
+    // Keep hazards away from the treasure approach and exit so a rock cannot
+    // appear immediately behind a chest or overlap the treasure formation.
+    const treasureRockClearance = 18;
+    let nextHazardZ = -150;
+    const clearHazardsAroundTreasure = () => {
+      if (!treasureGroup.visible) return;
+      const treasureZ = treasureGroup.position.z + (treasureChests[1]?.position.z ?? 0);
+      hazards.forEach((rock) => {
+        if (Math.abs(rock.position.z - treasureZ) < treasureRockClearance) {
+          rock.position.z = nextHazardZ;
+          nextHazardZ -= 30;
+          rock.userData.hit = false;
+        }
+      });
+    };
     const finishGroup = new THREE.Group(); const postMaterial = new THREE.MeshLambertMaterial({ color: '#f2f2e8' }); for (const x of [-2.35, 2.35]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(.08, .08, 2.5, 8), postMaterial); post.position.set(x, 1.25, 0); finishGroup.add(post); } for (let row = 0; row < 2; row += 1) for (let column = 0; column < 10; column += 1) { const square = new THREE.Mesh(new THREE.PlaneGeometry(.46, .28), new THREE.MeshBasicMaterial({ color: (row + column) % 2 ? '#fbfbef' : '#1d2430' })); square.position.set(-2.07 + column * .46, 2.26 - row * .28, .03); finishGroup.add(square); } finishGroup.visible = false; world.add(finishGroup);
     const resize = () => { const { width, height } = mount.getBoundingClientRect(); renderer.setSize(width, height, false); camera.aspect = width / Math.max(height, 1); camera.updateProjectionMatrix(); };
     const observer = new ResizeObserver(resize); observer.observe(mount); resize();
@@ -75,9 +90,10 @@ export function CyclingRunnerScene({ level, lane, paused, powerUp, treasureVisib
         if (wanted && !powerGroup.visible) { activePower = wanted.power; powerGroup.userData.lane = wanted.lane; powerGroup.position.set((wanted.lane - 1) * 1.18, .62, -48); powerGroup.visible = true; }
         if (!wanted && powerGroup.visible) powerGroup.visible = false;
         if (powerGroup.visible) { powerGroup.position.z += speed; powerGroup.rotation.y += delta * 3; powerGroup.position.y = .62 + Math.sin(elapsed * 5) * .12; if (powerGroup.position.z > 2) { powerGroup.visible = false; if (powerGroup.userData.lane === laneRef.current && activePower) callbacks.current.onPower(); else callbacks.current.onPowerMiss(); activePower = null; } }
-        if (treasureRef.current && !treasureActive) { treasureGroup.visible = true; treasureGroup.position.set(0, 0, -52); treasureChests.forEach((chest) => { chest.position.z = 0; chest.position.y = 0; }); treasureActive = true; }
+        if (treasureRef.current && !treasureActive) { treasureGroup.visible = true; treasureGroup.position.set(0, 0, -52); treasureChests.forEach((chest) => { chest.position.z = 0; chest.position.y = 0; }); treasureActive = true; clearHazardsAroundTreasure(); }
         if (!treasureRef.current && treasureActive) { treasureGroup.visible = false; treasureActive = false; }
         if (treasureGroup.visible) { treasureChests.forEach((chest) => { chest.position.z += speed; chest.rotation.y += delta * .45; chest.position.y = Math.sin(elapsed * 4 + chest.userData.phase) * .12; }); }
+        clearHazardsAroundTreasure();
         if (finishRef.current && !finishActive) { finishGroup.visible = true; finishGroup.position.set(0, 0, -55); finishActive = true; }
         if (!finishRef.current && finishActive) { finishGroup.visible = false; finishActive = false; }
         if (finishGroup.visible) finishGroup.position.z += speed;
