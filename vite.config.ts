@@ -13,8 +13,8 @@ export default defineConfig(({ mode }) => ({
       name: 'yunafied-csp',
       transformIndexHtml(html) {
         const connectSrc = mode === 'development'
-          ? "'self' http://localhost:4000 http://127.0.0.1:4000 https://www.yunafied.online"
-          : "'self' https://www.yunafied.online";
+          ? "'self' http://localhost:4000 http://127.0.0.1:4000 https://yunafied.online https://www.yunafied.online"
+          : "'self' https://yunafied.online https://www.yunafied.online";
 
         return html.replace('__CSP_CONNECT_SRC__', connectSrc);
       },
