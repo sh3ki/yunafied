@@ -46,7 +46,7 @@
   overflow: hidden;
   touch-action: none;
   border-radius: 1.5rem;
-  background: linear-gradient(#bde9ff 0 48%, #8cca74 48%);
+  background: transparent;
 }
 
 .word-hunt-card {
@@ -55,10 +55,10 @@
   width: 74px;
   height: 74px;
   place-items: center;
-  border: 2px solid rgb(255 255 255 / .8);
+  border: 0;
   border-radius: 1rem;
-  background: rgb(255 255 255 / .82);
-  box-shadow: 0 5px 12px rgb(30 55 40 / .24);
+  background: transparent;
+  box-shadow: none;
   touch-action: none;
 }
 
