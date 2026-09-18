@@ -798,7 +798,7 @@ function getCloudinaryAssetDetails(resourceUrl: string): { publicId: string; res
         directives: {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
           "img-src": ["'self'", "data:", "https://res.cloudinary.com"],
-          "connect-src": ["'self'", "https://www.yunafied.online"],
+          "connect-src": ["'self'", "https://yunafied.online", "https://www.yunafied.online"],
           "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
           "font-src": ["'self'", "https://fonts.gstatic.com"],
         },
@@ -806,9 +806,10 @@ function getCloudinaryAssetDetails(resourceUrl: string): { publicId: string; res
     }),
   );
 
-  // CORS: allow www origin (DNS redirects www→apex, so preflight must not be redirected)
+  // CORS: both custom hostnames can serve the app while DNS redirects settle.
   const allowedOrigins = process.env.NODE_ENV === "production"
-    ? [
+      ? [
+        "https://yunafied.online",
         "https://www.yunafied.online",
         // Capacitor Android WebViews use localhost as their app origin.
         "https://localhost",
@@ -822,6 +823,7 @@ function getCloudinaryAssetDetails(resourceUrl: string): { publicId: string; res
         "http://127.0.0.1:8081",
         "http://localhost:19006",
         "http://127.0.0.1:19006",
+        "https://yunafied.online",
         "https://www.yunafied.online",
       ];
   const isAllowedOrigin = (origin?: string) => {
