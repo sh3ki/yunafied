@@ -3,6 +3,17 @@
   background: #79b6d0;
 }
 
+.level-stats { display: flex; align-items: stretch; gap: .5rem; }
+.level-best-card { display: flex; min-width: 78px; align-items: center; gap: .45rem; border-radius: 1rem; background: #d1fae5; padding: .7rem .8rem; color: #047857; line-height: 1.05; }
+.level-best-card span { display: flex; flex-direction: column; }
+.level-best-card strong { font-size: 1.1rem; }
+.level-best-card small { margin-top: .2rem; font-size: .58rem; font-weight: 800; text-transform: uppercase; }
+.level-coin-card { display: flex; min-width: 74px; align-items: center; gap: .45rem; border-radius: 1rem; background: #fff3c4; padding: .7rem .8rem; color: #a34b08; box-shadow: 0 4px 12px rgba(163,75,8,.08); }
+.level-coin-card span { display: flex; flex-direction: column; line-height: 1.05; }
+.level-coin-card strong { font-size: 1.2rem; }
+.level-coin-card small { margin-top: .18rem; font-size: .62rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+@media (max-width: 420px) { .level-stats { gap: .35rem; } .level-best-card, .level-coin-card { min-width: 64px; padding: .5rem; } }
+
 .three-runner-canvas canvas {
   display: block;
   width: 100%;
