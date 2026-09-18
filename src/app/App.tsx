@@ -180,7 +180,9 @@ interface AuthenticatedShellProps {
   notificationUnreadCount?: number;
 }
 
-const backendBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+const backendBaseUrl = import.meta.env.PROD
+  ? window.location.origin
+  : (import.meta.env.VITE_API_URL || 'http://localhost:4000');
 
 const roleViews: Record<UserRole, string[]> = {
   admin: ['dashboard', 'schedule', 'announcements', 'chats', 'notifications', 'enrollments', 'teacher-records', 'student-records', 'materials', 'gamified-learning', 'assessments', 'grades', 'audit-logs', 'meeting-history', 'profile'],
