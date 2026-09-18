@@ -3,7 +3,7 @@ import * as THREE from 'three';
 
 type Power = 'skip' | 'double';
 type Props = {
-  level: 1 | 2;
+  level: 1 | 2 | 3;
   lane: number;
   paused: boolean;
   powerUp: { power: Power; lane: number } | null;
