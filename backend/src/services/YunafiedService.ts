@@ -4218,6 +4218,11 @@ export class YunafiedService {
     return { ...(await this.getCyclingQuestState(studentId)), coinsEarned };
   }
 
+  async listCyclingQuestLeaderboard(limit = 10): Promise<Array<{ studentId: string; studentName: string; bestScore: number; attemptCount: number }>> {
+    const result = await pool.query(`SELECT r.student_id AS "studentId",u.full_name AS "studentName",MAX(r.score)::int AS "bestScore",COUNT(*)::int AS "attemptCount" FROM cycling_quest_runs r JOIN users u ON u.id=r.student_id GROUP BY r.student_id,u.full_name ORDER BY "bestScore" DESC, MIN(r.completed_at) ASC LIMIT $1`, [limit]);
+    return result.rows;
+  }
+
   async getArcadeGame(gameId: string, requester: { id: string; role: UserRole }): Promise<Record<string, unknown> | null> {
     const game = await pool.query(`SELECT g.id,g.title,g.description,g.game_type AS "gameType",g.category_id AS "categoryId",c.name AS "categoryName",g.difficulty,g.practice_xp_reward AS "practiceXpReward",g.practice_coin_reward AS "practiceCoinReward",g.is_published AS "isPublished" FROM gamified_games g LEFT JOIN gamified_categories c ON c.id=g.category_id WHERE g.id=$1 AND ($2 <> 'student' OR g.is_published=TRUE)`, [gameId, requester.role]);
     if (!game.rows[0]) return null;
