@@ -11,17 +11,18 @@ type Props = {
   onCoin: () => void;
   onPower: () => void;
   onPowerMiss: () => void;
+  onRock: () => void;
 };
 
-export function CyclingRunnerScene({ lane, paused, powerUp, treasureVisible, finishLine, onCoin, onPower, onPowerMiss }: Props) {
+export function CyclingRunnerScene({ lane, paused, powerUp, treasureVisible, finishLine, onCoin, onPower, onPowerMiss, onRock }: Props) {
   const host = useRef<HTMLDivElement | null>(null);
-  const laneRef = useRef(lane), pausedRef = useRef(paused), powerRef = useRef(powerUp), treasureRef = useRef(treasureVisible), finishRef = useRef(finishLine), callbacks = useRef({ onCoin, onPower, onPowerMiss });
+  const laneRef = useRef(lane), pausedRef = useRef(paused), powerRef = useRef(powerUp), treasureRef = useRef(treasureVisible), finishRef = useRef(finishLine), callbacks = useRef({ onCoin, onPower, onPowerMiss, onRock });
   useEffect(() => { laneRef.current = lane; }, [lane]);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => { powerRef.current = powerUp; }, [powerUp]);
   useEffect(() => { treasureRef.current = treasureVisible; }, [treasureVisible]);
   useEffect(() => { finishRef.current = finishLine; }, [finishLine]);
-  useEffect(() => { callbacks.current = { onCoin, onPower, onPowerMiss }; }, [onCoin, onPower, onPowerMiss]);
+  useEffect(() => { callbacks.current = { onCoin, onPower, onPowerMiss, onRock }; }, [onCoin, onPower, onPowerMiss, onRock]);
 
   useEffect(() => {
     const mount = host.current;
@@ -48,12 +49,11 @@ export function CyclingRunnerScene({ lane, paused, powerUp, treasureVisible, fin
     const createRock = () => new THREE.Mesh(new THREE.DodecahedronGeometry(.46, 0), new THREE.MeshLambertMaterial({ color: '#7f8d84' }));
     const resetScenery = (item: THREE.Object3D, near = false) => { const side = Math.random() > .5 ? 1 : -1; item.position.set(side * (4.2 + Math.random() * 6), 0, -(near ? 15 : 45 + Math.random() * 70)); const scale = .35 + Math.random() * .85; item.scale.setScalar(scale); };
     for (let i = 0; i < 46; i += 1) { const item = Math.random() > .23 ? createTree() : createRock(); resetScenery(item); scenery.push(item as THREE.Group); world.add(item); }
-    const coins: THREE.Group[] = [];
+    const hazards: THREE.Mesh[] = []; for (let index = 0; index < 4; index += 1) { const rock = createRock(); rock.scale.setScalar(.7); rock.userData.lane = Math.floor(Math.random() * 3); rock.userData.hit = false; rock.position.set((rock.userData.lane - 1) * 1.18, .34, -42 - index * 30); hazards.push(rock); world.add(rock); } const coins: THREE.Group[] = [];
     const coinMaterial = new THREE.MeshStandardMaterial({ color: '#ffc533', emissive: '#8c4e00', emissiveIntensity: .35, metalness: .75, roughness: .22 });
     const coinGeometry = new THREE.CylinderGeometry(.25, .25, .075, 18), starGeometry = new THREE.OctahedronGeometry(.1, 0), starMaterial = new THREE.MeshBasicMaterial({ color: '#fff7be' });
-    let nextCoinLane = 0;
-    const resetCoin = (coin: THREE.Group, z = -42) => { coin.userData.lane = nextCoinLane; nextCoinLane = (nextCoinLane + 1) % 3; coin.position.set((coin.userData.lane - 1) * 1.18, .46, z); coin.rotation.set(0, 0, 0); };
-    for (let index = 0; index < 12; index += 1) { const group = new THREE.Group(); const disc = new THREE.Mesh(coinGeometry, coinMaterial); disc.rotation.x = Math.PI / 2; const star = new THREE.Mesh(starGeometry, starMaterial); star.position.z = .05; group.add(disc, star); resetCoin(group, -14 - index * 7.2); coins.push(group); world.add(group); }
+    const resetCoin = (coin: THREE.Group, z = -42) => { coin.userData.lane = Math.floor(Math.random() * 3); coin.position.set((coin.userData.lane - 1) * 1.18, .46, z); coin.rotation.set(0, 0, 0); coin.visible = true; };
+    for (let index = 0; index < 12; index += 1) { const group = new THREE.Group(); const disc = new THREE.Mesh(coinGeometry, coinMaterial); disc.rotation.x = Math.PI / 2; const star = new THREE.Mesh(starGeometry, starMaterial); star.position.z = .05; group.add(disc, star); resetCoin(group, -12 - index * 7.5); coins.push(group); world.add(group); }
     const powerGroup = new THREE.Group(); const core = new THREE.Mesh(new THREE.OctahedronGeometry(.38, 0), new THREE.MeshStandardMaterial({ color: '#8b5cf6', emissive: '#4719af', emissiveIntensity: .7, metalness: .4 })); const ring = new THREE.Mesh(new THREE.TorusGeometry(.55, .075, 8, 20), new THREE.MeshStandardMaterial({ color: '#ffd34d', emissive: '#754700', emissiveIntensity: .45 })); ring.rotation.x = Math.PI / 2; powerGroup.add(core, ring); powerGroup.visible = false; world.add(powerGroup);
     const treasureGroup = new THREE.Group(); const treasureChests: THREE.Group[] = []; [-1.18, 0, 1.18].forEach((x, index) => { const chest = new THREE.Group(); const base = new THREE.Mesh(new THREE.BoxGeometry(.62, .42, .44), new THREE.MeshStandardMaterial({ color: '#145b78', metalness: .35, roughness: .42 })); base.position.y = .42; const lid = new THREE.Mesh(new THREE.BoxGeometry(.68, .2, .48), new THREE.MeshStandardMaterial({ color: '#18b6a4', emissive: '#075e62', emissiveIntensity: .45, metalness: .45 })); lid.position.y = .71; const lock = new THREE.Mesh(new THREE.BoxGeometry(.12, .16, .05), new THREE.MeshBasicMaterial({ color: '#ffe36e' })); lock.position.set(0, .48, .25); chest.add(base, lid, lock); chest.position.set(x, 0, 0); chest.userData.phase = index * 1.8; treasureChests.push(chest); treasureGroup.add(chest); }); treasureGroup.visible = false; world.add(treasureGroup);
     const finishGroup = new THREE.Group(); const postMaterial = new THREE.MeshLambertMaterial({ color: '#f2f2e8' }); for (const x of [-2.35, 2.35]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(.08, .08, 2.5, 8), postMaterial); post.position.set(x, 1.25, 0); finishGroup.add(post); } for (let row = 0; row < 2; row += 1) for (let column = 0; column < 10; column += 1) { const square = new THREE.Mesh(new THREE.PlaneGeometry(.46, .28), new THREE.MeshBasicMaterial({ color: (row + column) % 2 ? '#fbfbef' : '#1d2430' })); square.position.set(-2.07 + column * .46, 2.26 - row * .28, .03); finishGroup.add(square); } finishGroup.visible = false; world.add(finishGroup);
@@ -65,7 +65,8 @@ export function CyclingRunnerScene({ lane, paused, powerUp, treasureVisible, fin
         const speed = delta * 18;
         markers.forEach((marker) => { marker.position.z += speed; if (marker.position.z > 8) marker.position.z -= 114; });
         scenery.forEach((item) => { item.position.z += speed; if (item.position.z > 9) resetScenery(item); });
-        coins.forEach((coin) => { coin.position.z += speed; coin.rotation.y += delta * 5; if (coin.position.z > 6) { if (coin.userData.lane === laneRef.current) callbacks.current.onCoin(); resetCoin(coin); } });
+        hazards.forEach((rock) => { rock.position.z += speed; if (rock.position.z > 2 && rock.position.z < 3.5 && !rock.userData.hit && rock.userData.lane === laneRef.current) { rock.userData.hit = true; callbacks.current.onRock(); } if (rock.position.z > 7) { rock.position.z = -120; rock.userData.hit = false; } });
+        coins.forEach((coin) => { if (!coin.visible) { if (coin.position.z > 8) resetCoin(coin, -120 - Math.random() * 45); return; } coin.position.z += speed; coin.rotation.y += delta * 5; if (finishRef.current) { coin.visible = false; return; } if (coin.position.z > 2) { if (coin.userData.lane === laneRef.current) { callbacks.current.onCoin(); coin.visible = false; } else if (coin.position.z > 7) resetCoin(coin, -120 - Math.random() * 45); } });
         const wanted = powerRef.current;
         if (wanted && !powerGroup.visible) { activePower = wanted.power; powerGroup.userData.lane = wanted.lane; powerGroup.position.set((wanted.lane - 1) * 1.18, .62, -48); powerGroup.visible = true; }
         if (!wanted && powerGroup.visible) powerGroup.visible = false;
@@ -84,6 +85,8 @@ export function CyclingRunnerScene({ lane, paused, powerUp, treasureVisible, fin
   }, []);
   return <div ref={host} className="three-runner-canvas absolute inset-0 z-0" aria-hidden="true" />;
 }
+
+
 
 
 
