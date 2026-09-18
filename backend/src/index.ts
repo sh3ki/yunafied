@@ -2312,6 +2312,9 @@ app.post('/api/cycling-quest/runs/complete', requireAuth, requireRole('student')
 app.get('/api/cycling-quest/leaderboard', requireAuth, async (req, res, next) => {
   try { const limit = z.coerce.number().int().min(1).max(100).default(10).parse(req.query.limit); res.json(await service.listCyclingQuestLeaderboard(limit)); } catch (error) { next(error); }
 });
+app.get('/api/cycling-quest/stats', requireAuth, requireRole('student'), async (req: AuthenticatedRequest, res, next) => {
+  try { res.json(await service.getCyclingQuestStats(req.auth?.sub || '')); } catch (error) { next(error); }
+});
 
 app.get('/api/arcade/leaderboard', requireAuth, async (req, res, next) => {
   try {
