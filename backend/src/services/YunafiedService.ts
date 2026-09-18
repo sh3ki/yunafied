@@ -4206,7 +4206,7 @@ export class YunafiedService {
   }
 
   async completeCyclingQuestRun(studentId: string, input: { score: number; bossCorrectCount: number }): Promise<{ coinBalance: number; powerUps: { skip: number; double: number }; coinsEarned: number }> {
-    const coinsEarned = Math.max(0, Math.min(5, input.bossCorrectCount)) * 5 + 10;
+    const coinsEarned = Math.max(0, Math.min(7, input.bossCorrectCount)) * 5 + 10;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
