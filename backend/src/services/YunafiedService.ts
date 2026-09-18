@@ -4173,7 +4173,7 @@ export class YunafiedService {
   }
 
   async purchaseCyclingPowerUp(studentId: string, powerUp: 'skip' | 'double'): Promise<{ coinBalance: number; powerUps: { skip: number; double: number } }> {
-    const cost = powerUp === 'skip' ? 15 : 20;
+    const cost = powerUp === 'skip' ? 150 : 120;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -4221,6 +4221,10 @@ export class YunafiedService {
   async listCyclingQuestLeaderboard(limit = 10): Promise<Array<{ studentId: string; studentName: string; bestScore: number; attemptCount: number }>> {
     const result = await pool.query(`SELECT r.student_id AS "studentId",u.full_name AS "studentName",MAX(r.score)::int AS "bestScore",COUNT(*)::int AS "attemptCount" FROM cycling_quest_runs r JOIN users u ON u.id=r.student_id GROUP BY r.student_id,u.full_name ORDER BY "bestScore" DESC, MIN(r.completed_at) ASC LIMIT $1`, [limit]);
     return result.rows;
+  }
+  async getCyclingQuestStats(studentId: string): Promise<{ bestScore: number; coinBalance: number }> {
+    const result = await pool.query<{ best_score: number | null; coin_balance: number }>(`SELECT COALESCE((SELECT MAX(score) FROM cycling_quest_runs WHERE student_id=$1),0)::int AS best_score, COALESCE((SELECT coin_balance FROM student_progression WHERE student_id=$1),0)::int AS coin_balance`, [studentId]);
+    return { bestScore: result.rows[0]?.best_score || 0, coinBalance: result.rows[0]?.coin_balance || 0 };
   }
 
   async getArcadeGame(gameId: string, requester: { id: string; role: UserRole }): Promise<Record<string, unknown> | null> {
