@@ -869,6 +869,9 @@ class YunafiedApiClient {
   async completeCyclingQuestRun(payload: { score: number; bossCorrectCount: number }): Promise<{ coinBalance: number; powerUps: { skip: number; double: number }; coinsEarned: number }> {
     return this.request('/api/cycling-quest/runs/complete', { method: 'POST', body: JSON.stringify(payload) });
   }
+  async listCyclingQuestLeaderboard(limit = 10): Promise<Array<{ studentId: string; studentName: string; bestScore: number; attemptCount: number }>> {
+    return this.request(`/api/cycling-quest/leaderboard?limit=${limit}`);
+  }
 
   async listArcadeLeaderboard(input?: { gameId?: string; gameType?: string; limit?: number }): Promise<Array<{ studentId: string; studentName: string; bestScore: number; attemptCount: number }>> {
     const params = new URLSearchParams();
